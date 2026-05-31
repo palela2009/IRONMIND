@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "1094826576454",
+    "project_id": "ironmind-d80cc",
+    "storage_bucket": "ironmind-d80cc.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1094826576454:android:0386588a3f7ffcd2795847",
+        "android_client_info": {
+          "package_name": "com.anonymous.IRONMIND"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1094826576454-c8a5sddgcc79fcmig8r9kookq7tcg1il.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.anonymous.IRONMIND",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "1094826576454-rus44gke6b6f1o6ujunucs8dk0kfurub.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDkgyXjB30uNgQ_I_xIbmsoEALEEPSdaPM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1094826576454-rus44gke6b6f1o6ujunucs8dk0kfurub.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

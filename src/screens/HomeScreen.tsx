@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image } from 'react-native';
 import { UserStats, RepHistoryItem } from '../types/training';
+import { useAuth } from '../context/AuthContext'; 
 
 interface HomeProps {
   stats: UserStats;
@@ -18,6 +19,8 @@ const timeAgo = (ts: number) => {
 };
 
 export const HomeScreen: React.FC<HomeProps> = ({ stats, history, onNavigate }) => {
+  const { fbUser } = useAuth(); 
+  
   const displayHistory: RepHistoryItem[] = history.length > 0 ? history : [
     { id: '842', targetApp: 'INSTAGRAM', elapsedTime: 0.84, timestamp: Date.now() - 120000, xpEarned: 50, wasSuccessful: true },
     { id: '841', targetApp: 'TIKTOK', elapsedTime: 2.10, timestamp: Date.now() - 840000, xpEarned: 35, wasSuccessful: true },
@@ -28,6 +31,14 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, onNavigate }) 
   const xpToNext = 500 - stats.currentXP;
   const xpPct = Math.min((stats.currentXP / 500) * 100, 100);
   const streakStr = String(stats.currentStreak).padStart(2, '0');
+
+ 
+  const getInitials = () => {
+    if (fbUser?.displayName) {
+      return fbUser.displayName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+    }
+    return 'IM';
+  };
 
   return (
     <FlatList
@@ -51,8 +62,14 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, onNavigate }) 
             </View>
             <View style={styles.headerRight}>
               <Text style={styles.dateText}>MAY 28</Text>
+              
+              
               <TouchableOpacity style={styles.avatarBtn} onPress={() => onNavigate('PROFILE')}>
-                <Text style={styles.avatarBtnText}>NK</Text>
+                {fbUser?.photoURL ? (
+                  <Image source={{ uri: fbUser.photoURL }} style={styles.avatarImg} />
+                ) : (
+                  <Text style={styles.avatarBtnText}>{getInitials()}</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -63,7 +80,7 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, onNavigate }) 
 
           <View style={styles.heroRow}>
             <Text style={styles.heroNum}>{streakStr}</Text>
-            <TouchableOpacity style={styles.heroArrowBtn}>
+            <TouchableOpacity style={styles.heroArrowBtn} >
               <Text style={styles.heroArrowText}>↗</Text>
             </TouchableOpacity>
           </View>
@@ -177,7 +194,9 @@ const styles = StyleSheet.create({
   brandName: { color: '#FFFFFF', fontSize: 15, fontWeight: '900', letterSpacing: 1.5 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   dateText: { color: '#555555', fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
-  avatarBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#CCFF00', justifyContent: 'center', alignItems: 'center' },
+  
+  avatarBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#CCFF00', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
+  avatarImg: { width: '100%', height: '100%' },
   avatarBtnText: { color: '#000000', fontSize: 10, fontWeight: '900' },
 
   metaLine: { color: '#555555', fontSize: 10, fontWeight: '800', letterSpacing: 1, paddingHorizontal: 20 },

@@ -1,6 +1,9 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { UserStats } from '../types/training';
+import { useAuth } from '../context/AuthContext'; // ← შემოგვაქვს ავტორიზაციის კონტექსტი
+import { signOut } from 'firebase/auth';
+import { auth } from '../config/firebase'; // ← შემოგვაქვს ფაირბეისის საწყისი წერტილი
 
 interface ProfileProps {
   stats: UserStats;
@@ -27,8 +30,26 @@ const SETTINGS = [
 ];
 
 export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onNavigate }) => {
+  const { fbUser } = useAuth(); // ← ვიღებთ სისტემაში შესულ იუზერს
   const doneCount = ACHIEVEMENTS.filter((a) => a.done).length;
   const rankPct = (stats.currentXP / 500) * 100;
+
+
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth); 
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  };
+
+  
+  const getInitials = () => {
+    if (fbUser?.displayName) {
+      return fbUser.displayName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+    }
+    return 'IM';
+  };
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -48,13 +69,24 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onNavigate }) => 
           <Text style={styles.athleteNo}>NO. 00843 / IM</Text>
         </View>
         <View style={styles.cardBody}>
-          <View style={styles.avatarBox}>
-            <Text style={styles.avatarLetters}>NK</Text>
-            <View style={styles.avatarDiag} />
-          </View>
+          
+          {fbUser?.photoURL ? (
+            <Image source={{ uri: fbUser.photoURL }} style={styles.avatarImage} />
+          ) : (
+            <View style={styles.avatarBox}>
+              <Text style={styles.avatarLetters}>{getInitials()}</Text>
+              <View style={styles.avatarDiag} />
+            </View>
+          )}
+
           <View style={styles.athleteDetails}>
-            <Text style={styles.handleText}>NIKA.K</Text>
-            <Text style={styles.weightText}>FEATHER · #20KG</Text>
+          
+            <Text style={styles.handleText} numberOfLines={1} adjustsFontSizeToFit>
+              {fbUser?.displayName || 'IRON ATHLETE'}
+            </Text>
+            {/* იუზერის მეილი */}
+            <Text style={styles.weightText}>{fbUser?.email || 'FEATHER · #20KG'}</Text>
+            
             <View style={styles.threeStats}>
               <View style={styles.tStat}>
                 <Text style={styles.tStatVal}>{stats.level}</Text>
@@ -122,7 +154,9 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onNavigate }) => 
           <Text style={styles.settingValue}>{s.value}</Text>
         </TouchableOpacity>
       ))}
-      <TouchableOpacity style={styles.settingRow}>
+      
+     
+      <TouchableOpacity style={styles.settingRow} onPress={handleSignOut}>
         <Text style={styles.signOut}>SIGN OUT</Text>
       </TouchableOpacity>
     </ScrollView>
@@ -167,6 +201,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     overflow: 'hidden',
   },
+  avatarImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#CCFF00',
+  },
   avatarLetters: { color: '#000000', fontSize: 28, fontWeight: '900', zIndex: 1 },
   avatarDiag: {
     position: 'absolute',
@@ -177,8 +218,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.12)',
     transform: [{ rotate: '18deg' }],
   },
-  athleteDetails: { flex: 1 },
-  handleText: { color: '#FFFFFF', fontSize: 26, fontWeight: '900', letterSpacing: -0.5 },
+  athleteDetails: { flex: 1, overflow: 'hidden' },
+  handleText: { color: '#FFFFFF', fontSize: 24, fontWeight: '900', letterSpacing: -0.5 },
   weightText: { color: '#666666', fontSize: 11, fontWeight: '600', marginBottom: 10 },
   threeStats: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   tStat: { alignItems: 'center' },

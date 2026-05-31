@@ -1,7 +1,9 @@
 import React from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaView, StyleSheet, View, Text, TouchableOpacity } from 'react-native';
+import { SafeAreaView, StyleSheet, View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { AuthProvider, useAuth } from '../IRONMIND/src/context/AuthContext'; 
 import { useTrainingLoop } from './src/hooks/useTrainingLoop';
+import { LoginScreen } from './src/screens/LoginScreen'; // 
 import { HomeScreen } from './src/screens/HomeScreen';
 import { ArmScreen } from './src/screens/ArmScreen';
 import { WaitScreen } from './src/screens/WaitScreen';
@@ -17,9 +19,26 @@ const NAV_TABS = [
   { state: 'PROFILE', label: 'PROFILE', icon: '◉' },
 ] as const;
 
-export default function App() {
+
+function RootNavigator() {
+  const { fbUser, loading } = useAuth(); // 
   const { trainingState, setTrainingState, stats, history, lastElapsedTime, executeCloseRep, resetToIdle } = useTrainingLoop();
 
+  
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#CCFF00" />
+      </View>
+    );
+  }
+
+  
+  if (!fbUser) {
+    return <LoginScreen />;
+  }
+
+ 
   const isNavVisible = NAV_TABS.some((t) => t.state === trainingState);
 
   const renderScreen = () => {
@@ -77,9 +96,20 @@ export default function App() {
   );
 }
 
+// აპლიკაციის მთავარი ექსპორტი, რომელიც ყველაფერს AuthProvider-ში ფუთავს
+export default function App() {
+  return (
+    <AuthProvider>
+      <RootNavigator />
+    </AuthProvider>
+  );
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0A0A0A' },
   mainContent: { flex: 1 },
+  // ლოუდერის სტილი შავი ფონით
+  loadingContainer: { flex: 1, backgroundColor: '#0A0A0A', justifyContent: 'center', alignItems: 'center' },
 
   nav: {
     flexDirection: 'row',
