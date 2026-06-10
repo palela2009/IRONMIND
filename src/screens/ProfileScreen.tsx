@@ -1,55 +1,65 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { UserStats } from '../types/training';
-import { useAuth } from '../context/AuthContext'; // ← შემოგვაქვს ავტორიზაციის კონტექსტი
+import { useAuth } from '../context/AuthContext';
 import { signOut } from 'firebase/auth';
-import { auth } from '../config/firebase'; // ← შემოგვაქვს ფაირბეისის საწყისი წერტილი
+import { auth } from '../config/firebase';
 
 interface ProfileProps {
   stats: UserStats;
   onNavigate: (state: any) => void;
 }
 
-const ACHIEVEMENTS = [
-  { id: '01', title: 'FIRST BLOOD', desc: 'Closed your first trigger', done: true },
-  { id: '02', title: 'SUB-SECOND', desc: 'React in under 1.00s', done: true },
-  { id: '03', title: 'WEEK ONE', desc: '7-day streak unbroken', done: true },
-  { id: '04', title: 'IRON DISCIPLINE', desc: '30-day streak', done: false },
-  { id: '05', title: 'CENTURY', desc: '100 lifetime reps', done: true },
-  { id: '06', title: 'NIGHT OWL', desc: 'Kill a trigger after midnight', done: true },
+const getAchievements = (s: UserStats) => [
+  { id: '01', title: 'FIRST BLOOD', desc: 'Closed your first trigger', done: s.totalReps >= 1 },
+  { id: '02', title: 'SUB-SECOND', desc: 'React in under 1.00s', done: s.bestReactionTime > 0 && s.bestReactionTime < 1.0 },
+  { id: '03', title: 'WEEK ONE', desc: '7-day streak unbroken', done: s.longestStreak >= 7 },
+  { id: '04', title: 'IRON DISCIPLINE', desc: '30-day streak', done: s.longestStreak >= 30 },
+  { id: '05', title: 'CENTURY', desc: '100 lifetime reps', done: s.totalReps >= 100 },
+  { id: '06', title: 'NIGHT OWL', desc: 'Kill a trigger after midnight', done: false },
   { id: '07', title: 'STONE HANDS', desc: 'Zero fails in a week', done: false },
-  { id: '08', title: 'MARATHON', desc: '500 lifetime reps', done: false },
-];
-
-const SETTINGS = [
-  { label: 'TRIGGER POOL', value: '4 APPS' },
-  { label: 'DAILY GOAL', value: '10 REPS' },
-  { label: 'RESISTANCE LEVEL', value: 'INTERMEDIATE' },
-  { label: 'NOTIFICATIONS', value: 'ON' },
-  { label: 'ACCOUNT · DATA', value: '→' },
+  { id: '08', title: 'MARATHON', desc: '500 lifetime reps', done: s.totalReps >= 500 },
 ];
 
 export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onNavigate }) => {
-  const { fbUser } = useAuth(); // ← ვიღებთ სისტემაში შესულ იუზერს
-  const doneCount = ACHIEVEMENTS.filter((a) => a.done).length;
-  const rankPct = (stats.currentXP / 500) * 100;
+  const { fbUser } = useAuth();
+  const [difficultyLevel, setDifficultyLevel] = useState<string>('EASY');
 
+  useEffect(() => {
+    AsyncStorage.getItem('@ironmind_onboarding').then((raw) => {
+      if (raw) {
+        const data = JSON.parse(raw);
+        if (data.difficultyLevel) setDifficultyLevel(data.difficultyLevel);
+      }
+    }).catch(() => {});
+  }, []);
+
+  const achievements = getAchievements(stats);
+  const doneCount = achievements.filter((a) => a.done).length;
+  const rankPct = Math.min((stats.currentXP / 500) * 100, 100);
+  const rxnDisplay = stats.bestReactionTime > 0 ? `${stats.bestReactionTime.toFixed(2)}s` : '—';
 
   const handleSignOut = async () => {
     try {
-      await signOut(auth); 
-    } catch (error) {
-      console.error('Error signing out:', error);
-    }
+      await signOut(auth);
+    } catch {}
   };
 
-  
   const getInitials = () => {
     if (fbUser?.displayName) {
-      return fbUser.displayName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+      return fbUser.displayName.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2);
     }
     return 'IM';
   };
+
+  const SETTINGS = [
+    { label: 'TRIGGER POOL', value: 'TAP TO EDIT' },
+    { label: 'DAILY GOAL', value: '10 REPS' },
+    { label: 'RESISTANCE LEVEL', value: difficultyLevel },
+    { label: 'NOTIFICATIONS', value: 'ON' },
+    { label: 'ACCOUNT · DATA', value: '→' },
+  ];
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -66,10 +76,9 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onNavigate }) => 
           <View style={styles.athleteBadge}>
             <Text style={styles.athleteBadgeText}>ATHLETE</Text>
           </View>
-          <Text style={styles.athleteNo}>NO. 00843 / IM</Text>
+          <Text style={styles.athleteNo}>NO. 00001 / IM</Text>
         </View>
         <View style={styles.cardBody}>
-          
           {fbUser?.photoURL ? (
             <Image source={{ uri: fbUser.photoURL }} style={styles.avatarImage} />
           ) : (
@@ -80,13 +89,10 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onNavigate }) => 
           )}
 
           <View style={styles.athleteDetails}>
-          
             <Text style={styles.handleText} numberOfLines={1} adjustsFontSizeToFit>
               {fbUser?.displayName || 'IRON ATHLETE'}
             </Text>
-            {/* იუზერის მეილი */}
-            <Text style={styles.weightText}>{fbUser?.email || 'FEATHER · #20KG'}</Text>
-            
+            <Text style={styles.weightText}>{fbUser?.email || ''}</Text>
             <View style={styles.threeStats}>
               <View style={styles.tStat}>
                 <Text style={styles.tStatVal}>{stats.level}</Text>
@@ -99,8 +105,8 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onNavigate }) => 
               </View>
               <View style={styles.tStatLine} />
               <View style={styles.tStat}>
-                <Text style={styles.tStatVal}>26</Text>
-                <Text style={styles.tStatLabel}>JOINED</Text>
+                <Text style={styles.tStatVal}>{stats.totalReps}</Text>
+                <Text style={styles.tStatLabel}>REPS</Text>
               </View>
             </View>
           </View>
@@ -109,7 +115,7 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onNavigate }) => 
 
       <View style={styles.rankLabelRow}>
         <Text style={styles.rankLabel}>RANK PROGRESS</Text>
-        <Text style={styles.rankNext}>→ LIGHT @ LV.5</Text>
+        <Text style={styles.rankNext}>→ LV.{stats.level + 1}</Text>
       </View>
       <View style={styles.rankBarBg}>
         <View style={[styles.rankBarFill, { width: `${rankPct}%` }]} />
@@ -118,9 +124,9 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onNavigate }) => 
       <View style={styles.quickRow}>
         {[
           { label: 'TOTAL REPS', val: String(stats.totalReps) },
-          { label: 'BEST RXN', val: `${stats.bestReactionTime.toFixed(2)}s`, accent: true },
-          { label: 'HRS SAVED', val: '38h' },
-          { label: 'FAILS', val: '9' },
+          { label: 'BEST RXN', val: rxnDisplay, accent: true },
+          { label: 'LONGEST', val: `${stats.longestStreak}d` },
+          { label: 'XP', val: String(stats.currentXP) },
         ].map((s) => (
           <View key={s.label} style={styles.quickStat}>
             <Text style={[styles.quickStatVal, s.accent && styles.accentVal]}>{s.val}</Text>
@@ -131,11 +137,11 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onNavigate }) => 
 
       <View style={styles.sectionRow}>
         <Text style={styles.sectionTitle}>ACHIEVEMENTS</Text>
-        <Text style={styles.achieveCount}>{doneCount} / {ACHIEVEMENTS.length}</Text>
+        <Text style={styles.achieveCount}>{doneCount} / {achievements.length}</Text>
       </View>
 
       <View style={styles.achieveGrid}>
-        {ACHIEVEMENTS.map((a) => (
+        {achievements.map((a) => (
           <View key={a.id} style={[styles.achieveCard, !a.done && styles.achieveCardLocked]}>
             <View style={styles.achieveTopRow}>
               <Text style={[styles.achieveId, a.done && styles.achieveIdDone]}>#{a.id}</Text>
@@ -154,8 +160,7 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onNavigate }) => 
           <Text style={styles.settingValue}>{s.value}</Text>
         </TouchableOpacity>
       ))}
-      
-     
+
       <TouchableOpacity style={styles.settingRow} onPress={handleSignOut}>
         <Text style={styles.signOut}>SIGN OUT</Text>
       </TouchableOpacity>
@@ -201,13 +206,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     overflow: 'hidden',
   },
-  avatarImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#CCFF00',
-  },
+  avatarImage: { width: 80, height: 80, borderRadius: 10, borderWidth: 1, borderColor: '#CCFF00' },
   avatarLetters: { color: '#000000', fontSize: 28, fontWeight: '900', zIndex: 1 },
   avatarDiag: {
     position: 'absolute',
@@ -227,23 +226,13 @@ const styles = StyleSheet.create({
   tStatLabel: { color: '#444444', fontSize: 8, fontWeight: '900', letterSpacing: 0.5 },
   tStatLine: { width: 1, height: 22, backgroundColor: '#222222' },
 
-  rankLabelRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    marginBottom: 8,
-  },
+  rankLabelRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 8 },
   rankLabel: { color: '#444444', fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
   rankNext: { color: '#CCFF00', fontSize: 10, fontWeight: '800' },
   rankBarBg: { height: 4, backgroundColor: '#1A1A1A', marginHorizontal: 20, marginBottom: 24, overflow: 'hidden' },
   rankBarFill: { height: '100%', backgroundColor: '#CCFF00' },
 
-  quickRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    marginBottom: 32,
-  },
+  quickRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 32 },
   quickStat: {},
   quickStatVal: { color: '#FFFFFF', fontSize: 22, fontWeight: '900' },
   quickStatLabel: { color: '#444444', fontSize: 9, fontWeight: '800', letterSpacing: 0.3, marginTop: 2 },
@@ -259,13 +248,7 @@ const styles = StyleSheet.create({
   sectionTitle: { color: '#FFFFFF', fontSize: 13, fontWeight: '900', letterSpacing: 0.5 },
   achieveCount: { color: '#CCFF00', fontSize: 12, fontWeight: '800' },
 
-  achieveGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: 16,
-    gap: 8,
-    marginBottom: 36,
-  },
+  achieveGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 16, gap: 8, marginBottom: 36 },
   achieveCard: {
     width: '48%',
     backgroundColor: '#111111',
@@ -283,14 +266,7 @@ const styles = StyleSheet.create({
   achieveTitleLocked: { color: '#444444' },
   achieveDesc: { color: '#444444', fontSize: 10, lineHeight: 14 },
 
-  settingsSection: {
-    color: '#444444',
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1,
-    paddingHorizontal: 20,
-    marginBottom: 8,
-  },
+  settingsSection: { color: '#444444', fontSize: 10, fontWeight: '900', letterSpacing: 1, paddingHorizontal: 20, marginBottom: 8 },
   settingRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

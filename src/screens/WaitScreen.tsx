@@ -33,10 +33,7 @@ export const WaitScreen: React.FC<WaitProps> = ({ onNavigate }) => {
           Pocket the phone. A trigger will fire at a random moment — you won't know when.
         </Text>
       </View>
-
-      <TouchableOpacity style={styles.demoBtn} onPress={() => onNavigate('REP')} activeOpacity={0.7}>
-        <Text style={styles.demoBtnText}>SIMULATE TRIGGER  (DEMO)</Text>
-      </TouchableOpacity>
+      <View />
     </View>
   );
 };
@@ -65,7 +62,6 @@ const styles = StyleSheet.create({
   },
   armedDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#CCFF00' },
   armedText: { color: '#CCFF00', fontSize: 10, fontWeight: '900', letterSpacing: 0.8 },
-
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 16 },
   ringOuter: {
     width: 288,
@@ -99,17 +95,6 @@ const styles = StyleSheet.create({
   },
   pulseSymbol: { color: '#CCFF00', fontSize: 48, lineHeight: 54 },
   listeningText: { color: '#4A6600', fontSize: 11, fontWeight: '900', letterSpacing: 2 },
-
   title: { color: '#FFFFFF', fontSize: 28, fontWeight: '900', textAlign: 'center', lineHeight: 36, marginBottom: 12 },
   desc: { color: '#444444', fontSize: 14, textAlign: 'center', lineHeight: 22, paddingHorizontal: 20 },
-
-  demoBtn: {
-    backgroundColor: '#111113',
-    borderRadius: 16,
-    paddingVertical: 18,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#1E1E21',
-  },
-  demoBtnText: { color: '#3A3A3E', fontSize: 12, fontWeight: '800', letterSpacing: 0.5 },
 });

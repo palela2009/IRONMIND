@@ -3,19 +3,23 @@ import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-nati
 
 interface RepProps {
   onNavigate: (state: any) => void;
+  triggerFiredAt: number;
+  targetApp: string;
 }
 
 const { height } = Dimensions.get('window');
 
-export const RepScreen: React.FC<RepProps> = ({ onNavigate }) => {
-  const [elapsed, setElapsed] = useState<number>(0.0);
+export const RepScreen: React.FC<RepProps> = ({ onNavigate, triggerFiredAt, targetApp }) => {
+  const [elapsed, setElapsed] = useState<number>(
+    triggerFiredAt > 0 ? (Date.now() - triggerFiredAt) / 1000 : 0
+  );
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setElapsed((prev) => parseFloat((prev + 0.1).toFixed(1)));
+      setElapsed(triggerFiredAt > 0 ? (Date.now() - triggerFiredAt) / 1000 : 0);
     }, 100);
     return () => clearInterval(interval);
-  }, []);
+  }, [triggerFiredAt]);
 
   return (
     <View style={styles.container}>
@@ -26,7 +30,7 @@ export const RepScreen: React.FC<RepProps> = ({ onNavigate }) => {
           </View>
           <View>
             <Text style={styles.bannerTitle}>TRIGGER FIRED — CLOSE NOW</Text>
-            <Text style={styles.bannerSub}>elapsed {elapsed.toFixed(1)}s</Text>
+            <Text style={styles.bannerSub}>{targetApp.toUpperCase()} · {elapsed.toFixed(1)}s elapsed</Text>
           </View>
         </View>
         <View style={styles.elapsedBadge}>
@@ -82,7 +86,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  bannerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  bannerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
   bannerLogo: { backgroundColor: '#000000', padding: 8, borderRadius: 8 },
   bannerLogoText: { color: '#CCFF00', fontWeight: '900', fontSize: 12 },
   bannerTitle: { color: '#000000', fontWeight: '900', fontSize: 12, letterSpacing: 0.3 },

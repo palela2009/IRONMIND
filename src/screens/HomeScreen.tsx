@@ -140,7 +140,9 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, onNavigate }) 
             <View style={styles.quickDivider} />
             <View style={styles.quickCell}>
               <Text style={[styles.quickVal, styles.accentVal]}>
-                {stats.bestReactionTime.toFixed(2)}<Text style={styles.quickUnit}>s</Text>
+                {stats.bestReactionTime > 0
+                  ? <>{stats.bestReactionTime.toFixed(2)}<Text style={styles.quickUnit}>s</Text></>
+                  : '—'}
               </Text>
               <Text style={styles.quickLabel}>BEST RXN</Text>
             </View>
