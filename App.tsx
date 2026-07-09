@@ -1,29 +1,79 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaView, StyleSheet, View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { SafeAreaView, StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, DeviceEventEmitter } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { AuthProvider, useAuth } from '../IRONMIND/src/context/AuthContext';
-import { useTrainingLoop } from './src/hooks/useTrainingLoop';
+import * as Notifications from 'expo-notifications';
+import { AuthProvider, useAuth } from './src/context/AuthContext';
+import { useStats } from './src/hooks/useStats';
+import { useNotifications } from './src/hooks/useNotifications';
+import { useAppMonitor } from './src/hooks/useAppMonitor';
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
+import { TrainingState } from './src/types/training';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { OnboardingScreen } from './src/screens/OnboardingScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
-import { ArmScreen } from './src/screens/ArmScreen';
-import { WaitScreen } from './src/screens/WaitScreen';
-import { RepScreen } from './src/screens/RepScreen';
-import { RsltScreen } from './src/screens/RsltScreen';
-import { FailScreen } from './src/screens/FailScreen';
-import { StatsScreen } from './src/screens/StatsScreen';
+import { AppsScreen } from './src/screens/AppsScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 
-const NAV_TABS = [
-  { state: 'HOME',    label: 'HOME',    icon: '⌂' },
-  { state: 'STATS',   label: 'STATS',   icon: '▦' },
-  { state: 'PROFILE', label: 'PROFILE', icon: '◉' },
-] as const;
+const HomeIcon = ({ active }: { active: boolean }) => {
+  const c = active ? '#000000' : '#333333';
+  return (
+    <View style={{ alignItems: 'center', gap: 2 }}>
+      <View style={{ width: 14, height: 9, borderTopLeftRadius: 7, borderTopRightRadius: 7, backgroundColor: c }} />
+      <View style={{ width: 10, height: 7, backgroundColor: c, borderRadius: 1 }} />
+    </View>
+  );
+};
+
+const AppsIcon = ({ active }: { active: boolean }) => {
+  const c = active ? '#000000' : '#333333';
+  return (
+    <View style={{ width: 14, height: 14, flexDirection: 'row', flexWrap: 'wrap', gap: 2 }}>
+      {[0, 1, 2, 3].map((i) => (
+        <View key={i} style={{ width: 5, height: 5, backgroundColor: c, borderRadius: 1 }} />
+      ))}
+    </View>
+  );
+};
+
+const ProfileIcon = ({ active }: { active: boolean }) => {
+  const c = active ? '#000000' : '#333333';
+  return (
+    <View style={{ alignItems: 'center', gap: 2 }}>
+      <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: c }} />
+      <View style={{ width: 14, height: 6, borderTopLeftRadius: 7, borderTopRightRadius: 7, backgroundColor: c }} />
+    </View>
+  );
+};
 
 function RootNavigator() {
   const { fbUser, loading } = useAuth();
-  const { trainingState, setTrainingState, stats, history, lastElapsedTime, triggerFiredAt, currentTargetApp, executeCloseRep, resetToIdle } = useTrainingLoop();
+  const { stats, history, recordChallenge } = useStats();
+  useNotifications(fbUser?.uid);
+  useAppMonitor();
+
+  const recordChallengeRef = useRef(recordChallenge);
+  recordChallengeRef.current = recordChallenge;
+
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener(
+      'IronmindChallengeResult',
+      (result: { targetApp: string; elapsedTime: number; wasSuccessful: boolean }) => {
+        recordChallengeRef.current(result.elapsedTime, result.targetApp, result.wasSuccessful);
+      }
+    );
+    return () => sub.remove();
+  }, []);
+  const [screen, setScreen] = useState<TrainingState>('HOME');
   const [isOnboarded, setIsOnboarded] = useState<boolean>(false);
   const [checkingOnboarding, setCheckingOnboarding] = useState<boolean>(true);
 
@@ -47,36 +97,19 @@ function RootNavigator() {
     );
   }
 
-  if (!fbUser) {
-    return <LoginScreen />;
-  }
-
-  if (!isOnboarded) {
-    return <OnboardingScreen onComplete={handleOnboardingComplete} />;
-  }
-
-  const isNavVisible = NAV_TABS.some((t) => t.state === trainingState);
+  if (!fbUser) return <LoginScreen />;
+  if (!isOnboarded) return <OnboardingScreen onComplete={handleOnboardingComplete} />;
 
   const renderScreen = () => {
-    switch (trainingState) {
+    switch (screen) {
       case 'HOME':
-        return <HomeScreen stats={stats} history={history} onNavigate={setTrainingState} />;
-      case 'ARM':
-        return <ArmScreen onNavigate={setTrainingState} />;
-      case 'WAIT':
-        return <WaitScreen onNavigate={setTrainingState} />;
-      case 'REP':
-        return <RepScreen onNavigate={executeCloseRep} triggerFiredAt={triggerFiredAt} targetApp={currentTargetApp} />;
-      case 'RSLT':
-        return <RsltScreen elapsedTime={lastElapsedTime} stats={stats} onNavigate={setTrainingState} />;
-      case 'FAIL':
-        return <FailScreen elapsedTime={lastElapsedTime} onReset={resetToIdle} />;
-      case 'STATS':
-        return <StatsScreen stats={stats} history={history} onNavigate={setTrainingState} />;
+        return <HomeScreen stats={stats} history={history} onNavigate={setScreen} />;
+      case 'APPS':
+        return <AppsScreen history={history} onNavigate={setScreen} />;
       case 'PROFILE':
-        return <ProfileScreen stats={stats} onNavigate={setTrainingState} />;
+        return <ProfileScreen stats={stats} onNavigate={setScreen} />;
       default:
-        return <HomeScreen stats={stats} history={history} onNavigate={setTrainingState} />;
+        return <HomeScreen stats={stats} history={history} onNavigate={setScreen} />;
     }
   };
 
@@ -85,29 +118,29 @@ function RootNavigator() {
       <StatusBar style="light" />
       <View style={styles.mainContent}>{renderScreen()}</View>
 
-      {isNavVisible && (
-        <View style={styles.nav}>
-          {NAV_TABS.map((tab) => {
-            const active = trainingState === tab.state;
-            return (
-              <TouchableOpacity
-                key={tab.state}
-                style={styles.navItem}
-                onPress={() => setTrainingState(tab.state)}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.iconWrap, active && styles.iconWrapActive]}>
-                  <Text style={[styles.icon, active && styles.iconActive]}>{tab.icon}</Text>
-                </View>
-                <Text style={[styles.navLabel, active && styles.navLabelActive]}>
-                  {tab.label}
-                </Text>
-                {active && <View style={styles.activeDot} />}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      )}
+      <View style={nav.bar}>
+        {([
+          { id: 'HOME' as TrainingState, label: 'HOME', Icon: HomeIcon },
+          { id: 'APPS' as TrainingState, label: 'APPS', Icon: AppsIcon },
+          { id: 'PROFILE' as TrainingState, label: 'YOU', Icon: ProfileIcon },
+        ] as { id: TrainingState; label: string; Icon: React.FC<{ active: boolean }> }[]).map((tab) => {
+          const active = screen === tab.id;
+          return (
+            <TouchableOpacity
+              key={tab.id}
+              style={nav.item}
+              onPress={() => setScreen(tab.id)}
+              activeOpacity={0.7}
+            >
+              <View style={[nav.iconWrap, active && nav.iconWrapActive]}>
+                <tab.Icon active={active} />
+              </View>
+              <Text style={[nav.label, active && nav.labelActive]}>{tab.label}</Text>
+              {active && <View style={nav.dot} />}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
     </SafeAreaView>
   );
 }
@@ -124,21 +157,28 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0A0A0A' },
   mainContent: { flex: 1 },
   loadingContainer: { flex: 1, backgroundColor: '#0A0A0A', justifyContent: 'center', alignItems: 'center' },
-  nav: {
+});
+
+const nav = StyleSheet.create({
+  bar: {
     flexDirection: 'row',
     backgroundColor: '#0D0D0D',
     borderTopWidth: 1,
     borderColor: '#161616',
     paddingTop: 10,
-    paddingBottom: 14,
+    paddingBottom: 16,
     paddingHorizontal: 8,
   },
-  navItem: { flex: 1, alignItems: 'center', gap: 5 },
-  iconWrap: { width: 46, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
+  item: { flex: 1, alignItems: 'center', gap: 5 },
+  iconWrap: {
+    width: 46,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   iconWrapActive: { backgroundColor: '#CCFF00' },
-  icon: { fontSize: 17, color: '#2E2E2E' },
-  iconActive: { color: '#000000' },
-  navLabel: { fontSize: 9, fontWeight: '800', letterSpacing: 0.8, color: '#2E2E2E' },
-  navLabelActive: { color: '#CCFF00' },
-  activeDot: { position: 'absolute', bottom: -14, width: 24, height: 2, backgroundColor: '#CCFF00', borderRadius: 1 },
+  label: { fontSize: 9, fontWeight: '800', letterSpacing: 0.8, color: '#333333' },
+  labelActive: { color: '#CCFF00' },
+  dot: { position: 'absolute', bottom: -16, width: 20, height: 2, backgroundColor: '#CCFF00', borderRadius: 1 },
 });

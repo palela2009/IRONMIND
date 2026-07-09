@@ -3,8 +3,9 @@ import { AppState, AppStateStatus, Linking } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { TrainingState, RepHistoryItem, UserStats } from '../types/training';
 import { useAuth } from '../context/AuthContext';
+import { API_BASE_URL } from '../config/api';
 
-const API_URL = 'http://10.0.2.2:5000/api/stats';
+const API_URL = `${API_BASE_URL}/api/stats`;
 
 const STORAGE_KEYS = {
   STATS: '@ironmind_stats',

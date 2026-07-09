@@ -1,11 +1,10 @@
-export type TrainingState = 'HOME' | 'ARM' | 'WAIT' | 'REP' | 'RSLT' | 'FAIL' | 'STATS' | 'PROFILE';
+export type TrainingState = 'HOME' | 'APPS' | 'PROFILE';
 
-export interface RepHistoryItem {
+export interface ChallengeItem {
   id: string;
   targetApp: string;
   elapsedTime: number;
   timestamp: number;
-  xpEarned: number;
   wasSuccessful: boolean;
 }
 
@@ -13,7 +12,8 @@ export interface UserStats {
   currentStreak: number;
   longestStreak: number;
   bestReactionTime: number;
-  totalReps: number;
+  totalChallenges: number;
+  successCount: number;
   currentXP: number;
   level: number;
 }

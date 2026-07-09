@@ -17,15 +17,33 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.IRONMIND",
-      "googleServicesFile": "./google-services.json"
+      "package": "com.ironmind.app",
+      "googleServicesFile": "./google-services.json",
+      "permissions": [
+        "android.permission.PACKAGE_USAGE_STATS",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.VIBRATE"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-web-browser",
-      "@react-native-google-signin/google-signin"
-    ]
+      "@react-native-google-signin/google-signin",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#CCFF00"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "e715ee5c-e8ac-4b88-aa3e-46f1bcf549f7"
+      }
+    },
+    "owner": "palela"
   }
 }
