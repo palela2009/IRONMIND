@@ -39,10 +39,6 @@ export const useNotifications = (userId?: string) => {
   }, [userId]);
 
   useEffect(() => {
-    // Foregrounding an already-running app does not remount this hook, so without this
-    // the backend would only ever get the token from the very first registration attempt —
-    // if that attempt happened before userId was known, or an onboarding save later wiped
-    // it server-side, it would silently stay missing until a full app restart.
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active' && userId) {
         resyncToken(userId);

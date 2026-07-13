@@ -12,8 +12,6 @@ export interface AppUsage {
 }
 
 const getTodayDate = () => {
-  // Local date, not UTC — using toISOString() would roll over to "tomorrow" or
-  // stay on "yesterday" depending on the device's timezone offset from UTC.
   const d = new Date();
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -48,7 +46,6 @@ export const useScreenTime = (userId?: string) => {
         .slice(0, 10);
       setScreenTime(top10);
 
-      // Sync to backend in background
       if (userId && top10.length > 0) {
         saveToBackend(userId, top10);
       }

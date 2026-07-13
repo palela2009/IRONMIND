@@ -102,7 +102,19 @@ export const useStats = () => {
     } catch {}
   };
 
+  const DAILY_CHALLENGE_LIMIT = 5;
+
+  const getTodayStart = () => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  };
+
   const recordChallenge = async (elapsedTime: number, targetApp: string, success: boolean) => {
+    const todayStart = getTodayStart();
+    const todayCount = history.filter((item) => item.timestamp >= todayStart).length;
+
+    if (todayCount >= DAILY_CHALLENGE_LIMIT) return;
+
     const xpEarned = success ? 50 + (stats.currentStreak >= 5 ? 10 : 0) : 0;
     const newStreak = success ? stats.currentStreak + 1 : 0;
     const newBest = success && elapsedTime > 0
@@ -136,5 +148,8 @@ export const useStats = () => {
     await persist(updatedStats, updatedHistory, fbUser?.uid);
   };
 
-  return { stats, history, monitoredApps, recordChallenge };
+  const todayStart = getTodayStart();
+  const challengesToday = history.filter((item) => item.timestamp >= todayStart).length;
+
+  return { stats, history, monitoredApps, recordChallenge, challengesToday, DAILY_CHALLENGE_LIMIT };
 };

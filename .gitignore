@@ -38,4 +38,11 @@ yarn-error.*
 
 # generated native folders
 /ios
-/android
+
+# Android — custom native modules here are hand-written and must be tracked;
+# only the generated Gradle build output is disposable.
+android/build/
+android/app/build/
+android/.gradle/
+android/local.properties
+android/app/.cxx/

@@ -75,7 +75,7 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, onNavigate }) 
   const weekBars = getWeeklyBars(history);
   const maxBar = Math.max(...weekBars, 1);
   const todayBarIdx = getTodayBarIndex();
-  const streakStr = String(stats.currentStreak).padStart(2, '0');
+  const streakStr = String(stats.currentStreak);
   const rxnDisplay = stats.bestReactionTime > 0 ? `${stats.bestReactionTime.toFixed(2)}s` : '—';
   const xpPct = Math.min(((stats.currentXP % 500) / 500) * 100, 100);
 
@@ -118,7 +118,7 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, onNavigate }) 
             </View>
           </View>
 
-          <Text style={styles.metaLine}>WK {weekNum} · DAY {streakStr} STREAK</Text>
+          <Text style={styles.metaLine}>WK {weekNum} · {streakStr} STREAK</Text>
 
           <View style={styles.heroRow}>
             <Text style={styles.heroNum}>{streakStr}</Text>
@@ -129,7 +129,7 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, onNavigate }) 
             </View>
           </View>
 
-          <Text style={styles.streakLabel}>DAY STREAK</Text>
+          <Text style={styles.streakLabel}>STREAK</Text>
 
           <View style={styles.xpBarBg}>
             <View style={[styles.xpBarFill, { width: `${xpPct}%` }]} />
