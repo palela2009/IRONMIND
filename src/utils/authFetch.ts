@@ -6,7 +6,10 @@ export const authedFetch = async (url: string, options: RequestInit = {}): Promi
   return fetch(url, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
+      // Only claim a JSON content type when there's an actual body — sending it on a
+      // bodyless POST/DELETE makes Express's JSON body-parser try to parse an empty
+      // request body and reject with its own generic 400 before our route ever runs.
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
       ...(options.headers || {}),
       ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
     },
