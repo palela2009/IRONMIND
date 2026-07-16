@@ -4,6 +4,7 @@ import Constants from 'expo-constants';
 import { AppState, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../config/api';
+import { authedFetch } from '../utils/authFetch';
 
 const BACKEND_URL = `${API_BASE_URL}/api/save-token`;
 
@@ -108,10 +109,9 @@ export const useNotifications = (userId?: string) => {
 
   const sendTokenToBackend = async (token: string, uid: string) => {
     try {
-      const res = await fetch(BACKEND_URL, {
+      const res = await authedFetch(BACKEND_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: uid, pushToken: token }),
+        body: JSON.stringify({ pushToken: token }),
       });
       if (res.ok) {
         console.log('[IRONMIND] Push token saved to backend for user:', uid);

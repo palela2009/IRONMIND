@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, ActivityIndicator } from 'react-native';
 import { UserStats, ChallengeItem, TrainingState } from '../types/training';
 import { useAuth } from '../context/AuthContext';
+import { XP_PER_LEVEL } from '../constants/leveling';
 
 interface HomeProps {
   stats: UserStats;
@@ -77,7 +78,7 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, onNavigate }) 
   const todayBarIdx = getTodayBarIndex();
   const streakStr = String(stats.currentStreak);
   const rxnDisplay = stats.bestReactionTime > 0 ? `${stats.bestReactionTime.toFixed(2)}s` : '—';
-  const xpPct = Math.min(((stats.currentXP % 500) / 500) * 100, 100);
+  const xpPct = Math.min(((stats.currentXP % XP_PER_LEVEL) / XP_PER_LEVEL) * 100, 100);
 
   const getInitials = () => {
     if (fbUser?.displayName) {
@@ -97,13 +98,7 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, onNavigate }) 
         <>
           <View style={styles.header}>
             <View style={styles.brand}>
-              <View style={styles.logoBox}>
-                <View style={styles.logoBars}>
-                  <View style={[styles.logoBar, { height: 7 }]} />
-                  <View style={[styles.logoBar, { height: 13 }]} />
-                  <View style={[styles.logoBar, { height: 10 }]} />
-                </View>
-              </View>
+              <Image source={require('../../assets/icon.png')} style={styles.logoBox} />
               <Text style={styles.brandName}>IRONMIND</Text>
             </View>
             <View style={styles.headerRight}>
@@ -135,7 +130,7 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, onNavigate }) 
             <View style={[styles.xpBarFill, { width: `${xpPct}%` }]} />
           </View>
           <View style={styles.xpLabelRow}>
-            <Text style={styles.xpLabel}>XP {stats.currentXP % 500} / 500</Text>
+            <Text style={styles.xpLabel}>XP {stats.currentXP % XP_PER_LEVEL} / {XP_PER_LEVEL}</Text>
             <Text style={styles.xpNext}>NEXT LV.{stats.level + 1}</Text>
           </View>
 
@@ -243,9 +238,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   brand: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  logoBox: { backgroundColor: '#CCFF00', width: 28, height: 28, borderRadius: 6, justifyContent: 'center', alignItems: 'center' },
-  logoBars: { flexDirection: 'row', alignItems: 'flex-end', gap: 2 },
-  logoBar: { width: 3.5, backgroundColor: '#000000', borderRadius: 1.5 },
+  logoBox: { width: 28, height: 28, borderRadius: 8 },
   brandName: { color: '#FFFFFF', fontSize: 15, fontWeight: '900', letterSpacing: 1.5 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   dateText: { color: '#555555', fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },

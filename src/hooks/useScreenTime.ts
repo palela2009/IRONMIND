@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { NativeModules, Platform, AppState } from 'react-native';
 import { API_BASE_URL } from '../config/api';
+import { authedFetch } from '../utils/authFetch';
 
 const { UsageMonitor } = NativeModules;
 
@@ -19,12 +20,11 @@ const getTodayDate = () => {
   return `${y}-${m}-${day}`;
 };
 
-const saveToBackend = async (userId: string, apps: AppUsage[]) => {
+const saveToBackend = async (apps: AppUsage[]) => {
   try {
-    await fetch(`${BASE_URL}/api/screentime`, {
+    await authedFetch(`${BASE_URL}/api/screentime`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, date: getTodayDate(), apps }),
+      body: JSON.stringify({ date: getTodayDate(), apps }),
     });
   } catch {}
 };
@@ -47,7 +47,7 @@ export const useScreenTime = (userId?: string) => {
       setScreenTime(top10);
 
       if (userId && top10.length > 0) {
-        saveToBackend(userId, top10);
+        saveToBackend(top10);
       }
     } catch {
       setScreenTime([]);

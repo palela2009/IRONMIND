@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaView, StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, DeviceEventEmitter } from 'react-native';
+import { SafeAreaView, StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, DeviceEventEmitter, PanResponder } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
@@ -45,6 +45,8 @@ const AppsIcon = ({ active }: { active: boolean }) => {
   );
 };
 
+const SCREEN_ORDER: TrainingState[] = ['HOME', 'APPS', 'PROFILE'];
+
 const ProfileIcon = ({ active }: { active: boolean }) => {
   const c = active ? '#000000' : '#333333';
   return (
@@ -76,6 +78,24 @@ function RootNavigator() {
   const [screen, setScreen] = useState<TrainingState>('HOME');
   const [isOnboarded, setIsOnboarded] = useState<boolean>(false);
   const [checkingOnboarding, setCheckingOnboarding] = useState<boolean>(true);
+
+  const screenRef = useRef(screen);
+  screenRef.current = screen;
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gesture) =>
+        Math.abs(gesture.dx) > 20 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 2,
+      onPanResponderRelease: (_, gesture) => {
+        const index = SCREEN_ORDER.indexOf(screenRef.current);
+        if (gesture.dx < -50 && index < SCREEN_ORDER.length - 1) {
+          setScreen(SCREEN_ORDER[index + 1]);
+        } else if (gesture.dx > 50 && index > 0) {
+          setScreen(SCREEN_ORDER[index - 1]);
+        }
+      },
+    })
+  ).current;
 
   useEffect(() => {
     AsyncStorage.getItem('@ironmind_onboarded').then((val) => {
@@ -116,7 +136,7 @@ function RootNavigator() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="light" />
-      <View style={styles.mainContent}>{renderScreen()}</View>
+      <View style={styles.mainContent} {...panResponder.panHandlers}>{renderScreen()}</View>
 
       <View style={nav.bar}>
         {([

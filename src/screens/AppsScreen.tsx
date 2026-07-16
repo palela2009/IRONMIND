@@ -21,6 +21,7 @@ const APP_COLORS: Record<string, string> = {
   Snapchat: '#FFFC00',
 };
 import { API_BASE_URL } from '../config/api';
+import { authedFetch } from '../utils/authFetch';
 
 const BACKEND_URL = `${API_BASE_URL}/api/challenge/notify`;
 
@@ -107,10 +108,9 @@ export const AppsScreen: React.FC<AppsProps> = ({ history }) => {
     if (!fbUser?.uid) return;
     setRealPushState('sending');
     try {
-      const res = await fetch(BACKEND_URL, {
+      const res = await authedFetch(BACKEND_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: fbUser.uid, test: true }),
+        body: JSON.stringify({ test: true }),
       });
       setRealPushState(res.ok ? 'sent' : 'error');
     } catch {

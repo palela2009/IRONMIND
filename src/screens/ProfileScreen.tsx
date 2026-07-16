@@ -7,6 +7,8 @@ import { signOut } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import { DIFFICULTY_WINDOW_SECONDS, DEFAULT_DIFFICULTY, DifficultyLevel } from '../constants/difficulty';
 import { API_BASE_URL } from '../config/api';
+import { authedFetch } from '../utils/authFetch';
+import { XP_PER_LEVEL } from '../constants/leveling';
 
 interface ProfileProps {
   stats: UserStats;
@@ -64,10 +66,9 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats }) => {
   };
 
   const syncOnboarding = (fields: { targetApps: string[]; difficultyLevel: DifficultyLevel; goals: string[] }) => {
-    fetch(ONBOARDING_URL, {
+    authedFetch(ONBOARDING_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ uid: fbUser?.uid, ...fields }),
+      body: JSON.stringify(fields),
     }).catch(() => {});
   };
 
@@ -117,7 +118,7 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats }) => {
 
   const achievements = getAchievements(stats);
   const doneCount = achievements.filter((a) => a.done).length;
-  const rankPct = Math.min(((stats.currentXP % 500) / 500) * 100, 100);
+  const rankPct = Math.min(((stats.currentXP % XP_PER_LEVEL) / XP_PER_LEVEL) * 100, 100);
   const rxnDisplay = stats.bestReactionTime > 0 ? `${stats.bestReactionTime.toFixed(2)}s` : '—';
   const successRate = stats.totalChallenges > 0
     ? `${Math.round((stats.successCount / stats.totalChallenges) * 100)}%`

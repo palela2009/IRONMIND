@@ -17,6 +17,8 @@ const GOALS = [
   { id: 'time', label: 'RECLAIM TIME', sub: 'Get hours back every week' },
 ];
 import { API_BASE_URL } from '../config/api';
+import { authedFetch } from '../utils/authFetch';
+import { DEFAULT_DIFFICULTY } from '../constants/difficulty';
 
 const ONBOARDING_URL = `${API_BASE_URL}/api/user/onboarding`;
 
@@ -73,10 +75,13 @@ export const OnboardingScreen: React.FC<OnboardingProps> = ({ onComplete }) => {
 
     try {
       await AsyncStorage.setItem('@ironmind_onboarding', JSON.stringify(data));
-      await fetch(ONBOARDING_URL, {
+      await authedFetch(ONBOARDING_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetApps: data.targetApps, goals: data.goals }),
+        body: JSON.stringify({
+          targetApps: data.targetApps,
+          goals: data.goals,
+          difficultyLevel: DEFAULT_DIFFICULTY,
+        }),
       });
     } catch {}
 

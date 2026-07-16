@@ -3,6 +3,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { UserStats, ChallengeItem } from '../types/training';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE_URL } from '../config/api';
+import { authedFetch } from '../utils/authFetch';
+import { XP_PER_LEVEL } from '../constants/leveling';
 
 const API_URL = `${API_BASE_URL}/api`;
 
@@ -57,7 +59,7 @@ export const useStats = () => {
       if (rawHistory) setHistory(JSON.parse(rawHistory));
 
       if (userId) {
-        const res = await fetch(`${API_URL}/stats/${userId}`);
+        const res = await authedFetch(`${API_URL}/stats/${userId}`);
         if (res.ok) {
           const cloud = await res.json();
           if (cloud.totalChallenges > localStats.totalChallenges) {
@@ -84,11 +86,9 @@ export const useStats = () => {
       await AsyncStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(updatedHistory));
 
       if (userId) {
-        await fetch(`${API_URL}/stats`, {
+        await authedFetch(`${API_URL}/stats`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            userId,
             currentStreak: updatedStats.currentStreak,
             longestStreak: updatedStats.longestStreak,
             bestReactionTime: updatedStats.bestReactionTime,
@@ -131,7 +131,7 @@ export const useStats = () => {
       totalChallenges: stats.totalChallenges + 1,
       successCount: stats.successCount + (success ? 1 : 0),
       currentXP: newXP,
-      level: Math.floor(newXP / 500) + 1,
+      level: Math.floor(newXP / XP_PER_LEVEL) + 1,
     };
 
     const newItem: ChallengeItem = {
