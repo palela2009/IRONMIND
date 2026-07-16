@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { API_BASE_URL } from '../config/api';
 import { authedFetch } from '../utils/authFetch';
 import { XP_PER_LEVEL } from '../constants/leveling';
+import { DAILY_LIMIT_VALUES, DEFAULT_DAILY_LIMIT } from '../constants/dailyLimit';
 
 const API_URL = `${API_BASE_URL}/api`;
 
@@ -28,6 +29,7 @@ export const useStats = () => {
   const [stats, setStats] = useState<UserStats>(INITIAL_STATS);
   const [history, setHistory] = useState<ChallengeItem[]>([]);
   const [monitoredApps, setMonitoredApps] = useState<string[]>([]);
+  const [dailyChallengeLimit, setDailyChallengeLimit] = useState<number>(DAILY_LIMIT_VALUES[DEFAULT_DAILY_LIMIT]);
 
   useEffect(() => {
     load(fbUser?.uid);
@@ -37,10 +39,11 @@ export const useStats = () => {
   const loadMonitoredApps = async () => {
     try {
       const raw = await AsyncStorage.getItem('@ironmind_onboarding');
-      if (raw) {
-        const data = JSON.parse(raw);
-        if (data.targetApps?.length > 0) setMonitoredApps(data.targetApps);
-      }
+      const data = raw ? JSON.parse(raw) : null;
+      // Set unconditionally (not just when present) — otherwise switching to an account
+      // with no onboarding data yet would leave the previous account's values in memory.
+      setMonitoredApps(data?.targetApps?.length > 0 ? data.targetApps : []);
+      setDailyChallengeLimit(data?.dailyChallengeLimit ?? DAILY_LIMIT_VALUES[DEFAULT_DAILY_LIMIT]);
     } catch {}
   };
 
@@ -102,8 +105,6 @@ export const useStats = () => {
     } catch {}
   };
 
-  const DAILY_CHALLENGE_LIMIT = 5;
-
   const getTodayStart = () => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
@@ -113,7 +114,7 @@ export const useStats = () => {
     const todayStart = getTodayStart();
     const todayCount = history.filter((item) => item.timestamp >= todayStart).length;
 
-    if (todayCount >= DAILY_CHALLENGE_LIMIT) return;
+    if (todayCount >= dailyChallengeLimit) return;
 
     const xpEarned = success ? 50 + (stats.currentStreak >= 5 ? 10 : 0) : 0;
     const newStreak = success ? stats.currentStreak + 1 : 0;
@@ -151,5 +152,13 @@ export const useStats = () => {
   const todayStart = getTodayStart();
   const challengesToday = history.filter((item) => item.timestamp >= todayStart).length;
 
-  return { stats, history, monitoredApps, recordChallenge, challengesToday, DAILY_CHALLENGE_LIMIT };
+  return {
+    stats,
+    history,
+    monitoredApps,
+    recordChallenge,
+    challengesToday,
+    DAILY_CHALLENGE_LIMIT: dailyChallengeLimit,
+    refreshSettings: loadMonitoredApps,
+  };
 };

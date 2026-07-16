@@ -27,6 +27,7 @@ class UsageMonitorService : Service() {
     private val cooldownMs = 120_000L
     private var activeChallenge: ActiveChallenge? = null
     private var challengeWindowMs = 10_000L
+    private var maxDailyChallenges = 5
 
     private val APP_PACKAGES = mapOf(
         "Instagram" to "com.instagram.android",
@@ -53,6 +54,9 @@ class UsageMonitorService : Service() {
         if (intent?.hasExtra("challengeWindowSeconds") == true) {
             challengeWindowMs = (intent.getDoubleExtra("challengeWindowSeconds", 10.0) * 1000).toLong()
         }
+        if (intent?.hasExtra("dailyLimit") == true) {
+            maxDailyChallenges = intent.getDoubleExtra("dailyLimit", 5.0).toInt()
+        }
 
         createChannels()
         startForeground(FOREGROUND_ID, buildForegroundNotification())
@@ -67,11 +71,14 @@ class UsageMonitorService : Service() {
 
         activeChallenge?.let { challenge ->
             val elapsedMs = now - challenge.startTime
-            if (foreground != challenge.pkg) {
-                emitChallengeResult(challenge.appName, elapsedMs / 1000.0, true)
-                activeChallenge = null
-            } else if (elapsedMs >= challengeWindowMs) {
+            // Check the deadline FIRST: polling only happens every 2s, so by the time a poll
+            // notices the user has left the app, elapsed time may already be past the window —
+            // that must still count as a fail, not a success just because they eventually left.
+            if (elapsedMs >= challengeWindowMs) {
                 emitChallengeResult(challenge.appName, -1.0, false)
+                activeChallenge = null
+            } else if (foreground != challenge.pkg) {
+                emitChallengeResult(challenge.appName, elapsedMs / 1000.0, true)
                 activeChallenge = null
             }
             // A challenge is in progress — don't evaluate for a new one until this resolves.
@@ -81,7 +88,7 @@ class UsageMonitorService : Service() {
         for ((appName, pkg) in monitoredPackages) {
             if (foreground == pkg) {
                 val sameAppCooldown = appName == lastChallengedApp && (now - lastChallengeTime) < cooldownMs
-                if (!sameAppCooldown && getFiredCountToday() < MAX_DAILY_CHALLENGES) {
+                if (!sameAppCooldown && getFiredCountToday() < maxDailyChallenges) {
                     lastChallengedApp = appName
                     lastChallengeTime = now
                     activeChallenge = ActiveChallenge(appName, pkg, now)
@@ -199,6 +206,5 @@ class UsageMonitorService : Service() {
         const val FOREGROUND_CHANNEL = "ironmind_monitor"
         const val CHALLENGE_CHANNEL = "ironmind_challenges"
         const val PREFS_NAME = "ironmind_challenge_prefs"
-        const val MAX_DAILY_CHALLENGES = 5
     }
 }

@@ -6,12 +6,14 @@ import { useAuth } from '../context/AuthContext';
 import { signOut } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import { DIFFICULTY_WINDOW_SECONDS, DEFAULT_DIFFICULTY, DifficultyLevel } from '../constants/difficulty';
+import { DAILY_LIMIT_VALUES, DEFAULT_DAILY_LIMIT, DailyLimitLevel } from '../constants/dailyLimit';
 import { API_BASE_URL } from '../config/api';
 import { authedFetch } from '../utils/authFetch';
 import { XP_PER_LEVEL } from '../constants/leveling';
 
 interface ProfileProps {
   stats: UserStats;
+  onSettingsChanged?: () => void;
   onNavigate: (state: any) => void;
 }
 
@@ -24,6 +26,17 @@ const DIFFICULTIES: { id: DifficultyLevel; label: string; desc: string }[] = [
   { id: 'HARD', label: 'HARD', desc: `${DIFFICULTY_WINDOW_SECONDS.HARD} second window — fastest reflexes only` },
 ];
 
+const DAILY_LIMITS: { id: DailyLimitLevel; label: string; desc: string }[] = [
+  { id: 'EASY', label: 'EASY', desc: `${DAILY_LIMIT_VALUES.EASY} challenges a day — fewest chances to slip up` },
+  { id: 'MEDIUM', label: 'MEDIUM', desc: `${DAILY_LIMIT_VALUES.MEDIUM} challenges a day` },
+  { id: 'HARD', label: 'HARD', desc: `${DAILY_LIMIT_VALUES.HARD} challenges a day — most exposure, most discipline required` },
+];
+
+const dailyLimitLevelFor = (limit: number): DailyLimitLevel => {
+  const match = (Object.entries(DAILY_LIMIT_VALUES) as [DailyLimitLevel, number][]).find(([, v]) => v === limit);
+  return match ? match[0] : DEFAULT_DAILY_LIMIT;
+};
+
 const getAchievements = (s: UserStats) => [
   { id: '01', title: 'FIRST STEP', desc: 'Completed your first challenge', done: s.totalChallenges >= 1 },
   { id: '02', title: 'SPEED DEMON', desc: 'Exit in under 3 seconds', done: s.bestReactionTime > 0 && s.bestReactionTime < 3.0 },
@@ -35,7 +48,7 @@ const getAchievements = (s: UserStats) => [
   { id: '08', title: 'MARATHON', desc: '500 challenges completed', done: s.totalChallenges >= 500 },
 ];
 
-export const ProfileScreen: React.FC<ProfileProps> = ({ stats }) => {
+export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onSettingsChanged }) => {
   const { fbUser } = useAuth();
   const [monitoredApps, setMonitoredApps] = useState<string[]>([]);
   const [editingApps, setEditingApps] = useState<boolean>(false);
@@ -47,25 +60,31 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats }) => {
   const [pendingDifficulty, setPendingDifficulty] = useState<DifficultyLevel>(DEFAULT_DIFFICULTY);
   const [savingDifficulty, setSavingDifficulty] = useState<boolean>(false);
 
+  const [dailyLimit, setDailyLimit] = useState<number>(DAILY_LIMIT_VALUES[DEFAULT_DAILY_LIMIT]);
+  const [editingDailyLimit, setEditingDailyLimit] = useState<boolean>(false);
+  const [pendingDailyLimit, setPendingDailyLimit] = useState<DailyLimitLevel>(DEFAULT_DAILY_LIMIT);
+  const [savingDailyLimit, setSavingDailyLimit] = useState<boolean>(false);
+
   useEffect(() => {
     AsyncStorage.getItem('@ironmind_onboarding').then((raw) => {
       if (raw) {
         const data = JSON.parse(raw);
         if (data.targetApps) setMonitoredApps(data.targetApps);
         if (data.difficultyLevel) setDifficulty(data.difficultyLevel);
+        if (data.dailyChallengeLimit) setDailyLimit(data.dailyChallengeLimit);
       }
     }).catch(() => {});
   }, []);
 
-  const restartMonitor = (apps: string[], difficultyLevel: DifficultyLevel) => {
+  const restartMonitor = (apps: string[], difficultyLevel: DifficultyLevel, dailyChallengeLimit: number) => {
     if (Platform.OS !== 'android' || !NativeModules.UsageMonitor) return;
     NativeModules.UsageMonitor.stopMonitoring();
     if (apps.length > 0) {
-      NativeModules.UsageMonitor.startMonitoring(apps, DIFFICULTY_WINDOW_SECONDS[difficultyLevel]);
+      NativeModules.UsageMonitor.startMonitoring(apps, DIFFICULTY_WINDOW_SECONDS[difficultyLevel], dailyChallengeLimit);
     }
   };
 
-  const syncOnboarding = (fields: { targetApps: string[]; difficultyLevel: DifficultyLevel; goals: string[] }) => {
+  const syncOnboarding = (fields: { targetApps: string[]; difficultyLevel: DifficultyLevel; dailyChallengeLimit: number; goals: string[] }) => {
     authedFetch(ONBOARDING_URL, {
       method: 'POST',
       body: JSON.stringify(fields),
@@ -89,8 +108,11 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats }) => {
       const updated = { ...data, targetApps: pendingApps };
       await AsyncStorage.setItem('@ironmind_onboarding', JSON.stringify(updated));
       setMonitoredApps(pendingApps);
-      restartMonitor(pendingApps, data.difficultyLevel ?? difficulty);
-      syncOnboarding({ targetApps: pendingApps, difficultyLevel: data.difficultyLevel ?? difficulty, goals: data.goals ?? [] });
+      const effectiveDifficulty = data.difficultyLevel ?? difficulty;
+      const effectiveDailyLimit = data.dailyChallengeLimit ?? dailyLimit;
+      restartMonitor(pendingApps, effectiveDifficulty, effectiveDailyLimit);
+      syncOnboarding({ targetApps: pendingApps, difficultyLevel: effectiveDifficulty, dailyChallengeLimit: effectiveDailyLimit, goals: data.goals ?? [] });
+      onSettingsChanged?.();
     } catch {}
     setSavingApps(false);
     setEditingApps(false);
@@ -109,11 +131,38 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats }) => {
       const updated = { ...data, difficultyLevel: pendingDifficulty };
       await AsyncStorage.setItem('@ironmind_onboarding', JSON.stringify(updated));
       setDifficulty(pendingDifficulty);
-      restartMonitor(data.targetApps ?? monitoredApps, pendingDifficulty);
-      syncOnboarding({ targetApps: data.targetApps ?? monitoredApps, difficultyLevel: pendingDifficulty, goals: data.goals ?? [] });
+      const effectiveApps = data.targetApps ?? monitoredApps;
+      const effectiveDailyLimit = data.dailyChallengeLimit ?? dailyLimit;
+      restartMonitor(effectiveApps, pendingDifficulty, effectiveDailyLimit);
+      syncOnboarding({ targetApps: effectiveApps, difficultyLevel: pendingDifficulty, dailyChallengeLimit: effectiveDailyLimit, goals: data.goals ?? [] });
+      onSettingsChanged?.();
     } catch {}
     setSavingDifficulty(false);
     setEditingDifficulty(false);
+  };
+
+  const openDailyLimitEditor = () => {
+    setPendingDailyLimit(dailyLimitLevelFor(dailyLimit));
+    setEditingDailyLimit(true);
+  };
+
+  const saveDailyLimit = async () => {
+    setSavingDailyLimit(true);
+    try {
+      const resolvedLimit = DAILY_LIMIT_VALUES[pendingDailyLimit];
+      const raw = await AsyncStorage.getItem('@ironmind_onboarding');
+      const data = raw ? JSON.parse(raw) : {};
+      const updated = { ...data, dailyChallengeLimit: resolvedLimit };
+      await AsyncStorage.setItem('@ironmind_onboarding', JSON.stringify(updated));
+      setDailyLimit(resolvedLimit);
+      const effectiveApps = data.targetApps ?? monitoredApps;
+      const effectiveDifficulty = data.difficultyLevel ?? difficulty;
+      restartMonitor(effectiveApps, effectiveDifficulty, resolvedLimit);
+      syncOnboarding({ targetApps: effectiveApps, difficultyLevel: effectiveDifficulty, dailyChallengeLimit: resolvedLimit, goals: data.goals ?? [] });
+      onSettingsChanged?.();
+    } catch {}
+    setSavingDailyLimit(false);
+    setEditingDailyLimit(false);
   };
 
   const achievements = getAchievements(stats);
@@ -328,8 +377,60 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats }) => {
         </View>
       )}
 
+      <TouchableOpacity style={styles.settingRow} onPress={openDailyLimitEditor} activeOpacity={0.7}>
+        <Text style={styles.settingLabel}>DAILY CHALLENGES</Text>
+        <Text style={styles.settingValue}>
+          {dailyLimit} / DAY · {DAILY_LIMITS.find((d) => d.id === dailyLimitLevelFor(dailyLimit))?.label} ›
+        </Text>
+      </TouchableOpacity>
+
+      {editingDailyLimit && (
+        <View style={styles.appEditor}>
+          {DAILY_LIMITS.map((d) => {
+            const on = pendingDailyLimit === d.id;
+            return (
+              <TouchableOpacity
+                key={d.id}
+                style={[styles.diffRow, on && styles.appEditRowOn]}
+                onPress={() => setPendingDailyLimit(d.id)}
+                activeOpacity={0.75}
+              >
+                <View style={styles.diffLeft}>
+                  <Text style={[styles.appEditLabel, on && styles.appEditLabelOn]}>{d.label}</Text>
+                  <Text style={styles.diffDesc}>{d.desc}</Text>
+                </View>
+                <View style={[styles.radioOuter, on && styles.radioOuterOn]}>
+                  {on && <View style={styles.radioInner} />}
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+          <View style={styles.appEditActions}>
+            <TouchableOpacity
+              style={styles.appEditCancel}
+              onPress={() => setEditingDailyLimit(false)}
+              activeOpacity={0.8}
+              disabled={savingDailyLimit}
+            >
+              <Text style={styles.appEditCancelText}>CANCEL</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.appEditSave}
+              onPress={saveDailyLimit}
+              activeOpacity={0.85}
+              disabled={savingDailyLimit}
+            >
+              {savingDailyLimit ? (
+                <ActivityIndicator color="#000000" size="small" />
+              ) : (
+                <Text style={styles.appEditSaveText}>SAVE</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
       {[
-        { label: 'DAILY CHALLENGES', value: '5 / DAY' },
         { label: 'NOTIFICATIONS', value: 'ON' },
       ].map((s) => (
         <TouchableOpacity key={s.label} style={styles.settingRow}>

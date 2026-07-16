@@ -7,12 +7,12 @@ import { XP_PER_LEVEL } from '../constants/leveling';
 interface HomeProps {
   stats: UserStats;
   history: ChallengeItem[];
+  dailyChallengeLimit: number;
   onNavigate: (state: TrainingState) => void;
 }
 
 const DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-const MAX_DAILY = 5;
 
 const getTodayCount = (history: ChallengeItem[]): number => {
   const today = new Date();
@@ -58,7 +58,7 @@ const timeAgo = (ts: number) => {
   return `${Math.floor(mins / 60)}h ago`;
 };
 
-export const HomeScreen: React.FC<HomeProps> = ({ stats, history, onNavigate }) => {
+export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallengeLimit, onNavigate }) => {
   const { fbUser } = useAuth();
 
   const now = new Date();
@@ -141,13 +141,13 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, onNavigate }) 
                 {todaySuccess}<Text style={styles.todayOf}>/{todayCount} done</Text>
               </Text>
               <Text style={styles.todayRemain}>
-                {MAX_DAILY - todayCount > 0
-                  ? `${MAX_DAILY - todayCount} more may fire today`
+                {dailyChallengeLimit - todayCount > 0
+                  ? `${dailyChallengeLimit - todayCount} more may fire today`
                   : 'All challenges complete for today'}
               </Text>
             </View>
             <View style={styles.todayDots}>
-              {Array.from({ length: MAX_DAILY }).map((_, i) => (
+              {Array.from({ length: dailyChallengeLimit }).map((_, i) => (
                 <View
                   key={i}
                   style={[

@@ -59,9 +59,8 @@ const ProfileIcon = ({ active }: { active: boolean }) => {
 
 function RootNavigator() {
   const { fbUser, loading } = useAuth();
-  const { stats, history, recordChallenge } = useStats();
+  const { stats, history, recordChallenge, DAILY_CHALLENGE_LIMIT, refreshSettings } = useStats();
   useNotifications(fbUser?.uid);
-  useAppMonitor();
 
   const recordChallengeRef = useRef(recordChallenge);
   recordChallengeRef.current = recordChallenge;
@@ -78,6 +77,8 @@ function RootNavigator() {
   const [screen, setScreen] = useState<TrainingState>('HOME');
   const [isOnboarded, setIsOnboarded] = useState<boolean>(false);
   const [checkingOnboarding, setCheckingOnboarding] = useState<boolean>(true);
+
+  useAppMonitor(fbUser?.uid, isOnboarded);
 
   const screenRef = useRef(screen);
   screenRef.current = screen;
@@ -98,11 +99,15 @@ function RootNavigator() {
   ).current;
 
   useEffect(() => {
+    setCheckingOnboarding(true);
     AsyncStorage.getItem('@ironmind_onboarded').then((val) => {
-      if (val === 'true') setIsOnboarded(true);
+      // Must set false as well as true — if a different account just signed in and its
+      // stale onboarding flag was cleared, this needs to route back to OnboardingScreen,
+      // not keep whatever isOnboarded value was left over from the previous account.
+      setIsOnboarded(val === 'true');
       setCheckingOnboarding(false);
     }).catch(() => setCheckingOnboarding(false));
-  }, []);
+  }, [fbUser?.uid]);
 
   const handleOnboardingComplete = async () => {
     await AsyncStorage.setItem('@ironmind_onboarded', 'true');
@@ -123,13 +128,13 @@ function RootNavigator() {
   const renderScreen = () => {
     switch (screen) {
       case 'HOME':
-        return <HomeScreen stats={stats} history={history} onNavigate={setScreen} />;
+        return <HomeScreen stats={stats} history={history} dailyChallengeLimit={DAILY_CHALLENGE_LIMIT} onNavigate={setScreen} />;
       case 'APPS':
         return <AppsScreen history={history} onNavigate={setScreen} />;
       case 'PROFILE':
-        return <ProfileScreen stats={stats} onNavigate={setScreen} />;
+        return <ProfileScreen stats={stats} onSettingsChanged={refreshSettings} onNavigate={setScreen} />;
       default:
-        return <HomeScreen stats={stats} history={history} onNavigate={setScreen} />;
+        return <HomeScreen stats={stats} history={history} dailyChallengeLimit={DAILY_CHALLENGE_LIMIT} onNavigate={setScreen} />;
     }
   };
 
