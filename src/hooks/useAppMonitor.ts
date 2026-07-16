@@ -6,17 +6,26 @@ import { DAILY_LIMIT_VALUES, DEFAULT_DAILY_LIMIT } from '../constants/dailyLimit
 
 const { UsageMonitor } = NativeModules;
 
-// Restart whenever the signed-in account changes or onboarding completes — otherwise the
-// native monitor keeps running with whichever account's app list was active when it first
-// started, and never picks up a freshly-onboarded account's real selections at all.
-export const useAppMonitor = (uid?: string, isOnboarded?: boolean) => {
+// Only depends on uid, not on onboarding-completion state — that used to also be a
+// dependency so a freshly-onboarded account's app list would get picked up, but uid and
+// isOnboarded can flip in quick succession during an account switch (uid changes, then the
+// async cloud-restore resolves isOnboarded moments later), which stopped and restarted the
+// foreground service twice in rapid succession — exactly the pattern that trips Android's
+// strict 5-second foreground-service promotion deadline and crashes the app. Onboarding
+// completion and cloud-restore now call syncAppMonitor() directly instead.
+export const useAppMonitor = (uid?: string) => {
   useEffect(() => {
     if (Platform.OS !== 'android') return;
-    startMonitoringFromStorage();
+    syncAppMonitor();
     return () => {
       UsageMonitor?.stopMonitoring();
     };
-  }, [uid, isOnboarded]);
+  }, [uid]);
+};
+
+export const syncAppMonitor = async () => {
+  if (Platform.OS !== 'android') return;
+  await startMonitoringFromStorage();
 };
 
 const startMonitoringFromStorage = async () => {

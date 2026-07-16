@@ -6,7 +6,7 @@ import * as Notifications from 'expo-notifications';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { useStats } from './src/hooks/useStats';
 import { useNotifications } from './src/hooks/useNotifications';
-import { useAppMonitor } from './src/hooks/useAppMonitor';
+import { useAppMonitor, syncAppMonitor } from './src/hooks/useAppMonitor';
 import { colors, radius, spacing, cardShadow } from './src/theme';
 import { authedFetch } from './src/utils/authFetch';
 import { API_BASE_URL } from './src/config/api';
@@ -92,7 +92,7 @@ function RootNavigator() {
   const [isOnboarded, setIsOnboarded] = useState<boolean>(false);
   const [checkingOnboarding, setCheckingOnboarding] = useState<boolean>(true);
 
-  useAppMonitor(fbUser?.uid, isOnboarded);
+  useAppMonitor(fbUser?.uid);
 
   const screenRef = useRef(screen);
   screenRef.current = screen;
@@ -142,6 +142,7 @@ function RootNavigator() {
                 dailyChallengeLimit: cloud.dailyChallengeLimit,
               }));
               await AsyncStorage.setItem('@ironmind_onboarded', 'true');
+              await syncAppMonitor();
               return finish(true);
             }
           }

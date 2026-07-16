@@ -47,6 +47,13 @@ class UsageMonitorService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Android enforces a strict ~5s deadline between startForegroundService() and this
+        // service calling startForeground() — miss it and the whole app is killed with
+        // ForegroundServiceDidNotStartInTimeException. Call it before any other work so
+        // nothing (parsing extras, creating channels) can push it past that deadline.
+        createChannels()
+        startForeground(FOREGROUND_ID, buildForegroundNotification())
+
         val apps = intent?.getStringArrayExtra("apps") ?: emptyArray()
         monitoredPackages = apps.mapNotNull { appName ->
             APP_PACKAGES[appName]?.let { pkg -> Pair(appName, pkg) }
@@ -57,9 +64,6 @@ class UsageMonitorService : Service() {
         if (intent?.hasExtra("dailyLimit") == true) {
             maxDailyChallenges = intent.getDoubleExtra("dailyLimit", 5.0).toInt()
         }
-
-        createChannels()
-        startForeground(FOREGROUND_ID, buildForegroundNotification())
         handler.post(pollRunnable)
 
         return START_STICKY

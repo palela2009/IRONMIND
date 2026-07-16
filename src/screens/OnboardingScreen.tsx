@@ -20,6 +20,7 @@ import { API_BASE_URL } from '../config/api';
 import { authedFetch } from '../utils/authFetch';
 import { DEFAULT_DIFFICULTY } from '../constants/difficulty';
 import { useAuth } from '../context/AuthContext';
+import { syncAppMonitor } from '../hooks/useAppMonitor';
 
 const ONBOARDING_URL = `${API_BASE_URL}/api/user/onboarding`;
 
@@ -88,6 +89,7 @@ export const OnboardingScreen: React.FC<OnboardingProps> = ({ onComplete }) => {
           photoURL: fbUser?.photoURL,
         }),
       });
+      await syncAppMonitor();
     } catch {}
 
     setSaving(false);
