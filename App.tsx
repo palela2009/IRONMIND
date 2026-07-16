@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { useStats } from './src/hooks/useStats';
 import { useNotifications } from './src/hooks/useNotifications';
 import { useAppMonitor } from './src/hooks/useAppMonitor';
+import { colors, radius, spacing, cardShadow } from './src/theme';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -25,7 +26,7 @@ import { AppsScreen } from './src/screens/AppsScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 
 const HomeIcon = ({ active }: { active: boolean }) => {
-  const c = active ? '#000000' : '#333333';
+  const c = active ? '#000000' : colors.textFaint;
   return (
     <View style={{ alignItems: 'center', gap: 2 }}>
       <View style={{ width: 14, height: 9, borderTopLeftRadius: 7, borderTopRightRadius: 7, backgroundColor: c }} />
@@ -35,7 +36,7 @@ const HomeIcon = ({ active }: { active: boolean }) => {
 };
 
 const AppsIcon = ({ active }: { active: boolean }) => {
-  const c = active ? '#000000' : '#333333';
+  const c = active ? '#000000' : colors.textFaint;
   return (
     <View style={{ width: 14, height: 14, flexDirection: 'row', flexWrap: 'wrap', gap: 2 }}>
       {[0, 1, 2, 3].map((i) => (
@@ -48,7 +49,7 @@ const AppsIcon = ({ active }: { active: boolean }) => {
 const SCREEN_ORDER: TrainingState[] = ['HOME', 'APPS', 'PROFILE'];
 
 const ProfileIcon = ({ active }: { active: boolean }) => {
-  const c = active ? '#000000' : '#333333';
+  const c = active ? '#000000' : colors.textFaint;
   return (
     <View style={{ alignItems: 'center', gap: 2 }}>
       <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: c }} />
@@ -143,28 +144,29 @@ function RootNavigator() {
       <StatusBar style="light" />
       <View style={styles.mainContent} {...panResponder.panHandlers}>{renderScreen()}</View>
 
-      <View style={nav.bar}>
-        {([
-          { id: 'HOME' as TrainingState, label: 'HOME', Icon: HomeIcon },
-          { id: 'APPS' as TrainingState, label: 'APPS', Icon: AppsIcon },
-          { id: 'PROFILE' as TrainingState, label: 'YOU', Icon: ProfileIcon },
-        ] as { id: TrainingState; label: string; Icon: React.FC<{ active: boolean }> }[]).map((tab) => {
-          const active = screen === tab.id;
-          return (
-            <TouchableOpacity
-              key={tab.id}
-              style={nav.item}
-              onPress={() => setScreen(tab.id)}
-              activeOpacity={0.7}
-            >
-              <View style={[nav.iconWrap, active && nav.iconWrapActive]}>
-                <tab.Icon active={active} />
-              </View>
-              <Text style={[nav.label, active && nav.labelActive]}>{tab.label}</Text>
-              {active && <View style={nav.dot} />}
-            </TouchableOpacity>
-          );
-        })}
+      <View style={nav.container}>
+        <View style={nav.bar}>
+          {([
+            { id: 'HOME' as TrainingState, label: 'HOME', Icon: HomeIcon },
+            { id: 'APPS' as TrainingState, label: 'APPS', Icon: AppsIcon },
+            { id: 'PROFILE' as TrainingState, label: 'YOU', Icon: ProfileIcon },
+          ] as { id: TrainingState; label: string; Icon: React.FC<{ active: boolean }> }[]).map((tab) => {
+            const active = screen === tab.id;
+            return (
+              <TouchableOpacity
+                key={tab.id}
+                style={nav.item}
+                onPress={() => setScreen(tab.id)}
+                activeOpacity={0.7}
+              >
+                <View style={[nav.iconWrap, active && nav.iconWrapActive]}>
+                  <tab.Icon active={active} />
+                </View>
+                <Text style={[nav.label, active && nav.labelActive]}>{tab.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -179,31 +181,30 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0A0A0A' },
+  container: { flex: 1, backgroundColor: colors.bg },
   mainContent: { flex: 1 },
-  loadingContainer: { flex: 1, backgroundColor: '#0A0A0A', justifyContent: 'center', alignItems: 'center' },
+  loadingContainer: { flex: 1, backgroundColor: colors.bg, justifyContent: 'center', alignItems: 'center' },
 });
 
 const nav = StyleSheet.create({
+  container: { paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
   bar: {
     flexDirection: 'row',
-    backgroundColor: '#0D0D0D',
-    borderTopWidth: 1,
-    borderColor: '#161616',
-    paddingTop: 10,
-    paddingBottom: 16,
-    paddingHorizontal: 8,
+    backgroundColor: colors.surface,
+    borderRadius: radius.xl,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+    ...cardShadow,
   },
   item: { flex: 1, alignItems: 'center', gap: 5 },
   iconWrap: {
-    width: 46,
-    height: 28,
-    borderRadius: 14,
+    width: 48,
+    height: 30,
+    borderRadius: radius.pill,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  iconWrapActive: { backgroundColor: '#CCFF00' },
-  label: { fontSize: 9, fontWeight: '800', letterSpacing: 0.8, color: '#333333' },
-  labelActive: { color: '#CCFF00' },
-  dot: { position: 'absolute', bottom: -16, width: 20, height: 2, backgroundColor: '#CCFF00', borderRadius: 1 },
+  iconWrapActive: { backgroundColor: colors.accent },
+  label: { fontSize: 9, fontWeight: '800', letterSpacing: 0.8, color: colors.textFaint },
+  labelActive: { color: colors.accent },
 });
