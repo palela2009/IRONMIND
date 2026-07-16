@@ -19,10 +19,12 @@ const GOALS = [
 import { API_BASE_URL } from '../config/api';
 import { authedFetch } from '../utils/authFetch';
 import { DEFAULT_DIFFICULTY } from '../constants/difficulty';
+import { useAuth } from '../context/AuthContext';
 
 const ONBOARDING_URL = `${API_BASE_URL}/api/user/onboarding`;
 
 export const OnboardingScreen: React.FC<OnboardingProps> = ({ onComplete }) => {
+  const { fbUser } = useAuth();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [selectedApps, setSelectedApps] = useState<string[]>([]);
   const [selectedGoal, setSelectedGoal] = useState<string>('');
@@ -81,6 +83,9 @@ export const OnboardingScreen: React.FC<OnboardingProps> = ({ onComplete }) => {
           targetApps: data.targetApps,
           goals: data.goals,
           difficultyLevel: DEFAULT_DIFFICULTY,
+          email: fbUser?.email,
+          displayName: fbUser?.displayName,
+          photoURL: fbUser?.photoURL,
         }),
       });
     } catch {}

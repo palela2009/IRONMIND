@@ -76,25 +76,58 @@ export const useFriends = () => {
     }
   };
 
-  const acceptRequest = async (id: string) => {
+  const acceptRequest = async (id: string): Promise<boolean> => {
+    setError('');
     try {
-      await authedFetch(`${API_URL}/requests/${id}/accept`, { method: 'POST' });
+      const res = await authedFetch(`${API_URL}/requests/${id}/accept`, { method: 'POST' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        console.error('[IRONMIND] Accept request failed:', res.status, body);
+        setError(body.message ?? 'Could not accept request');
+        return false;
+      }
       await load();
-    } catch {}
+      return true;
+    } catch (e) {
+      console.error('[IRONMIND] Accept request error:', e);
+      setError('Network error — try again');
+      return false;
+    }
   };
 
-  const rejectRequest = async (id: string) => {
+  const rejectRequest = async (id: string): Promise<boolean> => {
+    setError('');
     try {
-      await authedFetch(`${API_URL}/requests/${id}/reject`, { method: 'POST' });
+      const res = await authedFetch(`${API_URL}/requests/${id}/reject`, { method: 'POST' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        console.error('[IRONMIND] Reject request failed:', res.status, body);
+        setError(body.message ?? 'Could not reject request');
+        return false;
+      }
       await load();
-    } catch {}
+      return true;
+    } catch (e) {
+      console.error('[IRONMIND] Reject request error:', e);
+      setError('Network error — try again');
+      return false;
+    }
   };
 
-  const removeFriend = async (uid: string) => {
+  const removeFriend = async (uid: string): Promise<boolean> => {
+    setError('');
     try {
-      await authedFetch(`${API_URL}/${uid}`, { method: 'DELETE' });
+      const res = await authedFetch(`${API_URL}/${uid}`, { method: 'DELETE' });
+      if (!res.ok) {
+        console.error('[IRONMIND] Remove friend failed:', res.status);
+        return false;
+      }
       await load();
-    } catch {}
+      return true;
+    } catch (e) {
+      console.error('[IRONMIND] Remove friend error:', e);
+      return false;
+    }
   };
 
   return { code, friends, requests, loading, error, addByCode, acceptRequest, rejectRequest, removeFriend, refresh: load };

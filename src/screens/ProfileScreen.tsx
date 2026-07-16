@@ -87,7 +87,12 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onSettingsChanged
   const syncOnboarding = (fields: { targetApps: string[]; difficultyLevel: DifficultyLevel; dailyChallengeLimit: number; goals: string[] }) => {
     authedFetch(ONBOARDING_URL, {
       method: 'POST',
-      body: JSON.stringify(fields),
+      body: JSON.stringify({
+        ...fields,
+        email: fbUser?.email,
+        displayName: fbUser?.displayName,
+        photoURL: fbUser?.photoURL,
+      }),
     }).catch(() => {});
   };
 

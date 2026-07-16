@@ -43,6 +43,16 @@ export const FriendsScreen: React.FC<FriendsProps> = () => {
     setTimeout(() => setAddResult('idle'), 3000);
   };
 
+  const handleAccept = async (id: string) => {
+    const ok = await acceptRequest(id);
+    if (!ok) Alert.alert('Could not accept request', error || 'Try again.');
+  };
+
+  const handleReject = async (id: string) => {
+    const ok = await rejectRequest(id);
+    if (!ok) Alert.alert('Could not reject request', error || 'Try again.');
+  };
+
   const handleRemove = (uid: string, name: string) => {
     Alert.alert('Remove friend', `Remove ${name} from your friends?`, [
       { text: 'Cancel', style: 'cancel' },
@@ -102,10 +112,10 @@ export const FriendsScreen: React.FC<FriendsProps> = () => {
                 <Text style={styles.avatarText}>{abbrFor(r.displayName)}</Text>
               </View>
               <Text style={styles.requestName} numberOfLines={1}>{r.displayName}</Text>
-              <TouchableOpacity style={styles.rejectBtn} onPress={() => rejectRequest(r.id)} activeOpacity={0.8}>
+              <TouchableOpacity style={styles.rejectBtn} onPress={() => handleReject(r.id)} activeOpacity={0.8}>
                 <Text style={styles.rejectBtnText}>✕</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.acceptBtn} onPress={() => acceptRequest(r.id)} activeOpacity={0.8}>
+              <TouchableOpacity style={styles.acceptBtn} onPress={() => handleAccept(r.id)} activeOpacity={0.8}>
                 <Text style={styles.acceptBtnText}>ACCEPT</Text>
               </TouchableOpacity>
             </View>

@@ -8,6 +8,8 @@ import { useStats } from './src/hooks/useStats';
 import { useNotifications } from './src/hooks/useNotifications';
 import { useAppMonitor } from './src/hooks/useAppMonitor';
 import { colors, radius, spacing, cardShadow } from './src/theme';
+import { authedFetch } from './src/utils/authFetch';
+import { API_BASE_URL } from './src/config/api';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -111,14 +113,47 @@ function RootNavigator() {
   ).current;
 
   useEffect(() => {
-    setCheckingOnboarding(true);
-    AsyncStorage.getItem('@ironmind_onboarded').then((val) => {
-      // Must set false as well as true — if a different account just signed in and its
-      // stale onboarding flag was cleared, this needs to route back to OnboardingScreen,
-      // not keep whatever isOnboarded value was left over from the previous account.
-      setIsOnboarded(val === 'true');
+    let cancelled = false;
+    const finish = (onboarded: boolean) => {
+      if (cancelled) return;
+      setIsOnboarded(onboarded);
       setCheckingOnboarding(false);
-    }).catch(() => setCheckingOnboarding(false));
+    };
+
+    const check = async () => {
+      setCheckingOnboarding(true);
+      try {
+        const val = await AsyncStorage.getItem('@ironmind_onboarded');
+        if (val === 'true') return finish(true);
+
+        // No local flag — before sending this account through onboarding again, check
+        // whether the cloud already has real settings for it. A local reset (e.g. the
+        // account-switch guard clearing stale data from a previous account on this
+        // device) shouldn't force a *returning* account to redo onboarding from scratch.
+        if (fbUser?.uid) {
+          const res = await authedFetch(`${API_BASE_URL}/api/user/onboarding`);
+          if (res.ok) {
+            const cloud = await res.json();
+            if (cloud.onboarded) {
+              await AsyncStorage.setItem('@ironmind_onboarding', JSON.stringify({
+                targetApps: cloud.targetApps,
+                goals: cloud.goals,
+                difficultyLevel: cloud.difficultyLevel,
+                dailyChallengeLimit: cloud.dailyChallengeLimit,
+              }));
+              await AsyncStorage.setItem('@ironmind_onboarded', 'true');
+              return finish(true);
+            }
+          }
+        }
+        finish(false);
+      } catch {
+        finish(false);
+      }
+    };
+
+    check();
+    return () => { cancelled = true; };
   }, [fbUser?.uid]);
 
   const handleOnboardingComplete = async () => {
