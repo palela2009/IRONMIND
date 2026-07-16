@@ -1,4 +1,4 @@
-export type TrainingState = 'HOME' | 'APPS' | 'PROFILE';
+export type TrainingState = 'HOME' | 'APPS' | 'FRIENDS' | 'PROFILE';
 
 export interface ChallengeItem {
   id: string;

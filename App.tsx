@@ -22,6 +22,7 @@ import { LoginScreen } from './src/screens/LoginScreen';
 import { OnboardingScreen } from './src/screens/OnboardingScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { AppsScreen } from './src/screens/AppsScreen';
+import { FriendsScreen } from './src/screens/FriendsScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 
 const HomeIcon = ({ active }: { active: boolean }) => {
@@ -45,7 +46,17 @@ const AppsIcon = ({ active }: { active: boolean }) => {
   );
 };
 
-const SCREEN_ORDER: TrainingState[] = ['HOME', 'APPS', 'PROFILE'];
+const SCREEN_ORDER: TrainingState[] = ['HOME', 'APPS', 'FRIENDS', 'PROFILE'];
+
+const FriendsIcon = ({ active }: { active: boolean }) => {
+  const c = active ? '#000000' : '#333333';
+  return (
+    <View style={{ flexDirection: 'row' }}>
+      <View style={{ width: 9, height: 9, borderRadius: 4.5, backgroundColor: c, marginRight: -3, marginTop: 2 }} />
+      <View style={{ width: 11, height: 11, borderRadius: 5.5, backgroundColor: c }} />
+    </View>
+  );
+};
 
 const ProfileIcon = ({ active }: { active: boolean }) => {
   const c = active ? '#000000' : '#333333';
@@ -131,6 +142,8 @@ function RootNavigator() {
         return <HomeScreen stats={stats} history={history} dailyChallengeLimit={DAILY_CHALLENGE_LIMIT} onNavigate={setScreen} />;
       case 'APPS':
         return <AppsScreen history={history} onNavigate={setScreen} />;
+      case 'FRIENDS':
+        return <FriendsScreen onNavigate={setScreen} />;
       case 'PROFILE':
         return <ProfileScreen stats={stats} onSettingsChanged={refreshSettings} onNavigate={setScreen} />;
       default:
@@ -147,6 +160,7 @@ function RootNavigator() {
         {([
           { id: 'HOME' as TrainingState, label: 'HOME', Icon: HomeIcon },
           { id: 'APPS' as TrainingState, label: 'APPS', Icon: AppsIcon },
+          { id: 'FRIENDS' as TrainingState, label: 'FRIENDS', Icon: FriendsIcon },
           { id: 'PROFILE' as TrainingState, label: 'YOU', Icon: ProfileIcon },
         ] as { id: TrainingState; label: string; Icon: React.FC<{ active: boolean }> }[]).map((tab) => {
           const active = screen === tab.id;
