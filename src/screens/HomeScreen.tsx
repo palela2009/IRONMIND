@@ -124,7 +124,7 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallenge
             </View>
 
             <Text style={styles.heroNum}>{streakStr}</Text>
-            <Text style={styles.streakLabel}>DAY STREAK</Text>
+            <Text style={styles.streakLabel}>STREAK</Text>
 
             <View style={styles.xpBarBg}>
               <View style={[styles.xpBarFill, { width: `${xpPct}%` }]} />
