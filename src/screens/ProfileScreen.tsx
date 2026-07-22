@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, NativeModules, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, NativeModules, Platform, ActivityIndicator, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { UserStats } from '../types/training';
 import { useAuth } from '../context/AuthContext';
@@ -20,6 +20,7 @@ interface ProfileProps {
 
 const APPS_LIST = ['Instagram', 'YouTube', 'TikTok', 'Facebook', 'X (Twitter)', 'Reddit', 'Snapchat'];
 const ONBOARDING_URL = `${API_BASE_URL}/api/user/onboarding`;
+const DELETE_ACCOUNT_URL = `${API_BASE_URL}/api/user/account`;
 
 const DIFFICULTIES: { id: DifficultyLevel; label: string; desc: string }[] = [
   { id: 'EASY', label: 'EASY', desc: `${DIFFICULTY_WINDOW_SECONDS.EASY} second window — most forgiving` },
@@ -181,6 +182,47 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onSettingsChanged
 
   const handleSignOut = async () => {
     try { await signOut(auth); } catch {}
+  };
+
+  const [deletingAccount, setDeletingAccount] = useState<boolean>(false);
+
+  const performDeleteAccount = async () => {
+    setDeletingAccount(true);
+    try {
+      const res = await authedFetch(DELETE_ACCOUNT_URL, { method: 'DELETE' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        Alert.alert('Could not delete account', body.message ?? 'Try again.');
+        setDeletingAccount(false);
+        return;
+      }
+      // Server-side data is already gone — clear everything cached locally too, then
+      // sign out. Deleting the Firebase user doesn't invalidate this device's existing
+      // session by itself, so signOut() is still needed to actually leave the account.
+      await AsyncStorage.multiRemove([
+        '@ironmind_stats_v2',
+        '@ironmind_history_v2',
+        '@ironmind_onboarded',
+        '@ironmind_onboarding',
+        '@ironmind_push_token',
+        '@ironmind_last_uid',
+      ]);
+      await signOut(auth);
+    } catch {
+      Alert.alert('Could not delete account', 'Network error — try again.');
+      setDeletingAccount(false);
+    }
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete your account?',
+      'This permanently deletes your account, streak, history, and friends. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete Account', style: 'destructive', onPress: performDeleteAccount },
+      ]
+    );
   };
 
   const getInitials = () => {
@@ -445,6 +487,14 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onSettingsChanged
       <TouchableOpacity style={styles.settingRow} onPress={handleSignOut}>
         <Text style={styles.signOut}>SIGN OUT</Text>
       </TouchableOpacity>
+
+      <TouchableOpacity style={styles.settingRow} onPress={handleDeleteAccount} disabled={deletingAccount}>
+        {deletingAccount ? (
+          <ActivityIndicator color={colors.danger} size="small" />
+        ) : (
+          <Text style={styles.deleteAccount}>DELETE ACCOUNT</Text>
+        )}
+      </TouchableOpacity>
     </ScrollView>
   );
 };
@@ -538,6 +588,7 @@ const styles = StyleSheet.create({
   settingLabel: { color: colors.textPrimary, fontSize: 13, fontWeight: '700' },
   settingValue: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
   signOut: { color: colors.danger, fontSize: 13, fontWeight: '900' },
+  deleteAccount: { color: colors.textTertiary, fontSize: 12, fontWeight: '700' },
 
   appEditor: { backgroundColor: colors.surface, marginHorizontal: spacing.lg, marginTop: -spacing.xs, marginBottom: spacing.md, borderRadius: radius.lg, padding: spacing.md, ...cardShadow },
   appEditRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.surfaceRaised, paddingHorizontal: spacing.lg, paddingVertical: spacing.lg, borderRadius: radius.md, marginBottom: spacing.sm },
