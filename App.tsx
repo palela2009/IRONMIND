@@ -76,6 +76,23 @@ function RootNavigator() {
   const { stats, history, recordChallenge, DAILY_CHALLENGE_LIMIT, refreshSettings } = useStats();
   useNotifications(fbUser?.uid);
 
+  useEffect(() => {
+    // Identity (email/displayName/photoURL) previously only reached the backend as a side
+    // effect of changing a setting in Profile, so plenty of existing accounts never sent
+    // it at all — which is why friend requests/leaderboard entries showed "Unknown". This
+    // syncs it automatically on every login; the backend now accepts identity-only updates
+    // without requiring the full onboarding payload, so this can't clobber real settings.
+    if (!fbUser?.uid) return;
+    authedFetch(`${API_BASE_URL}/api/user/onboarding`, {
+      method: 'POST',
+      body: JSON.stringify({
+        email: fbUser.email,
+        displayName: fbUser.displayName,
+        photoURL: fbUser.photoURL,
+      }),
+    }).catch(() => {});
+  }, [fbUser?.uid]);
+
   const recordChallengeRef = useRef(recordChallenge);
   recordChallengeRef.current = recordChallenge;
 
