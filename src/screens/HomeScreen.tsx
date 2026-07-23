@@ -215,11 +215,12 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallenge
           <View style={[styles.repDot, item.wasSuccessful ? styles.repDotOk : styles.repDotFail]} />
           <Text style={styles.repApp}>{item.targetApp.toUpperCase()}</Text>
           <Text style={styles.repTime}>{timeAgo(item.timestamp)}</Text>
-          {item.wasSuccessful ? (
-            <Text style={styles.repReact}>{item.elapsedTime.toFixed(2)}s</Text>
-          ) : (
-            <Text style={styles.repFail}>FAIL</Text>
-          )}
+          <View style={styles.repRight}>
+            <Text style={item.wasSuccessful ? styles.repReact : styles.repFailTime}>
+              {item.elapsedTime > 0 ? `${item.elapsedTime.toFixed(2)}s` : '—'}
+            </Text>
+            {!item.wasSuccessful && <Text style={styles.repFailLabel}>FAIL</Text>}
+          </View>
         </View>
       )}
       ItemSeparatorComponent={() => <View style={styles.repDivider} />}
@@ -343,8 +344,10 @@ const styles = StyleSheet.create({
   repDotFail: { backgroundColor: colors.danger },
   repApp: { flex: 1, color: colors.textPrimary, fontSize: 14, fontWeight: '800', letterSpacing: 0.3 },
   repTime: { color: colors.textFaint, fontSize: 11, fontWeight: '600' },
-  repReact: { color: colors.accent, fontSize: 14, fontWeight: '900', width: 46, textAlign: 'right' },
-  repFail: { color: colors.danger, fontSize: 12, fontWeight: '900', width: 46, textAlign: 'right' },
+  repRight: { alignItems: 'flex-end', minWidth: 52 },
+  repReact: { color: colors.accent, fontSize: 14, fontWeight: '900' },
+  repFailTime: { color: colors.textSecondary, fontSize: 14, fontWeight: '800' },
+  repFailLabel: { color: colors.danger, fontSize: 9, fontWeight: '900', letterSpacing: 0.5, marginTop: 1 },
   repDivider: { height: 1, backgroundColor: colors.borderSubtle, marginHorizontal: spacing.xl },
 
   emptyState: { alignItems: 'center', paddingVertical: 40, paddingHorizontal: spacing.xl },

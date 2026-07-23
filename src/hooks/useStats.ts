@@ -83,7 +83,7 @@ export const useStats = () => {
     } catch {}
   };
 
-  const persist = async (updatedStats: UserStats, updatedHistory: ChallengeItem[], userId?: string) => {
+  const persist = async (updatedStats: UserStats, updatedHistory: ChallengeItem[], newItem: ChallengeItem, userId?: string) => {
     try {
       await AsyncStorage.setItem(STORAGE_KEYS.STATS, JSON.stringify(updatedStats));
       await AsyncStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(updatedHistory));
@@ -99,6 +99,18 @@ export const useStats = () => {
             successCount: updatedStats.successCount,
             currentXP: updatedStats.currentXP,
             level: updatedStats.level,
+          }),
+        });
+        // Aggregate totals above cover Home/Profile displays, but nothing previously
+        // persisted the individual challenge record — history only ever lived in local
+        // AsyncStorage, invisible in MongoDB and lost on reinstall/device switch.
+        await authedFetch(`${API_URL}/challenge/result`, {
+          method: 'POST',
+          body: JSON.stringify({
+            targetApp: newItem.targetApp,
+            elapsedTime: newItem.elapsedTime,
+            wasSuccessful: newItem.wasSuccessful,
+            timestamp: newItem.timestamp,
           }),
         });
       }
@@ -138,7 +150,7 @@ export const useStats = () => {
     const newItem: ChallengeItem = {
       id: Date.now().toString(),
       targetApp,
-      elapsedTime: success ? elapsedTime : -1,
+      elapsedTime,
       timestamp: Date.now(),
       wasSuccessful: success,
     };
@@ -146,7 +158,7 @@ export const useStats = () => {
     const updatedHistory = [newItem, ...history];
     setStats(updatedStats);
     setHistory(updatedHistory);
-    await persist(updatedStats, updatedHistory, fbUser?.uid);
+    await persist(updatedStats, updatedHistory, newItem, fbUser?.uid);
   };
 
   const todayStart = getTodayStart();

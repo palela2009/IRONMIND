@@ -75,17 +75,16 @@ class UsageMonitorService : Service() {
 
         activeChallenge?.let { challenge ->
             val elapsedMs = now - challenge.startTime
-            // Check the deadline FIRST: polling only happens every 2s, so by the time a poll
-            // notices the user has left the app, elapsed time may already be past the window —
-            // that must still count as a fail, not a success just because they eventually left.
-            if (elapsedMs >= challengeWindowMs) {
-                emitChallengeResult(challenge.appName, -1.0, false)
-                activeChallenge = null
-            } else if (foreground != challenge.pkg) {
-                emitChallengeResult(challenge.appName, elapsedMs / 1000.0, true)
+            if (foreground != challenge.pkg) {
+                // Only resolve once they actually leave — whether that's within the window
+                // (success) or well after it expired (still a fail, but showing the real
+                // time it took them to close it instead of a meaningless placeholder).
+                val success = elapsedMs < challengeWindowMs
+                emitChallengeResult(challenge.appName, elapsedMs / 1000.0, success)
                 activeChallenge = null
             }
-            // A challenge is in progress — don't evaluate for a new one until this resolves.
+            // Window expired but they're still in the app: keep waiting rather than firing
+            // an early fail — don't evaluate for a new challenge until this one resolves.
             return
         }
 
