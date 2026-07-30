@@ -57,6 +57,7 @@ export const AppsScreen: React.FC<AppsProps> = ({ history }) => {
   const [monitoredApps, setMonitoredApps] = useState<string[]>([]);
   const [notifGranted, setNotifGranted] = useState<boolean>(false);
   const [usageAccessGranted, setUsageAccessGranted] = useState<boolean>(false);
+  const [batteryExempt, setBatteryExempt] = useState<boolean>(false);
   const [realPushState, setRealPushState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
 
   const checkPermissions = useCallback(async () => {
@@ -69,6 +70,12 @@ export const AppsScreen: React.FC<AppsProps> = ({ history }) => {
         setUsageAccessGranted(!!granted);
       } catch {
         setUsageAccessGranted(false);
+      }
+      try {
+        const exempt = await NativeModules.UsageMonitor.isIgnoringBatteryOptimizations();
+        setBatteryExempt(!!exempt);
+      } catch {
+        setBatteryExempt(false);
       }
     }
 
@@ -101,6 +108,12 @@ export const AppsScreen: React.FC<AppsProps> = ({ history }) => {
       }
     } catch {
       await Linking.openSettings();
+    }
+  };
+
+  const handleRequestBatteryExemption = () => {
+    if (Platform.OS === 'android' && NativeModules.UsageMonitor) {
+      NativeModules.UsageMonitor.requestIgnoreBatteryOptimizations();
     }
   };
 
@@ -203,7 +216,27 @@ export const AppsScreen: React.FC<AppsProps> = ({ history }) => {
             </TouchableOpacity>
           )}
         </View>
+        <View style={styles.statusDivider} />
+        <View style={styles.statusRow}>
+          <View style={styles.statusLeft}>
+            <View style={[styles.statusDot, batteryExempt && styles.statusDotOn]} />
+            <Text style={styles.statusLabel}>Battery Optimization</Text>
+          </View>
+          {batteryExempt ? (
+            <Text style={styles.statusOn}>OFF</Text>
+          ) : (
+            <TouchableOpacity onPress={handleRequestBatteryExemption} activeOpacity={0.8}>
+              <Text style={styles.statusFix}>TURN OFF →</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
+      {!batteryExempt && (
+        <Text style={styles.batteryHint}>
+          Some phones (especially Xiaomi/MIUI) can kill or delay the background monitor to
+          save battery, which breaks challenge detection. Turning this off keeps it reliable.
+        </Text>
+      )}
 
       {/* TEST SECTION */}
       <View style={styles.testCard}>
@@ -333,6 +366,7 @@ const styles = StyleSheet.create({
   statusLabel: { color: '#DDDDDD', fontSize: 13, fontWeight: '700' },
   statusOn: { color: '#CCFF00', fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
   statusFix: { color: '#FFFFFF', fontSize: 11, fontWeight: '900', letterSpacing: 0.3 },
+  batteryHint: { color: '#555555', fontSize: 11, lineHeight: 16, marginHorizontal: 16, marginTop: -4, marginBottom: 16 },
 
   testCard: {
     backgroundColor: '#0A1400',

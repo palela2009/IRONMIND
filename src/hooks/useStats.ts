@@ -54,12 +54,13 @@ export const useStats = () => {
         AsyncStorage.getItem(STORAGE_KEYS.HISTORY),
       ]);
 
-      let localStats = INITIAL_STATS;
-      if (rawStats) {
-        localStats = JSON.parse(rawStats);
-        setStats(localStats);
-      }
-      if (rawHistory) setHistory(JSON.parse(rawHistory));
+      // Set unconditionally, same fix as loadMonitoredApps below — otherwise switching to
+      // (or deleting into) an account with an empty local cache left stats/history frozen
+      // on whatever the PREVIOUS account's values were, since setStats/setHistory were
+      // only ever called when data was actually found.
+      const localStats: UserStats = rawStats ? JSON.parse(rawStats) : INITIAL_STATS;
+      setStats(localStats);
+      setHistory(rawHistory ? JSON.parse(rawHistory) : []);
 
       if (userId) {
         const res = await authedFetch(`${API_URL}/stats/${userId}`);

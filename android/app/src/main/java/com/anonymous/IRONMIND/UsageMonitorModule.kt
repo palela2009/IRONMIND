@@ -49,6 +49,39 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
     }
 
     @ReactMethod
+    fun isIgnoringBatteryOptimizations(promise: Promise) {
+        try {
+            val pm = reactContext.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+            promise.resolve(pm.isIgnoringBatteryOptimizations(reactContext.packageName))
+        } catch (e: Exception) {
+            promise.resolve(false)
+        }
+    }
+
+    // MIUI (and several other OEM skins) can throttle when they actually dispatch a
+    // foreground service start well beyond Android's own Doze restrictions, which is a
+    // common cause of ForegroundServiceDidNotStartInTimeException on those devices no
+    // matter how fast our own code responds once invoked. This is the standard exemption
+    // request; MIUI's own extra "Autostart" toggle has no public API to launch directly.
+    @ReactMethod
+    fun requestIgnoreBatteryOptimizations() {
+        try {
+            val intent = Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                data = android.net.Uri.parse("package:${reactContext.packageName}")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            reactContext.startActivity(intent)
+        } catch (e: Exception) {
+            try {
+                val fallback = Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                reactContext.startActivity(fallback)
+            } catch (_: Exception) {}
+        }
+    }
+
+    @ReactMethod
     fun hasUsageAccess(promise: Promise) {
         try {
             val appOps = reactContext.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager

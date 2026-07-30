@@ -99,6 +99,7 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onSettingsChanged
   };
 
   const openAppEditor = () => {
+    if (editingApps) { setEditingApps(false); return; }
     setPendingApps(monitoredApps);
     setEditingApps(true);
   };
@@ -126,6 +127,7 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onSettingsChanged
   };
 
   const openDifficultyEditor = () => {
+    if (editingDifficulty) { setEditingDifficulty(false); return; }
     setPendingDifficulty(difficulty);
     setEditingDifficulty(true);
   };
@@ -149,6 +151,7 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onSettingsChanged
   };
 
   const openDailyLimitEditor = () => {
+    if (editingDailyLimit) { setEditingDailyLimit(false); return; }
     setPendingDailyLimit(dailyLimitLevelFor(dailyLimit));
     setEditingDailyLimit(true);
   };
