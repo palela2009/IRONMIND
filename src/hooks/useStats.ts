@@ -59,26 +59,41 @@ export const useStats = () => {
       // on whatever the PREVIOUS account's values were, since setStats/setHistory were
       // only ever called when data was actually found.
       const localStats: UserStats = rawStats ? JSON.parse(rawStats) : INITIAL_STATS;
+      const localHistory: ChallengeItem[] = rawHistory ? JSON.parse(rawHistory) : [];
       setStats(localStats);
-      setHistory(rawHistory ? JSON.parse(rawHistory) : []);
+      setHistory(localHistory);
 
-      if (userId) {
-        const res = await authedFetch(`${API_URL}/stats/${userId}`);
-        if (res.ok) {
-          const cloud = await res.json();
-          if (cloud.totalChallenges > localStats.totalChallenges) {
-            const parsed: UserStats = {
-              currentStreak: cloud.currentStreak ?? 0,
-              longestStreak: cloud.longestStreak ?? 0,
-              bestReactionTime: cloud.bestReactionTime ?? 0,
-              totalChallenges: cloud.totalChallenges ?? 0,
-              successCount: cloud.successCount ?? 0,
-              currentXP: cloud.currentXP ?? 0,
-              level: cloud.level ?? 1,
-            };
-            setStats(parsed);
-            await AsyncStorage.setItem(STORAGE_KEYS.STATS, JSON.stringify(parsed));
-          }
+      if (!userId) return;
+
+      const [statsRes, historyRes] = await Promise.all([
+        authedFetch(`${API_URL}/stats/${userId}`),
+        authedFetch(`${API_URL}/challenge/results`),
+      ]);
+
+      if (statsRes.ok) {
+        const cloud = await statsRes.json();
+        if (cloud.totalChallenges > localStats.totalChallenges) {
+          const parsed: UserStats = {
+            currentStreak: cloud.currentStreak ?? 0,
+            longestStreak: cloud.longestStreak ?? 0,
+            bestReactionTime: cloud.bestReactionTime ?? 0,
+            totalChallenges: cloud.totalChallenges ?? 0,
+            successCount: cloud.successCount ?? 0,
+            currentXP: cloud.currentXP ?? 0,
+            level: cloud.level ?? 1,
+          };
+          setStats(parsed);
+          await AsyncStorage.setItem(STORAGE_KEYS.STATS, JSON.stringify(parsed));
+        }
+      }
+
+      if (historyRes.ok) {
+        const cloudHistory: ChallengeItem[] = await historyRes.json();
+        // Cloud wins when it holds more than this device does — covers both a fresh
+        // install and an account switch, which each start with nothing stored locally.
+        if (cloudHistory.length > localHistory.length) {
+          setHistory(cloudHistory);
+          await AsyncStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(cloudHistory));
         }
       }
     } catch {}
