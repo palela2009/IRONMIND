@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, NativeModules, Platform, ActivityIndicator, Alert, TextInput } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { UserStats } from '../types/training';
 import { useAuth } from '../context/AuthContext';
 import { signOut, updateProfile } from 'firebase/auth';
@@ -23,6 +22,8 @@ interface ProfileProps {
 const APPS_LIST = ['Instagram', 'YouTube', 'TikTok', 'Facebook', 'X (Twitter)', 'Reddit', 'Snapchat'];
 const ONBOARDING_URL = `${API_BASE_URL}/api/user/onboarding`;
 const DELETE_ACCOUNT_URL = `${API_BASE_URL}/api/user/account`;
+const PHOTO_UPLOAD_URL = `${API_BASE_URL}/api/user/photo`;
+const photoUrlFor = (uid: string) => `${API_BASE_URL}/api/public/photo/${uid}?t=${Date.now()}`;
 
 const DIFFICULTIES: { id: DifficultyLevel; label: string; desc: string }[] = [
   { id: 'EASY', label: 'EASY', desc: `${DIFFICULTY_WINDOW_SECONDS.EASY} second window — most forgiving` },
@@ -248,23 +249,33 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onSettingsChanged
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.7,
+        base64: true,
       });
-      if (result.canceled || !result.assets?.[0]) return;
+      if (result.canceled || !result.assets?.[0]?.base64) return;
 
       setUploadingPhoto(true);
-      const response = await fetch(result.assets[0].uri);
-      const blob = await response.blob();
+      // Stored in our own MongoDB and served from our own backend — no separate object
+      // storage service (Firebase Storage, S3, etc.) needed.
+      const uploadRes = await authedFetch(PHOTO_UPLOAD_URL, {
+        method: 'POST',
+        body: JSON.stringify({ imageBase64: result.assets[0].base64, contentType: 'image/jpeg' }),
+      });
+      if (!uploadRes.ok) {
+        const body = await uploadRes.json().catch(() => ({}));
+        Alert.alert('Could not update photo', body.message ?? 'Try again.');
+        setUploadingPhoto(false);
+        return;
+      }
 
-      const storage = getStorage();
-      const photoRef = ref(storage, `profile-photos/${fbUser.uid}.jpg`);
-      await uploadBytes(photoRef, blob);
-      const downloadUrl = await getDownloadURL(photoRef);
-
-      await updateProfile(auth.currentUser!, { photoURL: downloadUrl });
+      // A cache-busting query param, not a new file — the URL otherwise stays identical
+      // after a re-upload, and both the OS image cache and RN's <Image> would keep
+      // showing the old bytes at that same address.
+      const newPhotoUrl = photoUrlFor(fbUser.uid);
+      await updateProfile(auth.currentUser!, { photoURL: newPhotoUrl });
       await refreshUser();
-      resyncIdentityToBackend(fbUser.displayName, downloadUrl);
+      resyncIdentityToBackend(fbUser.displayName, newPhotoUrl);
     } catch (e) {
-      Alert.alert('Could not update photo', 'Try again — if this keeps happening, Firebase Storage may need to be enabled for this project.');
+      Alert.alert('Could not update photo', 'Try again.');
     }
     setUploadingPhoto(false);
   };
