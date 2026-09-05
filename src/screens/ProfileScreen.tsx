@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, NativeModules, Platform, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, NativeModules, Platform, ActivityIndicator, Alert, TextInput } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'expo-image-picker';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { UserStats } from '../types/training';
 import { useAuth } from '../context/AuthContext';
-import { signOut } from 'firebase/auth';
+import { signOut, updateProfile } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import { DIFFICULTY_WINDOW_SECONDS, DEFAULT_DIFFICULTY, DifficultyLevel } from '../constants/difficulty';
 import { DAILY_LIMIT_VALUES, DEFAULT_DAILY_LIMIT, DailyLimitLevel } from '../constants/dailyLimit';
@@ -51,7 +53,7 @@ const getAchievements = (s: UserStats) => [
 ];
 
 export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onSettingsChanged }) => {
-  const { fbUser } = useAuth();
+  const { fbUser, refreshUser } = useAuth();
   const [monitoredApps, setMonitoredApps] = useState<string[]>([]);
   const [editingApps, setEditingApps] = useState<boolean>(false);
   const [pendingApps, setPendingApps] = useState<string[]>([]);
@@ -217,6 +219,79 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onSettingsChanged
     }
   };
 
+  const [uploadingPhoto, setUploadingPhoto] = useState<boolean>(false);
+  const [editingName, setEditingName] = useState<boolean>(false);
+  const [pendingName, setPendingName] = useState<string>('');
+  const [savingName, setSavingName] = useState<boolean>(false);
+
+  // Every Google account already comes with a name/photo from the OAuth profile, but
+  // email/password sign-ups start with neither — this is what lets those users set both
+  // themselves, and lets anyone override the Google-provided ones if they want to.
+  const resyncIdentityToBackend = (displayName?: string | null, photoURL?: string | null) => {
+    authedFetch(ONBOARDING_URL, {
+      method: 'POST',
+      body: JSON.stringify({ displayName, photoURL, email: fbUser?.email }),
+    }).catch(() => {});
+  };
+
+  const handlePickPhoto = async () => {
+    if (uploadingPhoto || !fbUser) return;
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert('Permission needed', 'Allow photo library access to set a profile picture.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.7,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+
+      setUploadingPhoto(true);
+      const response = await fetch(result.assets[0].uri);
+      const blob = await response.blob();
+
+      const storage = getStorage();
+      const photoRef = ref(storage, `profile-photos/${fbUser.uid}.jpg`);
+      await uploadBytes(photoRef, blob);
+      const downloadUrl = await getDownloadURL(photoRef);
+
+      await updateProfile(auth.currentUser!, { photoURL: downloadUrl });
+      await refreshUser();
+      resyncIdentityToBackend(fbUser.displayName, downloadUrl);
+    } catch (e) {
+      Alert.alert('Could not update photo', 'Try again — if this keeps happening, Firebase Storage may need to be enabled for this project.');
+    }
+    setUploadingPhoto(false);
+  };
+
+  const openNameEditor = () => {
+    setPendingName(fbUser?.displayName ?? '');
+    setEditingName(true);
+  };
+
+  const saveName = async () => {
+    const trimmed = pendingName.trim();
+    if (!trimmed || !fbUser) {
+      setEditingName(false);
+      return;
+    }
+    setSavingName(true);
+    try {
+      await updateProfile(auth.currentUser!, { displayName: trimmed });
+      await refreshUser();
+      resyncIdentityToBackend(trimmed, fbUser.photoURL);
+    } catch {
+      Alert.alert('Could not update name', 'Try again.');
+    }
+    setSavingName(false);
+    setEditingName(false);
+  };
+
   const handleDeleteAccount = () => {
     Alert.alert(
       'Delete your account?',
@@ -250,17 +325,42 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onSettingsChanged
           <Text style={styles.athleteNo}>LV {stats.level} · {stats.currentXP} XP</Text>
         </View>
         <View style={styles.cardBody}>
-          {fbUser?.photoURL ? (
-            <Image source={{ uri: fbUser.photoURL }} style={styles.avatarImage} />
-          ) : (
-            <View style={styles.avatarBox}>
-              <Text style={styles.avatarLetters}>{getInitials()}</Text>
-            </View>
-          )}
+          <TouchableOpacity onPress={handlePickPhoto} activeOpacity={0.8} disabled={uploadingPhoto}>
+            {uploadingPhoto ? (
+              <View style={styles.avatarBox}><ActivityIndicator color="#000000" /></View>
+            ) : fbUser?.photoURL ? (
+              <Image source={{ uri: fbUser.photoURL }} style={styles.avatarImage} />
+            ) : (
+              <View style={styles.avatarBox}>
+                <Text style={styles.avatarLetters}>{getInitials()}</Text>
+              </View>
+            )}
+            <View style={styles.avatarEditBadge}><Text style={styles.avatarEditBadgeText}>✎</Text></View>
+          </TouchableOpacity>
           <View style={styles.athleteDetails}>
-            <Text style={styles.handleText} numberOfLines={1} adjustsFontSizeToFit>
-              {fbUser?.displayName || 'IRON ATHLETE'}
-            </Text>
+            {editingName ? (
+              <View style={styles.nameEditRow}>
+                <TextInput
+                  style={styles.nameInput}
+                  value={pendingName}
+                  onChangeText={setPendingName}
+                  placeholder="Your name"
+                  placeholderTextColor={colors.textFaint}
+                  autoFocus
+                  maxLength={40}
+                  editable={!savingName}
+                />
+                <TouchableOpacity onPress={saveName} disabled={savingName} style={styles.nameSaveBtn}>
+                  {savingName ? <ActivityIndicator color="#000000" size="small" /> : <Text style={styles.nameSaveBtnText}>✓</Text>}
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity onPress={openNameEditor} activeOpacity={0.7}>
+                <Text style={styles.handleText} numberOfLines={1} adjustsFontSizeToFit>
+                  {fbUser?.displayName || 'IRON ATHLETE'} <Text style={styles.nameEditHint}>✎</Text>
+                </Text>
+              </TouchableOpacity>
+            )}
             <Text style={styles.emailText}>{fbUser?.email || ''}</Text>
             <View style={styles.threeStats}>
               <View style={styles.tStat}>
@@ -541,6 +641,14 @@ const styles = StyleSheet.create({
   avatarBox: { width: 76, height: 76, backgroundColor: colors.accent, borderRadius: radius.lg, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
   avatarImage: { width: 76, height: 76, borderRadius: radius.lg },
   avatarLetters: { color: '#000000', fontSize: 26, fontWeight: '900' },
+  avatarEditBadge: { position: 'absolute', bottom: -2, right: -2, width: 22, height: 22, borderRadius: 11, backgroundColor: colors.surfaceRaised, borderWidth: 2, borderColor: colors.surface, justifyContent: 'center', alignItems: 'center' },
+  avatarEditBadgeText: { color: colors.textPrimary, fontSize: 11 },
+
+  nameEditHint: { color: colors.textFaint, fontSize: 14 },
+  nameEditRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  nameInput: { flex: 1, color: colors.textPrimary, fontSize: 18, fontWeight: '800', borderBottomWidth: 1, borderColor: colors.accent, paddingVertical: 2 },
+  nameSaveBtn: { width: 28, height: 28, borderRadius: radius.pill, backgroundColor: colors.accent, justifyContent: 'center', alignItems: 'center' },
+  nameSaveBtnText: { color: '#000000', fontSize: 14, fontWeight: '900' },
   athleteDetails: { flex: 1, overflow: 'hidden' },
   handleText: { color: colors.textPrimary, fontSize: 22, fontWeight: '900', letterSpacing: -0.5 },
   emailText: { color: colors.textTertiary, fontSize: 11, fontWeight: '600', marginBottom: spacing.md },

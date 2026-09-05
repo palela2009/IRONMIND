@@ -6,6 +6,7 @@ import { auth } from '../config/firebase';
 interface AuthContextType {
   fbUser: FirebaseUser | null;
   loading: boolean;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
@@ -54,8 +55,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return unsubscribe;
   }, []);
 
+  // Firebase's own auth-state listener doesn't refire just because updateProfile()
+  // changed displayName/photoURL on the current user object in place — callers that
+  // edit the profile need this to make the new values actually show up anywhere fbUser
+  // is read, since the object reference (and therefore React's re-render check) doesn't
+  // change on its own.
+  const refreshUser = async () => {
+    await auth.currentUser?.reload();
+    if (auth.currentUser) {
+      // A plain object spread would drop prototype methods (getIdToken, etc.) that other
+      // code calls on fbUser — clone via the prototype chain instead, preserving both the
+      // methods and a new object reference so React actually re-renders on the change.
+      const current = auth.currentUser;
+      setFbUser(Object.create(Object.getPrototypeOf(current), Object.getOwnPropertyDescriptors(current)));
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ fbUser, loading }}>
+    <AuthContext.Provider value={{ fbUser, loading, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );
