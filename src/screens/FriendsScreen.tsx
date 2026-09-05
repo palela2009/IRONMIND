@@ -1,9 +1,13 @@
-import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Share, Alert, Image } from 'react-native';
+import React, { useState, useMemo, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Share, Alert, Image, Modal } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFriends } from '../hooks/useFriends';
+import { useDuels, formatTimeLeft } from '../hooks/useDuels';
 import { useAuth } from '../context/AuthContext';
 import { TrainingState, UserStats } from '../types/training';
 import { rankForLevel, PODIUM } from '../constants/ranks';
+
+const DUEL_STAKE = 100;
 
 interface FriendsProps {
   stats: UserStats;
@@ -80,9 +84,27 @@ const RankBadge: React.FC<{ level: number }> = ({ level }) => {
 export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {
   const { fbUser } = useAuth();
   const { code, friends, requests, loading, error, addByCode, acceptRequest, rejectRequest, removeFriend } = useFriends();
+  const { duels, challenge, respond, error: duelError } = useDuels();
   const [inputCode, setInputCode] = useState('');
   const [adding, setAdding] = useState(false);
   const [addResult, setAddResult] = useState<'idle' | 'ok' | 'err'>('idle');
+
+  // A duel is only meaningful on an app this user actually tracks, so the picker offers
+  // their monitored apps rather than a free-text field that could name an app neither
+  // player has installed.
+  const [monitoredApps, setMonitoredApps] = useState<string[]>([]);
+  const [duelTarget, setDuelTarget] = useState<Entry | null>(null);
+  const [sending, setSending] = useState(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem('@ironmind_onboarding')
+      .then((raw) => {
+        if (!raw) return;
+        const data = JSON.parse(raw);
+        if (Array.isArray(data?.targetApps)) setMonitoredApps(data.targetApps);
+      })
+      .catch(() => {});
+  }, []);
 
   // The user competes *in* the leaderboard, not alongside it — a "top 3" that structurally
   // can't contain you is just a list of other people. Merging self in also means the podium
@@ -155,6 +177,29 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {
     ]);
   };
 
+  const openDuel = (entry: Entry) => {
+    if (entry.isMe) return;
+    if (monitoredApps.length === 0) {
+      Alert.alert('No apps tracked', 'Add at least one monitored app in your profile before starting a duel.');
+      return;
+    }
+    setDuelTarget(entry);
+  };
+
+  const sendChallenge = async (app: string) => {
+    if (!duelTarget) return;
+    setSending(true);
+    const ok = await challenge(duelTarget.uid, app, DUEL_STAKE);
+    setSending(false);
+    setDuelTarget(null);
+    if (!ok) Alert.alert('Could not start duel', duelError || 'Try again.');
+  };
+
+  const handleDuelResponse = async (id: string, action: 'accept' | 'decline') => {
+    const ok = await respond(id, action);
+    if (!ok) Alert.alert(`Could not ${action} duel`, duelError || 'Try again.');
+  };
+
   if (loading) {
     return (
       <View style={[styles.root, styles.centerFill]}>
@@ -169,6 +214,12 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {
   // Classic podium ordering — 2nd on the left, champion raised in the centre, 3rd on the
   // right — rather than plain left-to-right, which reads as an ordinary list.
   const podiumOrder = [1, 0, 2].filter((i) => i < podium.length);
+
+  const incomingDuels = duels.filter((d) => d.status === 'pending' && d.incoming);
+  const outgoingDuels = duels.filter((d) => d.status === 'pending' && !d.incoming);
+  const activeDuels = duels.filter((d) => d.status === 'active');
+  // Only a short tail of history — the interesting duel is nearly always the current one.
+  const settledDuels = duels.filter((d) => d.status === 'completed' || d.status === 'void').slice(0, 5);
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -223,6 +274,107 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {
         </>
       )}
 
+      {incomingDuels.length > 0 && (
+        <>
+          <Text style={styles.sectionLabel}>DUEL CHALLENGES · {incomingDuels.length}</Text>
+          {incomingDuels.map((d) => (
+            <View key={d.id} style={styles.duelCard}>
+              <View style={styles.duelHead}>
+                <Text style={styles.duelTitle} numberOfLines={1}>{d.opponentName}</Text>
+                <Text style={styles.duelStake}>{d.stake} XP</Text>
+              </View>
+              <Text style={styles.duelSub}>
+                Fewest minutes on {d.app} over 24 hours wins.
+              </Text>
+              <View style={styles.duelActions}>
+                <TouchableOpacity style={styles.rejectBtn} onPress={() => handleDuelResponse(d.id, 'decline')} activeOpacity={0.8}>
+                  <Text style={styles.rejectBtnText}>✕</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.acceptBtn} onPress={() => handleDuelResponse(d.id, 'accept')} activeOpacity={0.8}>
+                  <Text style={styles.acceptBtnText}>ACCEPT DUEL</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))}
+        </>
+      )}
+
+      {(activeDuels.length > 0 || outgoingDuels.length > 0) && (
+        <>
+          <Text style={styles.sectionLabel}>ACTIVE DUELS · {activeDuels.length + outgoingDuels.length}</Text>
+
+          {activeDuels.map((d) => {
+            // Lower is better, so the leader is whoever has the smaller number so far.
+            const mine = d.myMinutes ?? 0;
+            const theirs = d.theirMinutes;
+            const winning = theirs === null ? null : mine < theirs;
+            return (
+              <View key={d.id} style={styles.duelCard}>
+                <View style={styles.duelHead}>
+                  <Text style={styles.duelTitle} numberOfLines={1}>vs {d.opponentName}</Text>
+                  <Text style={styles.duelTimer}>{formatTimeLeft(d.endAt)}</Text>
+                </View>
+                <Text style={styles.duelSub}>{d.app} · fewest minutes wins · {d.stake} XP</Text>
+                <View style={styles.scoreRow}>
+                  <View style={styles.scoreSide}>
+                    <Text style={[styles.scoreVal, winning === true && styles.scoreWinning]}>
+                      {mine.toFixed(0)}
+                    </Text>
+                    <Text style={styles.scoreLabel}>YOU</Text>
+                  </View>
+                  <Text style={styles.scoreVs}>—</Text>
+                  <View style={styles.scoreSide}>
+                    <Text style={[styles.scoreVal, winning === false && styles.scoreWinning]}>
+                      {theirs === null ? '·' : theirs.toFixed(0)}
+                    </Text>
+                    <Text style={styles.scoreLabel}>THEM</Text>
+                  </View>
+                </View>
+                {theirs === null && (
+                  <Text style={styles.duelWarn}>
+                    They haven't synced yet — a duel with no data from one side is voided.
+                  </Text>
+                )}
+              </View>
+            );
+          })}
+
+          {outgoingDuels.map((d) => (
+            <View key={d.id} style={[styles.duelCard, styles.duelCardMuted]}>
+              <View style={styles.duelHead}>
+                <Text style={styles.duelTitle} numberOfLines={1}>vs {d.opponentName}</Text>
+                <Text style={styles.duelPending}>WAITING</Text>
+              </View>
+              <Text style={styles.duelSub}>{d.app} · {d.stake} XP · not accepted yet</Text>
+            </View>
+          ))}
+        </>
+      )}
+
+      {settledDuels.length > 0 && (
+        <>
+          <Text style={styles.sectionLabel}>DUEL HISTORY</Text>
+          {settledDuels.map((d) => (
+            <View key={d.id} style={styles.resultRow}>
+              <Text
+                style={[
+                  styles.resultTag,
+                  d.status === 'void' ? styles.resultVoid : d.iWon ? styles.resultWin : styles.resultLoss,
+                ]}
+              >
+                {d.status === 'void' ? 'VOID' : d.iWon ? 'WON' : 'LOST'}
+              </Text>
+              <Text style={styles.resultName} numberOfLines={1}>{d.opponentName}</Text>
+              <Text style={styles.resultDetail}>
+                {d.status === 'void'
+                  ? 'no data'
+                  : `${(d.myMinutes ?? 0).toFixed(0)}–${(d.theirMinutes ?? 0).toFixed(0)}m`}
+              </Text>
+            </View>
+          ))}
+        </>
+      )}
+
       {!hasFriends ? (
         <>
           <Text style={styles.sectionLabel}>NO FRIENDS YET</Text>
@@ -241,7 +393,12 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {
               const metal = PODIUM[i];
               const first = i === 0;
               return (
-                <View key={entry.uid} style={[styles.podiumSlot, first && styles.podiumSlotFirst]}>
+                <TouchableOpacity
+                  key={entry.uid}
+                  style={[styles.podiumSlot, first && styles.podiumSlotFirst]}
+                  onPress={() => openDuel(entry)}
+                  activeOpacity={entry.isMe ? 1 : 0.85}
+                >
                   {first && <Text style={styles.crown}>♛</Text>}
                   <Avatar entry={entry} size={first ? 64 : 50} ring={metal.color} />
                   <Text style={[styles.podiumName, entry.isMe && styles.podiumNameMe]} numberOfLines={1}>
@@ -252,7 +409,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {
                     <Text style={styles.podiumPlace}>{metal.label}</Text>
                     <Text style={styles.podiumStreak}>{entry.currentStreak}</Text>
                   </View>
-                </View>
+                </TouchableOpacity>
               );
             })}
           </View>
@@ -261,8 +418,9 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {
             <TouchableOpacity
               key={entry.uid}
               style={[styles.friendCard, entry.isMe && styles.friendCardMe]}
+              onPress={() => openDuel(entry)}
               onLongPress={() => !entry.isMe && handleRemove(entry.uid, entry.displayName)}
-              activeOpacity={0.85}
+              activeOpacity={entry.isMe ? 1 : 0.85}
             >
               <Text style={styles.rank}>{i + 4}</Text>
               <Avatar entry={entry} size={40} />
@@ -283,6 +441,43 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {
           ))}
         </>
       )}
+
+      <Modal
+        visible={duelTarget !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDuelTarget(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>CHALLENGE {duelTarget?.displayName.toUpperCase()}</Text>
+            <Text style={styles.modalSub}>
+              Whoever spends fewer minutes on the chosen app over the next 24 hours wins.
+              The loser gives up {DUEL_STAKE} XP.
+            </Text>
+
+            <Text style={styles.modalLabel}>PICK THE APP</Text>
+            {monitoredApps.map((app) => (
+              <TouchableOpacity
+                key={app}
+                style={styles.appOption}
+                onPress={() => sendChallenge(app)}
+                activeOpacity={0.85}
+                disabled={sending}
+              >
+                <Text style={styles.appOptionText}>{app}</Text>
+                <Text style={styles.appOptionArrow}>→</Text>
+              </TouchableOpacity>
+            ))}
+
+            {sending && <ActivityIndicator color="#CCFF00" style={styles.modalSpinner} />}
+
+            <TouchableOpacity style={styles.modalCancel} onPress={() => setDuelTarget(null)} activeOpacity={0.8}>
+              <Text style={styles.modalCancelText}>CANCEL</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 };
@@ -404,6 +599,71 @@ const styles = StyleSheet.create({
   friendRight: { alignItems: 'flex-end' },
   friendStreak: { color: '#CCFF00', fontSize: 20, fontWeight: '900' },
   friendStreakLabel: { color: '#444444', fontSize: 9, fontWeight: '800', letterSpacing: 0.3 },
+
+  duelCard: {
+    backgroundColor: '#12080F',
+    borderRadius: 14,
+    marginHorizontal: 16,
+    marginBottom: 10,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#3A1226',
+  },
+  duelCardMuted: { backgroundColor: '#111111', borderColor: '#1C1C1C' },
+  duelHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
+  duelTitle: { flex: 1, color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
+  duelStake: { color: '#FF4D8D', fontSize: 12, fontWeight: '900' },
+  duelTimer: { color: '#FF4D8D', fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
+  duelPending: { color: '#555555', fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
+  duelSub: { color: '#7A6070', fontSize: 11, marginBottom: 10 },
+  duelActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 10 },
+  duelWarn: { color: '#8A6A20', fontSize: 10, marginTop: 8, lineHeight: 14 },
+
+  scoreRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 20, paddingVertical: 4 },
+  scoreSide: { alignItems: 'center', minWidth: 60 },
+  scoreVal: { color: '#666666', fontSize: 26, fontWeight: '900' },
+  scoreWinning: { color: '#CCFF00' },
+  scoreLabel: { color: '#4A3A44', fontSize: 9, fontWeight: '900', letterSpacing: 0.5, marginTop: 2 },
+  scoreVs: { color: '#3A2530', fontSize: 16, fontWeight: '900' },
+
+  resultRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#0E0E0E',
+    borderRadius: 10,
+  },
+  resultTag: { fontSize: 9, fontWeight: '900', letterSpacing: 0.5, width: 34 },
+  resultWin: { color: '#CCFF00' },
+  resultLoss: { color: '#FF4D8D' },
+  resultVoid: { color: '#555555' },
+  resultName: { flex: 1, color: '#AAAAAA', fontSize: 12, fontWeight: '700' },
+  resultDetail: { color: '#555555', fontSize: 11, fontWeight: '700' },
+
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.82)', justifyContent: 'center', paddingHorizontal: 24 },
+  modalCard: { backgroundColor: '#121212', borderRadius: 18, padding: 20, borderWidth: 1, borderColor: '#242424' },
+  modalTitle: { color: '#FFFFFF', fontSize: 15, fontWeight: '900', letterSpacing: 0.3, marginBottom: 8 },
+  modalSub: { color: '#777777', fontSize: 12, lineHeight: 18, marginBottom: 18 },
+  modalLabel: { color: '#555555', fontSize: 10, fontWeight: '900', letterSpacing: 1, marginBottom: 10 },
+  appOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#1A1A1A',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    marginBottom: 8,
+  },
+  appOptionText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
+  appOptionArrow: { color: '#CCFF00', fontSize: 14, fontWeight: '900' },
+  modalSpinner: { marginVertical: 8 },
+  modalCancel: { alignItems: 'center', paddingVertical: 14, marginTop: 4 },
+  modalCancelText: { color: '#555555', fontSize: 12, fontWeight: '900', letterSpacing: 0.5 },
 
   emptyCard: { backgroundColor: '#111111', borderRadius: 14, marginHorizontal: 16, padding: 24, alignItems: 'center' },
   emptyTitle: { color: '#333333', fontSize: 13, fontWeight: '900', letterSpacing: 0.5, marginBottom: 6 },

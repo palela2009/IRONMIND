@@ -96,11 +96,82 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
         }
     }
 
+    // Exact per-package foreground time over an arbitrary window, from the raw event stream
+    // rather than UsageStatsManager's daily aggregate buckets — the aggregates snap to day
+    // boundaries, which would make any window that doesn't start at midnight (a duel, for
+    // example) silently wrong.
+    private fun foregroundTimesFor(startMs: Long, endMs: Long): Map<String, Long> {
+        val usm = reactContext.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
+        val eventsQuery = usm?.queryEvents(startMs, endMs) ?: return emptyMap()
+
+        val foregroundTimes = mutableMapOf<String, Long>()
+        val foregroundStart = mutableMapOf<String, Long>()
+
+        val event = android.app.usage.UsageEvents.Event()
+        while (eventsQuery.hasNextEvent()) {
+            eventsQuery.getNextEvent(event)
+            when (event.eventType) {
+                android.app.usage.UsageEvents.Event.MOVE_TO_FOREGROUND -> {
+                    foregroundStart[event.packageName] = event.timeStamp
+                }
+                android.app.usage.UsageEvents.Event.MOVE_TO_BACKGROUND -> {
+                    val start = foregroundStart.remove(event.packageName)
+                    if (start != null) {
+                        foregroundTimes[event.packageName] =
+                            (foregroundTimes[event.packageName] ?: 0L) + (event.timeStamp - start)
+                    }
+                }
+            }
+        }
+
+        // An app still in the foreground when the window closes has no MOVE_TO_BACKGROUND
+        // event to pair with, so its final session would otherwise be dropped entirely.
+        // Clamped to endMs so a past window can't accrue time up to the present.
+        val cutoff = minOf(endMs, System.currentTimeMillis())
+        foregroundStart.forEach { (pkg, start) ->
+            if (cutoff > start) {
+                foregroundTimes[pkg] = (foregroundTimes[pkg] ?: 0L) + (cutoff - start)
+            }
+        }
+
+        return foregroundTimes
+    }
+
+    // Usage over an explicit window, used to settle duels. Kept separate from getUsageStats
+    // so the duel result is computed over the duel's own rolling 24h rather than today's
+    // calendar day, which would disagree between two players in different timezones.
+    @ReactMethod
+    fun getUsageForRange(startMs: Double, endMs: Double, promise: Promise) {
+        try {
+            val foregroundTimes = foregroundTimesFor(startMs.toLong(), endMs.toLong())
+            val pm = reactContext.packageManager
+            val result = Arguments.createArray()
+
+            foregroundTimes
+                .filter { it.value > 0L }
+                .entries
+                .sortedByDescending { it.value }
+                .forEach { (pkg, timeMs) ->
+                    try {
+                        val appInfo = pm.getApplicationInfo(pkg, 0)
+                        val label = pm.getApplicationLabel(appInfo).toString()
+                        val friendlyName = APP_PACKAGES.entries.find { it.value == pkg }?.key ?: label
+                        val map = Arguments.createMap()
+                        map.putString("app", friendlyName)
+                        map.putDouble("minutes", timeMs / 60000.0)
+                        result.pushMap(map)
+                    } catch (_: Exception) {}
+                }
+
+            promise.resolve(result)
+        } catch (e: Exception) {
+            promise.reject("USAGE_ERROR", e.message)
+        }
+    }
+
     @ReactMethod
     fun getUsageStats(promise: Promise) {
         try {
-            val usm = reactContext.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
-
             // Midnight today → now
             val cal = java.util.Calendar.getInstance()
             cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
@@ -110,33 +181,7 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
             val startOfDay = cal.timeInMillis
             val now = System.currentTimeMillis()
 
-            // Use queryEvents for exact accuracy (tracks every FOREGROUND/BACKGROUND event)
-            val eventsQuery = usm?.queryEvents(startOfDay, now)
-            val foregroundTimes = mutableMapOf<String, Long>()
-            val foregroundStart = mutableMapOf<String, Long>()
-
-            if (eventsQuery != null) {
-                val event = android.app.usage.UsageEvents.Event()
-                while (eventsQuery.hasNextEvent()) {
-                    eventsQuery.getNextEvent(event)
-                    when (event.eventType) {
-                        android.app.usage.UsageEvents.Event.MOVE_TO_FOREGROUND -> {
-                            foregroundStart[event.packageName] = event.timeStamp
-                        }
-                        android.app.usage.UsageEvents.Event.MOVE_TO_BACKGROUND -> {
-                            val start = foregroundStart.remove(event.packageName)
-                            if (start != null) {
-                                foregroundTimes[event.packageName] =
-                                    (foregroundTimes[event.packageName] ?: 0L) + (event.timeStamp - start)
-                            }
-                        }
-                    }
-                }
-                // Add time for apps still in foreground right now
-                foregroundStart.forEach { (pkg, start) ->
-                    foregroundTimes[pkg] = (foregroundTimes[pkg] ?: 0L) + (now - start)
-                }
-            }
+            val foregroundTimes = foregroundTimesFor(startOfDay, now)
 
             val pm = reactContext.packageManager
 
