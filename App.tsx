@@ -197,7 +197,7 @@ function RootNavigator() {
       case 'APPS':
         return <AppsScreen history={history} onNavigate={setScreen} />;
       case 'FRIENDS':
-        return <FriendsScreen onNavigate={setScreen} />;
+        return <FriendsScreen stats={stats} onNavigate={setScreen} />;
       case 'PROFILE':
         return <ProfileScreen stats={stats} onSettingsChanged={refreshSettings} onNavigate={setScreen} />;
       default:

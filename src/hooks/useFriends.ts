@@ -12,6 +12,7 @@ export interface Friend {
   currentStreak: number;
   longestStreak: number;
   totalChallenges: number;
+  level: number;
 }
 
 export interface FriendRequestItem {
