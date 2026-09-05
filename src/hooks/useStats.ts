@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { UserStats, ChallengeItem } from '../types/training';
 import { useAuth } from '../context/AuthContext';
+import { usePro } from '../context/ProContext';
 import { API_BASE_URL } from '../config/api';
 import { authedFetch } from '../utils/authFetch';
 import { XP_PER_LEVEL } from '../constants/leveling';
@@ -26,6 +27,7 @@ const INITIAL_STATS: UserStats = {
 
 export const useStats = () => {
   const { fbUser } = useAuth();
+  const { useFreeze } = usePro();
   const [stats, setStats] = useState<UserStats>(INITIAL_STATS);
   const [history, setHistory] = useState<ChallengeItem[]>([]);
   const [monitoredApps, setMonitoredApps] = useState<string[]>([]);
@@ -142,10 +144,20 @@ export const useStats = () => {
     const todayStart = getTodayStart();
     const todayCount = history.filter((item) => item.timestamp >= todayStart).length;
 
-    if (todayCount >= dailyChallengeLimit) return;
+    if (todayCount >= dailyChallengeLimit) return { freezeUsed: false };
 
     const xpEarned = success ? 50 + (stats.currentStreak >= 5 ? 10 : 0) : 0;
-    const newStreak = success ? stats.currentStreak + 1 : 0;
+
+    // A failed challenge normally resets the streak to zero. A streak freeze absorbs that
+    // one failure and holds the streak where it was — it does not advance it, so freezing
+    // can never be better than actually succeeding. Only spent when there is a streak worth
+    // saving, otherwise a fail at zero would silently burn one.
+    let freezeUsed = false;
+    if (!success && stats.currentStreak > 0) {
+      freezeUsed = await useFreeze();
+    }
+
+    const newStreak = success ? stats.currentStreak + 1 : freezeUsed ? stats.currentStreak : 0;
     const newBest = success && elapsedTime > 0
       ? stats.bestReactionTime === 0
         ? elapsedTime
@@ -175,6 +187,10 @@ export const useStats = () => {
     setStats(updatedStats);
     setHistory(updatedHistory);
     await persist(updatedStats, updatedHistory, newItem, fbUser?.uid);
+
+    // Reported back so the caller can tell the user a freeze was spent — silently keeping
+    // the streak would look like the failure simply didn't register.
+    return { freezeUsed };
   };
 
   const todayStart = getTodayStart();

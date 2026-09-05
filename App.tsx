@@ -4,6 +4,7 @@ import { SafeAreaView, StyleSheet, View, Text, TouchableOpacity, ActivityIndicat
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
+import { ProProvider } from './src/context/ProContext';
 import { useStats } from './src/hooks/useStats';
 import { useNotifications } from './src/hooks/useNotifications';
 import { useAppMonitor, syncAppMonitor } from './src/hooks/useAppMonitor';
@@ -242,7 +243,11 @@ function RootNavigator() {
 export default function App() {
   return (
     <AuthProvider>
-      <RootNavigator />
+      {/* Inside AuthProvider — entitlement is per-account and reloads whenever the signed-in
+          user changes. */}
+      <ProProvider>
+        <RootNavigator />
+      </ProProvider>
     </AuthProvider>
   );
 }

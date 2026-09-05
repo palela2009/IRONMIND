@@ -4,6 +4,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { UserStats } from '../types/training';
 import { useAuth } from '../context/AuthContext';
+import { usePro } from '../context/ProContext';
+import { ProScreen } from './ProScreen';
 import { signOut, updateProfile } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import { DIFFICULTY_WINDOW_SECONDS, DEFAULT_DIFFICULTY, DifficultyLevel } from '../constants/difficulty';
@@ -55,6 +57,8 @@ const getAchievements = (s: UserStats) => [
 
 export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onSettingsChanged }) => {
   const { fbUser, refreshUser } = useAuth();
+  const { isPro, streakFreezes } = usePro();
+  const [showPro, setShowPro] = useState<boolean>(false);
   const [monitoredApps, setMonitoredApps] = useState<string[]>([]);
   const [editingApps, setEditingApps] = useState<boolean>(false);
   const [pendingApps, setPendingApps] = useState<string[]>([]);
@@ -413,6 +417,22 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onSettingsChanged
         ))}
       </View>
 
+      <TouchableOpacity
+        style={[styles.proBanner, isPro && styles.proBannerActive]}
+        onPress={() => setShowPro(true)}
+        activeOpacity={0.85}
+      >
+        <View style={styles.proBannerBody}>
+          <Text style={styles.proBannerTitle}>{isPro ? 'IRONMIND PRO' : 'UPGRADE TO PRO'}</Text>
+          <Text style={styles.proBannerSub}>
+            {isPro
+              ? `${streakFreezes} streak ${streakFreezes === 1 ? 'freeze' : 'freezes'} remaining`
+              : 'Streak protection, themes, elite badges, full analytics'}
+          </Text>
+        </View>
+        <Text style={styles.proBannerArrow}>{isPro ? '✓' : '→'}</Text>
+      </TouchableOpacity>
+
       <View style={styles.sectionRow}>
         <Text style={styles.sectionTitle}>ACHIEVEMENTS</Text>
         <Text style={styles.achieveCount}>{doneCount} / {achievements.length}</Text>
@@ -609,11 +629,31 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onSettingsChanged
           <Text style={styles.deleteAccount}>DELETE ACCOUNT</Text>
         )}
       </TouchableOpacity>
+
+      <ProScreen visible={showPro} onClose={() => setShowPro(false)} />
     </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
+  proBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#101403',
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    padding: spacing.lg,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.xl,
+    ...cardShadow,
+  },
+  proBannerActive: { backgroundColor: colors.surface, borderColor: '#2E3D00' },
+  proBannerBody: { flex: 1 },
+  proBannerTitle: { color: colors.accent, fontSize: 14, fontWeight: '900', letterSpacing: 0.4 },
+  proBannerSub: { color: colors.textTertiary, fontSize: 11, marginTop: 4 },
+  proBannerArrow: { color: colors.accent, fontSize: 16, fontWeight: '900' },
+
   root: { flex: 1, backgroundColor: colors.bg },
   content: { paddingBottom: 48 },
 
