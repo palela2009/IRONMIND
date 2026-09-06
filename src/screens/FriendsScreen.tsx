@@ -216,7 +216,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
   };
 
   const handleCancelDuel = (id: string, opponent: string) => {
-    Alert.alert('Cancel duel?', `Your duel with ${opponent} ends now. Nobody wins and no XP changes hands.`, [
+    Alert.alert('Cancel duel?', `Your duel with ${opponent} ends now. Nobody wins and both antes are refunded.`, [
       { text: 'Keep duelling', style: 'cancel' },
       {
         text: 'Cancel duel',
@@ -319,7 +319,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
             <View key={d.id} style={styles.duelCard}>
               <View style={styles.duelHead}>
                 <Text style={styles.duelTitle} numberOfLines={1}>{d.opponentName}</Text>
-                <Text style={styles.duelStake}>{d.stake} XP</Text>
+                <Text style={styles.duelStake}>◉ {d.stake}</Text>
               </View>
               <Text style={styles.duelSub}>
                 Fewest minutes on {d.app} over 24 hours wins.
@@ -351,7 +351,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
                   <Text style={styles.duelTitle} numberOfLines={1}>vs {d.opponentName}</Text>
                   <Text style={styles.duelTimer}>{formatTimeLeft(d.endAt)}</Text>
                 </View>
-                <Text style={styles.duelSub}>{d.app} · fewest minutes wins · {d.stake} XP</Text>
+                <Text style={styles.duelSub}>{d.app} · fewest minutes wins · pot ◉ {d.stake * 2}</Text>
                 <View style={styles.scoreRow}>
                   <View style={styles.scoreSide}>
                     <Text style={[styles.scoreVal, leader === 'me' && styles.scoreWinning]}>
@@ -405,7 +405,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
                 <Text style={styles.duelTitle} numberOfLines={1}>vs {d.opponentName}</Text>
                 <Text style={styles.duelPending}>WAITING</Text>
               </View>
-              <Text style={styles.duelSub}>{d.app} · {d.stake} XP · not accepted yet</Text>
+              <Text style={styles.duelSub}>{d.app} · ante ◉ {d.stake} · not accepted yet</Text>
               <TouchableOpacity
                 style={styles.cancelDuelBtn}
                 onPress={() => handleCancelDuel(d.id, d.opponentName)}
@@ -537,7 +537,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
             <Text style={styles.modalTitle}>CHALLENGE {duelTarget?.displayName.toUpperCase()}</Text>
             <Text style={styles.modalSub}>
               Whoever spends fewer minutes on the chosen app over the next 24 hours wins.
-              The loser gives up {DUEL_STAKE} XP.
+              You each ante ◉ {DUEL_STAKE} coins and the winner takes the pot of ◉ {DUEL_STAKE * 2}.
             </Text>
 
             <Text style={styles.modalLabel}>PICK THE APP</Text>

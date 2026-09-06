@@ -9,12 +9,13 @@ interface ThemeContextValue {
 const ThemeContext = createContext<ThemeContextValue>({ palette: DEFAULT_PALETTE });
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { themeId, isPro } = usePro();
+  const { themeId, isPro, unlockedThemes } = usePro();
 
   const palette = useMemo(() => {
     const chosen = paletteFor(themeId);
-    return chosen.pro && !isPro ? DEFAULT_PALETTE : chosen;
-  }, [themeId, isPro]);
+    const allowed = !chosen.pro || isPro || unlockedThemes.includes(chosen.id);
+    return allowed ? chosen : DEFAULT_PALETTE;
+  }, [themeId, isPro, unlockedThemes]);
 
   return <ThemeContext.Provider value={{ palette }}>{children}</ThemeContext.Provider>;
 };

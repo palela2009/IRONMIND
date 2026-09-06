@@ -27,7 +27,7 @@ const INITIAL_STATS: UserStats = {
 
 export const useStats = () => {
   const { fbUser } = useAuth();
-  const { useFreeze } = usePro();
+  const { useFreeze, awardCoins } = usePro();
   const [stats, setStats] = useState<UserStats>(INITIAL_STATS);
   const [history, setHistory] = useState<ChallengeItem[]>([]);
   const [monitoredApps, setMonitoredApps] = useState<string[]>([]);
@@ -182,6 +182,16 @@ export const useStats = () => {
     setStats(updatedStats);
     setHistory(updatedHistory);
     await persist(updatedStats, updatedHistory, newItem, fbUser?.uid);
+
+    if (success) {
+      await awardCoins('challenge_win');
+      // A perfect day is only knowable once the last challenge of the day resolves, so it is
+      // checked here against the updated history rather than tracked as running state.
+      const todayItems = updatedHistory.filter((item) => item.timestamp >= todayStart);
+      if (todayItems.length >= dailyChallengeLimit && todayItems.every((item) => item.wasSuccessful)) {
+        await awardCoins('perfect_day');
+      }
+    }
 
     return { freezeUsed };
   };

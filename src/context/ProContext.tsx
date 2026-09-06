@@ -6,19 +6,22 @@ import { authedFetch } from '../utils/authFetch';
 import { ProPlanId } from '../constants/pro';
 
 const API_URL = `${API_BASE_URL}/api/pro`;
+const COINS_URL = `${API_BASE_URL}/api/coins`;
 const CACHE_KEY = '@ironmind_pro_v1';
 
 export interface Entitlement {
   isPro: boolean;
   isOwner: boolean;
   welcomeOffer: boolean;
+  coins: number;
+  unlockedThemes: string[];
   plan: ProPlanId | null;
   expiresAt: string | null;
   streakFreezes: number;
   themeId: string;
 }
 
-const FREE: Entitlement = { isPro: false, isOwner: false, welcomeOffer: false, plan: null, expiresAt: null, streakFreezes: 0, themeId: 'default' };
+const FREE: Entitlement = { isPro: false, isOwner: false, welcomeOffer: false, coins: 0, unlockedThemes: [], plan: null, expiresAt: null, streakFreezes: 0, themeId: 'default' };
 
 interface ProContextValue extends Entitlement {
   loading: boolean;
@@ -29,6 +32,8 @@ interface ProContextValue extends Entitlement {
   grantFreeze: () => Promise<void>;
   setTheme: (themeId: string) => Promise<void>;
   closeWelcomeOffer: () => Promise<void>;
+  awardCoins: (reason: 'challenge_win' | 'perfect_day' | 'rewarded_ad') => Promise<void>;
+  buyItem: (item: 'freeze' | 'theme', themeId?: string) => Promise<{ ok: boolean; message?: string }>;
 }
 
 const ProContext = createContext<ProContextValue | undefined>(undefined);
@@ -119,6 +124,39 @@ export const ProProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {}
   };
 
+  const awardCoins = async (reason: 'challenge_win' | 'perfect_day' | 'rewarded_ad') => {
+    try {
+      const res = await authedFetch(`${COINS_URL}/award`, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      });
+      if (!res.ok) return;
+      const body = await res.json();
+      await persist({ ...entitlementRef.current, coins: body.coins });
+    } catch {}
+  };
+
+  const buyItem = async (item: 'freeze' | 'theme', themeId?: string) => {
+    try {
+      const res = await authedFetch(`${COINS_URL}/buy`, {
+        method: 'POST',
+        body: JSON.stringify({ item, themeId }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return { ok: false, message: body.message ?? 'Purchase failed' };
+
+      await persist({
+        ...entitlementRef.current,
+        coins: body.coins,
+        streakFreezes: body.streakFreezes ?? entitlementRef.current.streakFreezes,
+        unlockedThemes: body.unlockedThemes ?? entitlementRef.current.unlockedThemes,
+      });
+      return { ok: true };
+    } catch {
+      return { ok: false, message: 'Network error — try again' };
+    }
+  };
+
   const closeWelcomeOffer = async () => {
     await persist({ ...entitlementRef.current, welcomeOffer: false });
     try {
@@ -139,7 +177,7 @@ export const ProProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   return (
     <ProContext.Provider
-      value={{ ...entitlement, loading, refresh, activate, cancel, useFreeze, grantFreeze, setTheme, closeWelcomeOffer }}
+      value={{ ...entitlement, loading, refresh, activate, cancel, useFreeze, grantFreeze, setTheme, closeWelcomeOffer, awardCoins, buyItem }}
     >
       {children}
     </ProContext.Provider>

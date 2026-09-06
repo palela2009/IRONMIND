@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, ActivityIndicator } from 'react-native';
 import { useThemedStyles, useTheme } from '../context/ThemeContext';
 import { UserStats, ChallengeItem, TrainingState } from '../types/training';
 import { useAuth } from '../context/AuthContext';
+import { usePro } from '../context/ProContext';
+import { ShopScreen } from './ShopScreen';
 import { XP_PER_LEVEL } from '../constants/leveling';
 import { spacing, radius, type, cardShadow, glowFor, Palette } from '../theme';
 
@@ -61,6 +63,8 @@ const timeAgo = (ts: number) => {
 };
 
 export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallengeLimit, onNavigate }) => {  const styles = useThemedStyles(makeStyles);
+  const { coins } = usePro();
+  const [showShop, setShowShop] = useState<boolean>(false);
 
   const { fbUser } = useAuth();
 
@@ -165,10 +169,6 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallenge
 
           <View style={styles.quickRow}>
             <View style={styles.quickCell}>
-              <Text style={styles.quickVal}>{stats.currentStreak}</Text>
-              <Text style={styles.quickLabel}>STREAK</Text>
-            </View>
-            <View style={styles.quickCell}>
               <Text style={[styles.quickVal, styles.accentVal]}>{rxnDisplay}</Text>
               <Text style={styles.quickLabel}>BEST RXN</Text>
             </View>
@@ -176,6 +176,10 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallenge
               <Text style={styles.quickVal}>{stats.totalChallenges}</Text>
               <Text style={styles.quickLabel}>TOTAL</Text>
             </View>
+            <TouchableOpacity style={styles.shopCell} onPress={() => setShowShop(true)} activeOpacity={0.85}>
+              <Text style={styles.coinVal}>◉ {coins}</Text>
+              <Text style={styles.shopLabel}>SHOP →</Text>
+            </TouchableOpacity>
           </View>
 
           <View style={styles.chartCard}>
@@ -226,6 +230,7 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallenge
         </View>
       )}
       ItemSeparatorComponent={() => <View style={styles.repDivider} />}
+      ListFooterComponent={() => <ShopScreen visible={showShop} onClose={() => setShowShop(false)} />}
     />
   );
 };
@@ -320,6 +325,19 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   quickVal: { color: c.textPrimary, fontSize: 22, fontWeight: '900', letterSpacing: -0.5 },
   quickLabel: { color: c.textTertiary, fontSize: 9, fontWeight: '800', letterSpacing: 0.5, marginTop: spacing.xs },
   accentVal: { color: c.accent },
+
+  shopCell: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: c.accentMuted,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: c.accent,
+    paddingVertical: spacing.lg,
+  },
+  coinVal: { color: c.accent, fontSize: 20, fontWeight: '900', letterSpacing: -0.5 },
+  shopLabel: { color: c.accent, fontSize: 9, fontWeight: '900', letterSpacing: 0.6, marginTop: spacing.xs },
 
   chartCard: {
     backgroundColor: c.surface,
