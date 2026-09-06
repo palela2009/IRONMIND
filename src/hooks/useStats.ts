@@ -32,6 +32,7 @@ export const useStats = () => {
   const [history, setHistory] = useState<ChallengeItem[]>([]);
   const [monitoredApps, setMonitoredApps] = useState<string[]>([]);
   const [lostStreak, setLostStreak] = useState<number>(0);
+  const [savedStreak, setSavedStreak] = useState<{ streak: number; source: 'freeze' | 'ad' } | null>(null);
   const [dailyChallengeLimit, setDailyChallengeLimit] = useState<number>(DAILY_LIMIT_VALUES[DEFAULT_DAILY_LIMIT]);
 
   useEffect(() => {
@@ -148,6 +149,10 @@ export const useStats = () => {
     if (!success && !freezeUsed && stats.currentStreak > 0) {
       setLostStreak(stats.currentStreak);
     }
+
+    if (freezeUsed) {
+      setSavedStreak({ streak: stats.currentStreak, source: 'freeze' });
+    }
     const newBest = success && elapsedTime > 0
       ? stats.bestReactionTime === 0
         ? elapsedTime
@@ -192,6 +197,7 @@ export const useStats = () => {
 
     setStats(restored);
     setLostStreak(0);
+    setSavedStreak({ streak: lostStreak, source: 'ad' });
 
     try {
       await AsyncStorage.setItem(STORAGE_KEYS.STATS, JSON.stringify(restored));
@@ -216,6 +222,8 @@ export const useStats = () => {
     lostStreak,
     reclaimStreak,
     dismissLostStreak: () => setLostStreak(0),
+    savedStreak,
+    dismissSavedStreak: () => setSavedStreak(null),
     DAILY_CHALLENGE_LIMIT: dailyChallengeLimit,
     refreshSettings: loadMonitoredApps,
   };

@@ -6,6 +6,7 @@ import * as Notifications from 'expo-notifications';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { ProProvider } from './src/context/ProContext';
 import { StreakReclaimModal } from './src/components/StreakReclaimModal';
+import { StreakSavedOverlay } from './src/components/StreakSavedOverlay';
 import { reportActiveDuels } from './src/hooks/useDuels';
 import { ProScreen } from './src/screens/ProScreen';
 import { useStats } from './src/hooks/useStats';
@@ -86,7 +87,7 @@ function RootNavigator() {
   const nav = useThemedStyles(makeNav);
   const palette = useTheme();
   const { fbUser, loading } = useAuth();
-  const { stats, history, recordChallenge, DAILY_CHALLENGE_LIMIT, refreshSettings, lostStreak, reclaimStreak, dismissLostStreak } = useStats();
+  const { stats, history, recordChallenge, DAILY_CHALLENGE_LIMIT, refreshSettings, lostStreak, reclaimStreak, dismissLostStreak, savedStreak, dismissSavedStreak } = useStats();
   const [showPro, setShowPro] = useState<boolean>(false);
   useNotifications(fbUser?.uid);
 
@@ -298,6 +299,12 @@ function RootNavigator() {
           dismissLostStreak();
           setShowPro(true);
         }}
+      />
+
+      <StreakSavedOverlay
+        streak={savedStreak?.streak ?? 0}
+        source={savedStreak?.source ?? null}
+        onDone={dismissSavedStreak}
       />
 
       <ProScreen visible={showPro} onClose={() => setShowPro(false)} />
