@@ -9,6 +9,9 @@ import { rankForLevel, PODIUM } from '../constants/ranks';
 
 const DUEL_STAKE = 100;
 
+const hoursSince = (iso: string | null): number =>
+  iso ? (Date.now() - new Date(iso).getTime()) / 3_600_000 : 0;
+
 interface FriendsProps {
   stats: UserStats;
   onNavigate: (state: TrainingState) => void;
@@ -326,7 +329,9 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {
                 </View>
                 {theirs === null && (
                   <Text style={styles.duelWarn}>
-                    They haven't synced yet — a duel with no data from one side is voided.
+                    {hoursSince(d.startAt) >= 1
+                      ? "They haven't synced yet — a duel with no data from one side is voided."
+                      : 'Waiting for their first sync. Scores update when each of you opens IRONMIND.'}
                   </Text>
                 )}
               </View>

@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaView, StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, DeviceEventEmitter, PanResponder, Animated, Dimensions } from 'react-native';
+import { SafeAreaView, StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, DeviceEventEmitter, PanResponder, Animated, Dimensions, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { ProProvider } from './src/context/ProContext';
 import { StreakReclaimModal } from './src/components/StreakReclaimModal';
+import { reportActiveDuels } from './src/hooks/useDuels';
 import { ProScreen } from './src/screens/ProScreen';
 import { useStats } from './src/hooks/useStats';
 import { useNotifications } from './src/hooks/useNotifications';
@@ -91,6 +92,15 @@ function RootNavigator() {
         photoURL: fbUser.photoURL,
       }),
     }).catch(() => {});
+  }, [fbUser?.uid]);
+
+  useEffect(() => {
+    if (!fbUser?.uid) return;
+    reportActiveDuels();
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') reportActiveDuels();
+    });
+    return () => sub.remove();
   }, [fbUser?.uid]);
 
   const recordChallengeRef = useRef(recordChallenge);

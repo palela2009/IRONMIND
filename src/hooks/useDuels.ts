@@ -32,13 +32,34 @@ const measureWindow = async (app: string, startAt: string, endAt: string): Promi
   try {
     const start = new Date(startAt).getTime();
     const end = Math.min(Date.now(), new Date(endAt).getTime());
-    if (!(end > start)) return null;
+
+    if (!(end > start)) return 0;
 
     const usage: AppUsage[] = await UsageMonitor.getUsageForRange(start, end);
     return usage.find((u) => u.app === app)?.minutes ?? 0;
   } catch {
     return null;
   }
+};
+
+export const reportActiveDuels = async (): Promise<void> => {
+  try {
+    const res = await authedFetch(API_URL);
+    if (!res.ok) return;
+    const list: Duel[] = await res.json();
+
+    const active = list.filter((d) => d.status === 'active' && d.startAt && d.endAt);
+    await Promise.all(
+      active.map(async (d) => {
+        const minutes = await measureWindow(d.app, d.startAt!, d.endAt!);
+        if (minutes === null) return;
+        await authedFetch(`${API_URL}/${d.id}/report`, {
+          method: 'POST',
+          body: JSON.stringify({ minutes }),
+        }).catch(() => {});
+      })
+    );
+  } catch {}
 };
 
 export const useDuels = () => {
