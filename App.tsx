@@ -4,7 +4,7 @@ import { SafeAreaView, StyleSheet, View, Text, TouchableOpacity, ActivityIndicat
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
-import { ProProvider } from './src/context/ProContext';
+import { ProProvider, usePro } from './src/context/ProContext';
 import { StreakReclaimModal } from './src/components/StreakReclaimModal';
 import { StreakSavedOverlay } from './src/components/StreakSavedOverlay';
 import { reportActiveDuels } from './src/hooks/useDuels';
@@ -90,6 +90,7 @@ function RootNavigator() {
   const { fbUser, loading } = useAuth();
   const { stats, history, recordChallenge, DAILY_CHALLENGE_LIMIT, refreshSettings, lostStreak, reclaimStreak, dismissLostStreak, savedStreak, dismissSavedStreak } = useStats();
   const [showPro, setShowPro] = useState<boolean>(false);
+  const { refresh: refreshEntitlement } = usePro();
   useNotifications(fbUser?.uid);
 
   useEffect(() => {
@@ -227,6 +228,9 @@ function RootNavigator() {
 
   const handleOnboardingComplete = async () => {
     await AsyncStorage.setItem('@ironmind_onboarded', 'true');
+    // Entitlement was last fetched before onboarding created the account document, so the
+    // welcome offer would still read as unavailable without re-reading it here.
+    await refreshEntitlement();
     setIsOnboarded(true);
   };
 
