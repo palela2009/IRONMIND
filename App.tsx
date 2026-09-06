@@ -135,6 +135,15 @@ function RootNavigator() {
   const screenRef = useRef(screen);
   screenRef.current = screen;
 
+  // Screens stay mounted once visited and are hidden rather than unmounted. Swapping a single
+  // component meant every swipe tore the old screen down and rebuilt the new one, re-running
+  // its hooks, refetching everything and losing scroll position. Mounting lazily on first
+  // visit keeps startup cheap while making every later swipe instant.
+  const [visited, setVisited] = useState<TrainingState[]>(['HOME']);
+  useEffect(() => {
+    setVisited((prev) => (prev.includes(screen) ? prev : [...prev, screen]));
+  }, [screen]);
+
   const dragX = useRef(new Animated.Value(0)).current;
 
   const slideTo = (nextIndex: number, direction: number) => {
@@ -245,18 +254,16 @@ function RootNavigator() {
   if (!fbUser) return <LoginScreen />;
   if (!isOnboarded) return <OnboardingScreen onComplete={handleOnboardingComplete} />;
 
-  const renderScreen = () => {
-    switch (screen) {
-      case 'HOME':
-        return <HomeScreen stats={stats} history={history} dailyChallengeLimit={DAILY_CHALLENGE_LIMIT} onNavigate={setScreen} />;
+  const screenFor = (id: TrainingState) => {
+    switch (id) {
       case 'APPS':
-        return <AppsScreen history={history} onSettingsChanged={refreshSettings} onNavigate={setScreen} />;
+        return <AppsScreen history={history} onSettingsChanged={refreshSettings} onNavigate={goToTab} />;
       case 'FRIENDS':
-        return <FriendsScreen stats={stats} onNavigate={setScreen} />;
+        return <FriendsScreen stats={stats} onNavigate={goToTab} />;
       case 'PROFILE':
-        return <ProfileScreen stats={stats} history={history} onSettingsChanged={refreshSettings} onNavigate={setScreen} />;
+        return <ProfileScreen stats={stats} history={history} onSettingsChanged={refreshSettings} onNavigate={goToTab} />;
       default:
-        return <HomeScreen stats={stats} history={history} dailyChallengeLimit={DAILY_CHALLENGE_LIMIT} onNavigate={setScreen} />;
+        return <HomeScreen stats={stats} history={history} dailyChallengeLimit={DAILY_CHALLENGE_LIMIT} onNavigate={goToTab} />;
     }
   };
 
@@ -267,7 +274,15 @@ function RootNavigator() {
         style={[styles.mainContent, { transform: [{ translateX: dragX }] }]}
         {...panResponder.panHandlers}
       >
-        {renderScreen()}
+        {visited.map((id) => (
+          <View
+            key={id}
+            style={[StyleSheet.absoluteFill, id !== screen && styles.screenHidden]}
+            pointerEvents={id === screen ? 'auto' : 'none'}
+          >
+            {screenFor(id)}
+          </View>
+        ))}
       </Animated.View>
 
       <View style={nav.container}>
@@ -334,6 +349,7 @@ export default function App() {
 const makeStyles = (c: Palette) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.bg },
   mainContent: { flex: 1 },
+  screenHidden: { display: 'none' },
   loadingContainer: { flex: 1, backgroundColor: c.bg, justifyContent: 'center', alignItems: 'center' },
 });
 
