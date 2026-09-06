@@ -10,13 +10,14 @@ const CACHE_KEY = '@ironmind_pro_v1';
 
 export interface Entitlement {
   isPro: boolean;
+  isOwner: boolean;
   plan: ProPlanId | null;
   expiresAt: string | null;
   streakFreezes: number;
   themeId: string;
 }
 
-const FREE: Entitlement = { isPro: false, plan: null, expiresAt: null, streakFreezes: 0, themeId: 'default' };
+const FREE: Entitlement = { isPro: false, isOwner: false, plan: null, expiresAt: null, streakFreezes: 0, themeId: 'default' };
 
 interface ProContextValue extends Entitlement {
   loading: boolean;

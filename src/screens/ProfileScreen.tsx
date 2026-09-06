@@ -61,7 +61,7 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onSettingsChanged
   const palette = useTheme();
 
   const { fbUser, refreshUser } = useAuth();
-  const { isPro, streakFreezes } = usePro();
+  const { isPro, isOwner, streakFreezes } = usePro();
   const [showPro, setShowPro] = useState<boolean>(false);
   const [monitoredApps, setMonitoredApps] = useState<string[]>([]);
 
@@ -157,7 +157,7 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onSettingsChanged
 
   const achievements = getAchievements(stats);
   const doneCount = achievements.filter((a) => a.done).length;
-  const earnedElite = earnedBadges(stats);
+  const earnedElite = earnedBadges(stats, isOwner);
   const rankPct = Math.min(((stats.currentXP % XP_PER_LEVEL) / XP_PER_LEVEL) * 100, 100);
   const rxnDisplay = stats.bestReactionTime > 0 ? `${stats.bestReactionTime.toFixed(2)}s` : '—';
   const successRate = stats.totalChallenges > 0
@@ -431,7 +431,7 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onSettingsChanged
 
       <View style={styles.eliteGrid}>
         {ELITE_BADGES.map((b) => {
-          const earned = isPro && b.earned(stats);
+          const earned = isOwner || (isPro && b.earned(stats));
           return (
             <View key={b.id} style={[styles.eliteCard, !earned && styles.eliteCardLocked]}>
               <Text style={[styles.eliteGlyph, { color: earned ? b.color : palette.textFaint }]}>{b.glyph}</Text>

@@ -90,7 +90,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
   const palette = useTheme();
 
   const { fbUser } = useAuth();
-  const { isPro } = usePro();
+  const { isPro, isOwner } = usePro();
   const { code, friends, requests, loading, error, addByCode, acceptRequest, rejectRequest, removeFriend, refresh: refreshFriends } = useFriends();
   const { duels, challenge, respond, cancel: cancelDuel, error: duelError, refresh: refreshDuels } = useDuels();
   const [refreshing, setRefreshing] = useState(false);
@@ -121,7 +121,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
       totalChallenges: stats.totalChallenges,
       level: stats.level,
       isMe: true,
-      badge: topBadgeFor(stats, isPro),
+      badge: topBadgeFor(stats, isPro, isOwner),
     };
 
     const others: Entry[] = friends.map((f) => ({
@@ -142,7 +142,8 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
           currentXP: f.currentXP,
           level: f.level,
         },
-        f.isPro
+        f.isPro,
+        f.isOwner
       ),
     }));
 
@@ -152,7 +153,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
         b.level - a.level ||
         b.totalChallenges - a.totalChallenges
     );
-  }, [fbUser?.uid, fbUser?.displayName, fbUser?.email, fbUser?.photoURL, stats, friends, isPro]);
+  }, [fbUser?.uid, fbUser?.displayName, fbUser?.email, fbUser?.photoURL, stats, friends, isPro, isOwner]);
 
   const handleShare = async () => {
     if (!code) return;

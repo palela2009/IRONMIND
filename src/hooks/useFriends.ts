@@ -17,6 +17,7 @@ export interface Friend {
   bestReactionTime: number;
   currentXP: number;
   isPro: boolean;
+  isOwner: boolean;
 }
 
 export interface FriendRequestItem {
