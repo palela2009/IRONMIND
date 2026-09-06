@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Share, Alert, Image, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Share, Alert, Image, Modal, RefreshControl } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFriends } from '../hooks/useFriends';
 import { useDuels, formatTimeLeft } from '../hooks/useDuels';
@@ -78,8 +78,9 @@ const RankBadge: React.FC<{ level: number }> = ({ level }) => {
 
 export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {
   const { fbUser } = useAuth();
-  const { code, friends, requests, loading, error, addByCode, acceptRequest, rejectRequest, removeFriend } = useFriends();
-  const { duels, challenge, respond, error: duelError } = useDuels();
+  const { code, friends, requests, loading, error, addByCode, acceptRequest, rejectRequest, removeFriend, refresh: refreshFriends } = useFriends();
+  const { duels, challenge, respond, error: duelError, refresh: refreshDuels } = useDuels();
+  const [refreshing, setRefreshing] = useState(false);
   const [inputCode, setInputCode] = useState('');
   const [adding, setAdding] = useState(false);
   const [addResult, setAddResult] = useState<'idle' | 'ok' | 'err'>('idle');
@@ -166,7 +167,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {
   const openDuel = (entry: Entry) => {
     if (entry.isMe) return;
     if (monitoredApps.length === 0) {
-      Alert.alert('No apps tracked', 'Add at least one monitored app in your profile before starting a duel.');
+      Alert.alert('No apps tracked', 'Pick at least one app to track in the APPS tab before starting a duel.');
       return;
     }
     setDuelTarget(entry);
@@ -179,6 +180,12 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {
     setSending(false);
     setDuelTarget(null);
     if (!ok) Alert.alert('Could not start duel', duelError || 'Try again.');
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([refreshFriends(), refreshDuels()]);
+    setRefreshing(false);
   };
 
   const handleDuelResponse = async (id: string, action: 'accept' | 'decline') => {
@@ -205,7 +212,12 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {
   const settledDuels = duels.filter((d) => d.status === 'completed' || d.status === 'void').slice(0, 5);
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      style={styles.root}
+      contentContainerStyle={styles.content}
+      showsVerticalScrollIndicator={false}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#CCFF00" colors={['#CCFF00']} />}
+    >
       <View style={styles.header}>
         <Text style={styles.headerTitle}>FRIENDS</Text>
       </View>
@@ -368,6 +380,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {
       ) : (
         <>
           <Text style={styles.sectionLabel}>LEADERBOARD · {leaderboard.length}</Text>
+          <Text style={styles.duelHint}>Tap a friend to challenge them to a 24-hour duel.</Text>
 
           <View style={styles.podium}>
             {podiumOrder.map((i) => {
@@ -509,6 +522,7 @@ const styles = StyleSheet.create({
   addErr: { color: '#FF4444', fontSize: 12, fontWeight: '700', marginTop: 10 },
 
   sectionLabel: { color: '#444444', fontSize: 10, fontWeight: '900', letterSpacing: 1, paddingHorizontal: 20, marginBottom: 10 },
+  duelHint: { color: '#3A3A3A', fontSize: 11, paddingHorizontal: 20, marginTop: -4, marginBottom: 14 },
 
   requestRow: {
     flexDirection: 'row',
