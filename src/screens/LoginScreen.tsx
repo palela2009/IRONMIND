@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Image } from 'react-native';
 import { useThemedStyles, useTheme } from '../context/ThemeContext';
 import { Palette } from '../theme';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
@@ -66,7 +66,7 @@ export const LoginScreen: React.FC = () => {  const styles = useThemedStyles(ma
     >
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <View style={styles.centerBlock}>
-          <View style={styles.logoBox}><Text style={styles.logoText}>IM</Text></View>
+          <Image source={require('../../assets/icon.png')} style={styles.logoBox} />
           <Text style={styles.mainTitle}>IRONMIND</Text>
           <Text style={styles.tagline}>Train your attention.</Text>
         </View>
@@ -140,8 +140,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.bg },
   scrollContent: { flexGrow: 1, paddingHorizontal: 24, justifyContent: 'space-between', paddingBottom: 50, paddingTop: 100 },
   centerBlock: { alignItems: 'center', marginBottom: 40 },
-  logoBox: { backgroundColor: c.accent, width: 60, height: 60, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
-  logoText: { color: c.accentContrast, fontSize: 24, fontWeight: '900' },
+  logoBox: { width: 72, height: 72, borderRadius: 18, marginBottom: 16 },
   mainTitle: { color: c.textPrimary, fontSize: 36, fontWeight: '900', letterSpacing: 1 },
   tagline: { color: c.textSecondary, fontSize: 15, fontWeight: '500', marginTop: 6 },
   actionBlock: { width: '100%' },

@@ -90,7 +90,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
   const palette = useTheme();
 
   const { fbUser } = useAuth();
-  const { isPro, isOwner } = usePro();
+  const { isPro, isOwner, coins } = usePro();
   const { code, friends, requests, loading, error, addByCode, acceptRequest, rejectRequest, removeFriend, refresh: refreshFriends } = useFriends();
   const { duels, challenge, respond, cancel: cancelDuel, error: duelError, refresh: refreshDuels } = useDuels();
   const [refreshing, setRefreshing] = useState(false);
@@ -539,6 +539,11 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
               Whoever spends fewer minutes on the chosen app over the next 24 hours wins.
               You each ante ◉ {DUEL_STAKE} coins and the winner takes the pot of ◉ {DUEL_STAKE * 2}.
             </Text>
+            <Text style={[styles.modalBalance, coins < DUEL_STAKE && styles.modalBalanceLow]}>
+              {coins < DUEL_STAKE
+                ? `You have ◉ ${coins} — not enough to start this duel.`
+                : `Your balance: ◉ ${coins}`}
+            </Text>
 
             <Text style={styles.modalLabel}>PICK THE APP</Text>
             {monitoredApps.map((app) => (
@@ -739,6 +744,8 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   modalCard: { backgroundColor: c.surface, borderRadius: 18, padding: 20, borderWidth: 1, borderColor: c.border },
   modalTitle: { color: c.textPrimary, fontSize: 15, fontWeight: '900', letterSpacing: 0.3, marginBottom: 8 },
   modalSub: { color: c.textSecondary, fontSize: 12, lineHeight: 18, marginBottom: 18 },
+  modalBalance: { color: c.accent, fontSize: 11, fontWeight: '900', marginBottom: 14, marginTop: -8 },
+  modalBalanceLow: { color: c.danger },
   modalLabel: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 1, marginBottom: 10 },
   appOption: {
     flexDirection: 'row',
