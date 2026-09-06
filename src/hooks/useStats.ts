@@ -31,6 +31,7 @@ export const useStats = () => {
   const [stats, setStats] = useState<UserStats>(INITIAL_STATS);
   const [history, setHistory] = useState<ChallengeItem[]>([]);
   const [monitoredApps, setMonitoredApps] = useState<string[]>([]);
+  const [lostStreak, setLostStreak] = useState<number>(0);
   const [dailyChallengeLimit, setDailyChallengeLimit] = useState<number>(DAILY_LIMIT_VALUES[DEFAULT_DAILY_LIMIT]);
 
   useEffect(() => {
@@ -158,6 +159,10 @@ export const useStats = () => {
     }
 
     const newStreak = success ? stats.currentStreak + 1 : freezeUsed ? stats.currentStreak : 0;
+
+    if (!success && !freezeUsed && stats.currentStreak > 0) {
+      setLostStreak(stats.currentStreak);
+    }
     const newBest = success && elapsedTime > 0
       ? stats.bestReactionTime === 0
         ? elapsedTime
@@ -193,6 +198,29 @@ export const useStats = () => {
     return { freezeUsed };
   };
 
+  const reclaimStreak = async () => {
+    if (lostStreak <= 0) return;
+
+    const restored: UserStats = {
+      ...stats,
+      currentStreak: lostStreak,
+      longestStreak: Math.max(lostStreak, stats.longestStreak),
+    };
+
+    setStats(restored);
+    setLostStreak(0);
+
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.STATS, JSON.stringify(restored));
+      if (fbUser?.uid) {
+        await authedFetch(`${API_URL}/stats`, {
+          method: 'POST',
+          body: JSON.stringify(restored),
+        });
+      }
+    } catch {}
+  };
+
   const todayStart = getTodayStart();
   const challengesToday = history.filter((item) => item.timestamp >= todayStart).length;
 
@@ -202,6 +230,9 @@ export const useStats = () => {
     monitoredApps,
     recordChallenge,
     challengesToday,
+    lostStreak,
+    reclaimStreak,
+    dismissLostStreak: () => setLostStreak(0),
     DAILY_CHALLENGE_LIMIT: dailyChallengeLimit,
     refreshSettings: loadMonitoredApps,
   };

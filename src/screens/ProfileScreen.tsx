@@ -6,6 +6,7 @@ import { UserStats } from '../types/training';
 import { useAuth } from '../context/AuthContext';
 import { usePro } from '../context/ProContext';
 import { ProScreen } from './ProScreen';
+import { StatusCard } from '../components/StatusCard';
 import { signOut, updateProfile } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import { DIFFICULTY_WINDOW_SECONDS, DEFAULT_DIFFICULTY, DifficultyLevel } from '../constants/difficulty';
@@ -21,7 +22,6 @@ interface ProfileProps {
   onNavigate: (state: any) => void;
 }
 
-const APPS_LIST = ['Instagram', 'YouTube', 'TikTok', 'Facebook', 'X (Twitter)', 'Reddit', 'Snapchat'];
 const ONBOARDING_URL = `${API_BASE_URL}/api/user/onboarding`;
 const DELETE_ACCOUNT_URL = `${API_BASE_URL}/api/user/account`;
 const PHOTO_UPLOAD_URL = `${API_BASE_URL}/api/user/photo`;
@@ -60,9 +60,6 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onSettingsChanged
   const { isPro, streakFreezes } = usePro();
   const [showPro, setShowPro] = useState<boolean>(false);
   const [monitoredApps, setMonitoredApps] = useState<string[]>([]);
-  const [editingApps, setEditingApps] = useState<boolean>(false);
-  const [pendingApps, setPendingApps] = useState<string[]>([]);
-  const [savingApps, setSavingApps] = useState<boolean>(false);
 
   const [difficulty, setDifficulty] = useState<DifficultyLevel>(DEFAULT_DIFFICULTY);
   const [editingDifficulty, setEditingDifficulty] = useState<boolean>(false);
@@ -103,34 +100,6 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onSettingsChanged
         photoURL: fbUser?.photoURL,
       }),
     }).catch(() => {});
-  };
-
-  const openAppEditor = () => {
-    if (editingApps) { setEditingApps(false); return; }
-    setPendingApps(monitoredApps);
-    setEditingApps(true);
-  };
-
-  const togglePendingApp = (app: string) => {
-    setPendingApps((prev) => (prev.includes(app) ? prev.filter((a) => a !== app) : [...prev, app]));
-  };
-
-  const saveMonitoredApps = async () => {
-    setSavingApps(true);
-    try {
-      const raw = await AsyncStorage.getItem('@ironmind_onboarding');
-      const data = raw ? JSON.parse(raw) : {};
-      const updated = { ...data, targetApps: pendingApps };
-      await AsyncStorage.setItem('@ironmind_onboarding', JSON.stringify(updated));
-      setMonitoredApps(pendingApps);
-      const effectiveDifficulty = data.difficultyLevel ?? difficulty;
-      const effectiveDailyLimit = data.dailyChallengeLimit ?? dailyLimit;
-      restartMonitor(pendingApps, effectiveDifficulty, effectiveDailyLimit);
-      syncOnboarding({ targetApps: pendingApps, difficultyLevel: effectiveDifficulty, dailyChallengeLimit: effectiveDailyLimit, goals: data.goals ?? [] });
-      onSettingsChanged?.();
-    } catch {}
-    setSavingApps(false);
-    setEditingApps(false);
   };
 
   const openDifficultyEditor = () => {
@@ -451,57 +420,11 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onSettingsChanged
         ))}
       </View>
 
+      <Text style={styles.settingsSection}>PERMISSIONS</Text>
+
+      <StatusCard />
+
       <Text style={styles.settingsSection}>SETTINGS</Text>
-
-      <TouchableOpacity style={styles.settingRow} onPress={openAppEditor} activeOpacity={0.8}>
-        <Text style={styles.settingLabel}>MONITORED APPS</Text>
-        <Text style={styles.settingValue}>
-          {monitoredApps.length > 0 ? `${monitoredApps.length} APPS` : 'NONE'} ›
-        </Text>
-      </TouchableOpacity>
-
-      {editingApps && (
-        <View style={styles.appEditor}>
-          {APPS_LIST.map((app) => {
-            const on = pendingApps.includes(app);
-            return (
-              <TouchableOpacity
-                key={app}
-                style={[styles.appEditRow, on && styles.appEditRowOn]}
-                onPress={() => togglePendingApp(app)}
-                activeOpacity={0.75}
-              >
-                <Text style={[styles.appEditLabel, on && styles.appEditLabelOn]}>{app}</Text>
-                <View style={[styles.appEditCheck, on && styles.appEditCheckOn]}>
-                  {on && <Text style={styles.appEditCheckGlyph}>✓</Text>}
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-          <View style={styles.appEditActions}>
-            <TouchableOpacity
-              style={styles.appEditCancel}
-              onPress={() => setEditingApps(false)}
-              activeOpacity={0.8}
-              disabled={savingApps}
-            >
-              <Text style={styles.appEditCancelText}>CANCEL</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.appEditSave}
-              onPress={saveMonitoredApps}
-              activeOpacity={0.85}
-              disabled={savingApps}
-            >
-              {savingApps ? (
-                <ActivityIndicator color="#000000" size="small" />
-              ) : (
-                <Text style={styles.appEditSaveText}>SAVE</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
 
       <TouchableOpacity style={styles.settingRow} onPress={openDifficultyEditor} activeOpacity={0.7}>
         <Text style={styles.settingLabel}>CHALLENGE WINDOW</Text>

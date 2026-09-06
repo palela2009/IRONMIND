@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaView, StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, DeviceEventEmitter, PanResponder } from 'react-native';
+import { SafeAreaView, StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, DeviceEventEmitter, PanResponder, Animated, Dimensions } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { ProProvider } from './src/context/ProContext';
+import { StreakReclaimModal } from './src/components/StreakReclaimModal';
+import { ProScreen } from './src/screens/ProScreen';
 import { useStats } from './src/hooks/useStats';
 import { useNotifications } from './src/hooks/useNotifications';
 import { useAppMonitor, syncAppMonitor } from './src/hooks/useAppMonitor';
@@ -51,6 +53,7 @@ const AppsIcon = ({ active }: { active: boolean }) => {
 };
 
 const SCREEN_ORDER: TrainingState[] = ['HOME', 'APPS', 'FRIENDS', 'PROFILE'];
+const SCREEN_WIDTH = Dimensions.get('window').width;
 
 const FriendsIcon = ({ active }: { active: boolean }) => {
   const c = active ? '#000000' : colors.textFaint;
@@ -74,7 +77,8 @@ const ProfileIcon = ({ active }: { active: boolean }) => {
 
 function RootNavigator() {
   const { fbUser, loading } = useAuth();
-  const { stats, history, recordChallenge, DAILY_CHALLENGE_LIMIT, refreshSettings } = useStats();
+  const { stats, history, recordChallenge, DAILY_CHALLENGE_LIMIT, refreshSettings, lostStreak, reclaimStreak, dismissLostStreak } = useStats();
+  const [showPro, setShowPro] = useState<boolean>(false);
   useNotifications(fbUser?.uid);
 
   useEffect(() => {
@@ -115,17 +119,52 @@ function RootNavigator() {
   const screenRef = useRef(screen);
   screenRef.current = screen;
 
+  const dragX = useRef(new Animated.Value(0)).current;
+
+  const slideTo = (nextIndex: number, direction: number) => {
+    Animated.timing(dragX, {
+      toValue: -direction * SCREEN_WIDTH,
+      duration: 160,
+      useNativeDriver: true,
+    }).start(() => {
+      setScreen(SCREEN_ORDER[nextIndex]);
+      dragX.setValue(direction * SCREEN_WIDTH);
+      Animated.timing(dragX, { toValue: 0, duration: 200, useNativeDriver: true }).start();
+    });
+  };
+
+  const slideToRef = useRef(slideTo);
+  slideToRef.current = slideTo;
+
+  const goToTab = (id: TrainingState) => {
+    const from = SCREEN_ORDER.indexOf(screenRef.current);
+    const to = SCREEN_ORDER.indexOf(id);
+    if (to === from) return;
+    slideTo(to, to > from ? 1 : -1);
+  };
+
   const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gesture) =>
         Math.abs(gesture.dx) > 20 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 2,
+      onPanResponderMove: (_, gesture) => {
+        const index = SCREEN_ORDER.indexOf(screenRef.current);
+        const atStart = index === 0 && gesture.dx > 0;
+        const atEnd = index === SCREEN_ORDER.length - 1 && gesture.dx < 0;
+        dragX.setValue(atStart || atEnd ? gesture.dx * 0.25 : gesture.dx);
+      },
       onPanResponderRelease: (_, gesture) => {
         const index = SCREEN_ORDER.indexOf(screenRef.current);
         if (gesture.dx < -50 && index < SCREEN_ORDER.length - 1) {
-          setScreen(SCREEN_ORDER[index + 1]);
+          slideToRef.current(index + 1, 1);
         } else if (gesture.dx > 50 && index > 0) {
-          setScreen(SCREEN_ORDER[index - 1]);
+          slideToRef.current(index - 1, -1);
+        } else {
+          Animated.spring(dragX, { toValue: 0, useNativeDriver: true, bounciness: 0 }).start();
         }
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(dragX, { toValue: 0, useNativeDriver: true, bounciness: 0 }).start();
       },
     })
   ).current;
@@ -196,7 +235,7 @@ function RootNavigator() {
       case 'HOME':
         return <HomeScreen stats={stats} history={history} dailyChallengeLimit={DAILY_CHALLENGE_LIMIT} onNavigate={setScreen} />;
       case 'APPS':
-        return <AppsScreen history={history} onNavigate={setScreen} />;
+        return <AppsScreen history={history} onSettingsChanged={refreshSettings} onNavigate={setScreen} />;
       case 'FRIENDS':
         return <FriendsScreen stats={stats} onNavigate={setScreen} />;
       case 'PROFILE':
@@ -209,7 +248,12 @@ function RootNavigator() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="light" />
-      <View style={styles.mainContent} {...panResponder.panHandlers}>{renderScreen()}</View>
+      <Animated.View
+        style={[styles.mainContent, { transform: [{ translateX: dragX }] }]}
+        {...panResponder.panHandlers}
+      >
+        {renderScreen()}
+      </Animated.View>
 
       <View style={nav.container}>
         <View style={nav.bar}>
@@ -224,7 +268,7 @@ function RootNavigator() {
               <TouchableOpacity
                 key={tab.id}
                 style={nav.item}
-                onPress={() => setScreen(tab.id)}
+                onPress={() => goToTab(tab.id)}
                 activeOpacity={0.7}
               >
                 <View style={[nav.iconWrap, active && nav.iconWrapActive]}>
@@ -236,6 +280,18 @@ function RootNavigator() {
           })}
         </View>
       </View>
+
+      <StreakReclaimModal
+        lostStreak={lostStreak}
+        onReclaim={reclaimStreak}
+        onDismiss={dismissLostStreak}
+        onOpenPro={() => {
+          dismissLostStreak();
+          setShowPro(true);
+        }}
+      />
+
+      <ProScreen visible={showPro} onClose={() => setShowPro(false)} />
     </SafeAreaView>
   );
 }

@@ -1,424 +1,368 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking, Platform, AppState, ActivityIndicator, NativeModules } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, AppState, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Notifications from 'expo-notifications';
 import { ChallengeItem } from '../types/training';
 import { useAuth } from '../context/AuthContext';
 import { useScreenTime, formatMinutes } from '../hooks/useScreenTime';
+import { syncAppMonitor } from '../hooks/useAppMonitor';
+import { APPS_LIST, colorForApp, abbrForApp } from '../constants/apps';
+import { API_BASE_URL } from '../config/api';
+import { authedFetch } from '../utils/authFetch';
+import { colors, radius, spacing, cardShadow } from '../theme';
 
 interface AppsProps {
   history: ChallengeItem[];
+  onSettingsChanged?: () => void;
   onNavigate: (state: any) => void;
 }
 
-const APP_COLORS: Record<string, string> = {
-  Instagram: '#833AB4',
-  YouTube: '#FF0000',
-  TikTok: '#010101',
-  Facebook: '#1877F2',
-  'X (Twitter)': '#14171A',
-  Reddit: '#FF4500',
-  Snapchat: '#FFFC00',
-};
-import { API_BASE_URL } from '../config/api';
-import { authedFetch } from '../utils/authFetch';
+const ONBOARDING_URL = `${API_BASE_URL}/api/user/onboarding`;
 
-const BACKEND_URL = `${API_BASE_URL}/api/challenge/notify`;
-
-const APP_ICONS: Record<string, string> = {
-  Instagram: 'IG',
-  YouTube: 'YT',
-  TikTok: 'TK',
-  Facebook: 'FB',
-  'X (Twitter)': 'X',
-  Reddit: 'RD',
-  Snapchat: 'SC',
-};
-
-const FALLBACK_PALETTE = ['#4C6EF5', '#12B886', '#F59F00', '#E64980', '#7048E8', '#15AABF', '#FA5252'];
-
-const colorForApp = (app: string): string => {
-  if (APP_COLORS[app]) return APP_COLORS[app];
-  let hash = 0;
-  for (let i = 0; i < app.length; i++) hash = (hash * 31 + app.charCodeAt(i)) >>> 0;
-  return FALLBACK_PALETTE[hash % FALLBACK_PALETTE.length];
-};
-
-const abbrForApp = (app: string): string => {
-  if (APP_ICONS[app]) return APP_ICONS[app];
-  const words = app.trim().split(/\s+/).filter(Boolean);
-  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
-  return app.slice(0, 2).toUpperCase();
-};
-
-export const AppsScreen: React.FC<AppsProps> = ({ history }) => {
+export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged }) => {
   const { fbUser } = useAuth();
   const { screenTime, loading: stLoading } = useScreenTime(fbUser?.uid);
   const [monitoredApps, setMonitoredApps] = useState<string[]>([]);
-  const [notifGranted, setNotifGranted] = useState<boolean>(false);
-  const [usageAccessGranted, setUsageAccessGranted] = useState<boolean>(false);
-  const [batteryExempt, setBatteryExempt] = useState<boolean>(false);
-  const [realPushState, setRealPushState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [editing, setEditing] = useState(false);
+  const [pending, setPending] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
 
-  const checkPermissions = useCallback(async () => {
-    const { status } = await Notifications.getPermissionsAsync();
-    setNotifGranted(status === 'granted');
-
-    if (Platform.OS === 'android' && NativeModules.UsageMonitor) {
-      try {
-        const granted = await NativeModules.UsageMonitor.hasUsageAccess();
-        setUsageAccessGranted(!!granted);
-      } catch {
-        setUsageAccessGranted(false);
-      }
-      try {
-        const exempt = await NativeModules.UsageMonitor.isIgnoringBatteryOptimizations();
-        setBatteryExempt(!!exempt);
-      } catch {
-        setBatteryExempt(false);
-      }
-    }
-
+  const loadApps = useCallback(async () => {
     const raw = await AsyncStorage.getItem('@ironmind_onboarding').catch(() => null);
-    if (raw) {
+    if (!raw) return;
+    try {
       const data = JSON.parse(raw);
-      if (data.targetApps?.length > 0) setMonitoredApps(data.targetApps);
-    }
+      setMonitoredApps(Array.isArray(data.targetApps) ? data.targetApps : []);
+    } catch {}
   }, []);
 
   useEffect(() => {
-    checkPermissions();
+    loadApps();
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') checkPermissions();
+      if (state === 'active') loadApps();
     });
     return () => sub.remove();
-  }, [checkPermissions]);
+  }, [loadApps]);
 
-  const handleRequestNotifications = async () => {
-    const { status } = await Notifications.requestPermissionsAsync();
-    setNotifGranted(status === 'granted');
-  };
-
-  const handleOpenUsageAccess = async () => {
-    try {
-      if (Platform.OS === 'android') {
-        await Linking.sendIntent('android.settings.USAGE_ACCESS_SETTINGS');
-      } else {
-        await Linking.openSettings();
-      }
-    } catch {
-      await Linking.openSettings();
+  const openEditor = () => {
+    if (editing) {
+      setEditing(false);
+      return;
     }
+    setPending(monitoredApps);
+    setEditing(true);
   };
 
-  const handleRequestBatteryExemption = () => {
-    if (Platform.OS === 'android' && NativeModules.UsageMonitor) {
-      NativeModules.UsageMonitor.requestIgnoreBatteryOptimizations();
-    }
+  const togglePending = (app: string) => {
+    setPending((prev) => (prev.includes(app) ? prev.filter((a) => a !== app) : [...prev, app]));
   };
 
-  const handleRealPushTest = async () => {
-    if (!fbUser?.uid) return;
-    setRealPushState('sending');
+  const save = async () => {
+    setSaving(true);
     try {
-      const res = await authedFetch(BACKEND_URL, {
+      const raw = await AsyncStorage.getItem('@ironmind_onboarding');
+      const data = raw ? JSON.parse(raw) : {};
+      const updated = { ...data, targetApps: pending };
+      await AsyncStorage.setItem('@ironmind_onboarding', JSON.stringify(updated));
+      setMonitoredApps(pending);
+
+      await authedFetch(ONBOARDING_URL, {
         method: 'POST',
-        body: JSON.stringify({ test: true }),
-      });
-      setRealPushState(res.ok ? 'sent' : 'error');
-    } catch {
-      setRealPushState('error');
+        body: JSON.stringify({
+          targetApps: pending,
+          goals: data.goals ?? [],
+          difficultyLevel: data.difficultyLevel ?? 'EASY',
+          dailyChallengeLimit: data.dailyChallengeLimit ?? 5,
+        }),
+      }).catch(() => {});
+
+      await syncAppMonitor();
+      onSettingsChanged?.();
+      setEditing(false);
+    } finally {
+      setSaving(false);
     }
-    setTimeout(() => setRealPushState('idle'), 4000);
   };
 
-  const getChallengesForApp = (app: string) => {
+  const statsForApp = (app: string) => {
     const items = history.filter((i) => i.targetApp === app);
     const successes = items.filter((i) => i.wasSuccessful).length;
     const bestTime = items
       .filter((i) => i.wasSuccessful && i.elapsedTime > 0)
       .reduce((best, i) => (best === 0 || i.elapsedTime < best ? i.elapsedTime : best), 0);
-    return { total: items.length, successes, bestTime };
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const today = items.filter((i) => i.timestamp >= todayStart.getTime()).length;
+    return { total: items.length, successes, bestTime, today };
   };
 
-  const getTodayChallenges = (app: string) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return history.filter((i) => i.targetApp === app && i.timestamp >= today.getTime()).length;
-  };
+  const minutesForApp = (app: string) => screenTime.find((s) => s.app === app)?.minutes ?? 0;
 
   const totalMinutes = screenTime.reduce((sum, item) => sum + item.minutes, 0);
+  const maxMins = screenTime.length > 0 ? screenTime[0].minutes || 1 : 1;
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>APPS</Text>
+        <Text style={styles.headerSub}>
+          {monitoredApps.length > 0 ? `${monitoredApps.length} tracked` : 'Nothing tracked yet'}
+        </Text>
       </View>
 
-      {/* SCREEN TIME SECTION */}
-      <View style={styles.stCard}>
-        <View style={styles.stHeaderRow}>
-          <Text style={styles.stCardTitle}>TODAY'S SCREEN TIME</Text>
-          {!stLoading && screenTime.length > 0 && (
-            <Text style={styles.stTotal}>{formatMinutes(totalMinutes)}</Text>
-          )}
-        </View>
-        {stLoading ? (
-          <ActivityIndicator color="#CCFF00" style={{ marginVertical: 20 }} />
-        ) : screenTime.length === 0 ? (
-          <Text style={styles.stEmpty}>No data yet — grant Usage Access below to enable tracking.</Text>
-        ) : (
-          screenTime.slice(0, 10).map((item, i) => {
-            const maxMins = screenTime[0].minutes || 1;
-            const pct = Math.max((item.minutes / maxMins) * 100, 3);
+      <View style={styles.hero}>
+        <Text style={styles.heroLabel}>TODAY'S SCREEN TIME</Text>
+        <Text style={styles.heroValue}>{stLoading ? '—' : formatMinutes(totalMinutes)}</Text>
+      </View>
+
+      <View style={styles.sectionRow}>
+        <Text style={styles.sectionLabel}>TRACKED APPS</Text>
+        <TouchableOpacity onPress={openEditor} activeOpacity={0.8}>
+          <Text style={styles.editLink}>{editing ? 'CLOSE' : 'EDIT'}</Text>
+        </TouchableOpacity>
+      </View>
+
+      {editing && (
+        <View style={styles.editor}>
+          {APPS_LIST.map((app) => {
+            const on = pending.includes(app);
             return (
+              <TouchableOpacity
+                key={app}
+                style={[styles.editRow, on && styles.editRowOn]}
+                onPress={() => togglePending(app)}
+                activeOpacity={0.75}
+              >
+                <View style={[styles.editIcon, { backgroundColor: colorForApp(app) }]}>
+                  <Text style={styles.editIconText}>{abbrForApp(app)}</Text>
+                </View>
+                <Text style={[styles.editLabel, on && styles.editLabelOn]}>{app}</Text>
+                <View style={[styles.check, on && styles.checkOn]}>
+                  {on && <Text style={styles.checkGlyph}>✓</Text>}
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+          <View style={styles.editActions}>
+            <TouchableOpacity style={styles.cancelBtn} onPress={() => setEditing(false)} disabled={saving} activeOpacity={0.8}>
+              <Text style={styles.cancelText}>CANCEL</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.saveBtn} onPress={save} disabled={saving} activeOpacity={0.85}>
+              {saving ? <ActivityIndicator color="#000000" size="small" /> : <Text style={styles.saveText}>SAVE</Text>}
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {!editing && monitoredApps.length === 0 && (
+        <TouchableOpacity style={styles.emptyCard} onPress={openEditor} activeOpacity={0.85}>
+          <Text style={styles.emptyTitle}>NO APPS TRACKED</Text>
+          <Text style={styles.emptySub}>Pick the apps that pull you in. Tap EDIT to choose.</Text>
+        </TouchableOpacity>
+      )}
+
+      {!editing &&
+        monitoredApps.map((app) => {
+          const { total, successes, bestTime, today } = statsForApp(app);
+          const rate = total > 0 ? Math.round((successes / total) * 100) : null;
+          const mins = minutesForApp(app);
+          const barPct = Math.min((mins / maxMins) * 100, 100);
+
+          return (
+            <View key={app} style={styles.appCard}>
+              <View style={styles.appTop}>
+                <View style={[styles.appIcon, { backgroundColor: colorForApp(app) }]}>
+                  <Text style={styles.appIconText}>{abbrForApp(app)}</Text>
+                </View>
+                <View style={styles.appBody}>
+                  <Text style={styles.appName}>{app}</Text>
+                  <Text style={styles.appSub}>
+                    {today > 0 ? `${today} challenge${today > 1 ? 's' : ''} today` : 'No challenges today'}
+                  </Text>
+                </View>
+                <View style={styles.appRight}>
+                  <Text style={styles.appMinutes}>{mins > 0 ? formatMinutes(mins) : '—'}</Text>
+                  <Text style={styles.appMinutesLabel}>TODAY</Text>
+                </View>
+              </View>
+
+              <View style={styles.barWrap}>
+                <View style={[styles.bar, { width: `${barPct}%`, backgroundColor: colorForApp(app) }]} />
+              </View>
+
+              <View style={styles.statsRow}>
+                <View style={styles.statCell}>
+                  <Text style={styles.statVal}>{total}</Text>
+                  <Text style={styles.statLabel}>CHALLENGES</Text>
+                </View>
+                <View style={styles.statDivider} />
+                <View style={styles.statCell}>
+                  <Text style={[styles.statVal, rate !== null && rate >= 50 && styles.statAccent]}>
+                    {rate !== null ? `${rate}%` : '—'}
+                  </Text>
+                  <Text style={styles.statLabel}>SUCCESS</Text>
+                </View>
+                <View style={styles.statDivider} />
+                <View style={styles.statCell}>
+                  <Text style={[styles.statVal, bestTime > 0 && styles.statAccent]}>
+                    {bestTime > 0 ? `${bestTime.toFixed(2)}s` : '—'}
+                  </Text>
+                  <Text style={styles.statLabel}>BEST</Text>
+                </View>
+              </View>
+            </View>
+          );
+        })}
+
+      {!editing && screenTime.length > 0 && (
+        <>
+          <Text style={styles.sectionLabelAlone}>ALL APPS TODAY</Text>
+          <View style={styles.allCard}>
+            {screenTime.slice(0, 10).map((item) => (
               <View key={item.app} style={styles.stRow}>
                 <View style={[styles.stIcon, { backgroundColor: colorForApp(item.app) }]}>
                   <Text style={styles.stIconText}>{abbrForApp(item.app)}</Text>
                 </View>
                 <Text style={styles.stApp} numberOfLines={1}>{item.app}</Text>
                 <View style={styles.stBarWrap}>
-                  <View style={[styles.stBar, { width: `${pct}%` as any }]} />
+                  <View style={[styles.stBar, { width: `${Math.max((item.minutes / maxMins) * 100, 3)}%` }]} />
                 </View>
                 <Text style={styles.stTime}>{formatMinutes(item.minutes)}</Text>
               </View>
-            );
-          })
-        )}
-      </View>
-
-      {/* STATUS SECTION */}
-      <View style={styles.statusCard}>
-        <View style={styles.statusRow}>
-          <View style={styles.statusLeft}>
-            <View style={[styles.statusDot, notifGranted && styles.statusDotOn]} />
-            <Text style={styles.statusLabel}>Notifications</Text>
+            ))}
           </View>
-          {notifGranted ? (
-            <Text style={styles.statusOn}>ALLOWED</Text>
-          ) : (
-            <TouchableOpacity onPress={handleRequestNotifications} activeOpacity={0.8}>
-              <Text style={styles.statusFix}>ENABLE →</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-        <View style={styles.statusDivider} />
-        <View style={styles.statusRow}>
-          <View style={styles.statusLeft}>
-            <View style={[styles.statusDot, usageAccessGranted && styles.statusDotOn]} />
-            <Text style={styles.statusLabel}>Usage Access</Text>
-          </View>
-          {usageAccessGranted ? (
-            <Text style={styles.statusOn}>ON</Text>
-          ) : (
-            <TouchableOpacity onPress={handleOpenUsageAccess} activeOpacity={0.8}>
-              <Text style={styles.statusFix}>TURN ON →</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-        <View style={styles.statusDivider} />
-        <View style={styles.statusRow}>
-          <View style={styles.statusLeft}>
-            <View style={[styles.statusDot, batteryExempt && styles.statusDotOn]} />
-            <Text style={styles.statusLabel}>Battery Optimization</Text>
-          </View>
-          {batteryExempt ? (
-            <Text style={styles.statusOn}>OFF</Text>
-          ) : (
-            <TouchableOpacity onPress={handleRequestBatteryExemption} activeOpacity={0.8}>
-              <Text style={styles.statusFix}>TURN OFF →</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
-      {!batteryExempt && (
-        <Text style={styles.batteryHint}>
-          Some phones (especially Xiaomi/MIUI) can kill or delay the background monitor to
-          save battery, which breaks challenge detection. Turning this off keeps it reliable.
-        </Text>
-      )}
-
-      {/* TEST SECTION */}
-      <View style={styles.testCard}>
-        <Text style={styles.testCardTitle}>TEST CHALLENGE NOTIFICATION</Text>
-        <Text style={styles.testCardBody}>
-          Sends a real push through the backend and Expo — the same path a live challenge uses.
-        </Text>
-        <TouchableOpacity
-          style={[styles.testBtn, realPushState === 'sent' && styles.testBtnSent]}
-          onPress={handleRealPushTest}
-          activeOpacity={0.85}
-          disabled={realPushState === 'sending' || !fbUser?.uid}
-        >
-          <Text style={styles.testBtnText}>
-            {realPushState === 'sending' && 'SENDING…'}
-            {realPushState === 'sent' && 'SENT — CHECK YOUR PHONE ✓'}
-            {realPushState === 'error' && 'FAILED — CHECK BACKEND ✗'}
-            {realPushState === 'idle' && 'SEND TEST PUSH →'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {monitoredApps.length > 0 && (
-        <>
-          <Text style={styles.sectionLabel}>YOUR APPS · {monitoredApps.length} TRACKED</Text>
-          {monitoredApps.map((app) => {
-            const { total, successes, bestTime } = getChallengesForApp(app);
-            const todayCount = getTodayChallenges(app);
-            const rate = total > 0 ? Math.round((successes / total) * 100) : null;
-            const color = colorForApp(app);
-            const abbr = abbrForApp(app);
-
-            return (
-              <View key={app} style={styles.appCard}>
-                <View style={styles.appTopRow}>
-                  <View style={[styles.appIcon, { backgroundColor: color }]}>
-                    <Text style={styles.appIconText}>{abbr}</Text>
-                  </View>
-                  <View style={styles.appBody}>
-                    <Text style={styles.appName}>{app}</Text>
-                    <Text style={styles.appSub}>
-                      {todayCount > 0 ? `${todayCount} challenge${todayCount > 1 ? 's' : ''} today` : 'No challenges today'}
-                    </Text>
-                  </View>
-                  <View style={styles.appRight}>
-                    {rate !== null ? (
-                      <>
-                        <Text style={styles.appRate}>
-                          {rate}
-                          <Text style={styles.appRateUnit}>%</Text>
-                        </Text>
-                        <Text style={styles.appRateLabel}>SUCCESS</Text>
-                      </>
-                    ) : (
-                      <Text style={styles.appNoData}>—</Text>
-                    )}
-                  </View>
-                </View>
-                <View style={styles.appStatsRow}>
-                  <View style={styles.appStatCell}>
-                    <Text style={styles.appStatVal}>{total}</Text>
-                    <Text style={styles.appStatLabel}>TOTAL</Text>
-                  </View>
-                  <View style={styles.appStatDivider} />
-                  <View style={styles.appStatCell}>
-                    <Text style={styles.appStatVal}>{successes}</Text>
-                    <Text style={styles.appStatLabel}>WON</Text>
-                  </View>
-                  <View style={styles.appStatDivider} />
-                  <View style={styles.appStatCell}>
-                    <Text style={[styles.appStatVal, bestTime > 0 && styles.appStatAccent]}>
-                      {bestTime > 0 ? `${bestTime.toFixed(2)}s` : '—'}
-                    </Text>
-                    <Text style={styles.appStatLabel}>BEST</Text>
-                  </View>
-                </View>
-              </View>
-            );
-          })}
         </>
-      )}
-
-      {monitoredApps.length === 0 && (
-        <View style={styles.emptyCard}>
-          <Text style={styles.emptyTitle}>NO APPS SELECTED</Text>
-          <Text style={styles.emptySub}>Choose which apps to monitor from the YOU tab.</Text>
-        </View>
       )}
     </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#0A0A0A' },
+  root: { flex: 1, backgroundColor: colors.bg },
   content: { paddingTop: 52, paddingBottom: 48 },
 
-  header: { paddingHorizontal: 20, marginBottom: 16 },
-  headerTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '900', letterSpacing: 0.5 },
+  header: { paddingHorizontal: spacing.xl, marginBottom: spacing.lg },
+  headerTitle: { color: colors.textPrimary, fontSize: 18, fontWeight: '900', letterSpacing: 0.5 },
+  headerSub: { color: colors.textTertiary, fontSize: 12, marginTop: 3 },
 
-  stCard: { backgroundColor: '#111111', borderRadius: 18, marginHorizontal: 16, padding: 20, marginBottom: 14, borderWidth: 1, borderColor: '#1C1C1C' },
-  stHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 18 },
-  stCardTitle: { color: '#666666', fontSize: 11, fontWeight: '900', letterSpacing: 1 },
-  stTotal: { color: '#FFFFFF', fontSize: 26, fontWeight: '900', letterSpacing: -0.5 },
-  stEmpty: { color: '#333333', fontSize: 12, lineHeight: 18 },
-  stRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 14, gap: 12 },
-  stIcon: { width: 32, height: 32, borderRadius: 9, justifyContent: 'center', alignItems: 'center' },
-  stIconText: { color: '#FFFFFF', fontSize: 11, fontWeight: '900' },
-  stApp: { color: '#DDDDDD', fontSize: 13, fontWeight: '800', width: 88 },
-  stBarWrap: { flex: 1, height: 6, backgroundColor: '#1A1A1A', borderRadius: 3, overflow: 'hidden' },
-  stBar: { height: '100%', backgroundColor: '#CCFF00', borderRadius: 3 },
-  stTime: { color: '#CCFF00', fontSize: 13, fontWeight: '900', width: 50, textAlign: 'right' },
-
-  statusCard: {
-    backgroundColor: '#0D0D0D',
-    borderRadius: 14,
-    marginHorizontal: 16,
-    paddingHorizontal: 18,
-    marginBottom: 12,
+  hero: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    marginHorizontal: spacing.lg,
+    padding: spacing.xl,
+    marginBottom: spacing.xl,
     borderWidth: 1,
-    borderColor: '#1A1A1A',
+    borderColor: colors.border,
+    ...cardShadow,
   },
-  statusRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14 },
-  statusDivider: { height: 1, backgroundColor: '#1A1A1A' },
-  statusLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  statusDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#FF1133' },
-  statusDotOn: { backgroundColor: '#CCFF00' },
-  statusLabel: { color: '#DDDDDD', fontSize: 13, fontWeight: '700' },
-  statusOn: { color: '#CCFF00', fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
-  statusFix: { color: '#FFFFFF', fontSize: 11, fontWeight: '900', letterSpacing: 0.3 },
-  batteryHint: { color: '#555555', fontSize: 11, lineHeight: 16, marginHorizontal: 16, marginTop: -4, marginBottom: 16 },
+  heroLabel: { color: colors.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 1.2 },
+  heroValue: { color: colors.textPrimary, fontSize: 40, fontWeight: '900', letterSpacing: -1.5, marginTop: 6 },
 
-  testCard: {
-    backgroundColor: '#0A1400',
-    borderRadius: 14,
-    marginHorizontal: 16,
-    padding: 18,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: '#1E3300',
-  },
-  testCardTitle: { color: '#CCFF00', fontSize: 10, fontWeight: '900', letterSpacing: 1.5, marginBottom: 10 },
-  testCardBody: { color: '#556644', fontSize: 12, lineHeight: 20, marginBottom: 16 },
-  testBtn: {
-    backgroundColor: '#CCFF00',
-    borderRadius: 10,
-    paddingVertical: 14,
+  sectionRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.xl,
+    marginBottom: spacing.md,
   },
-  testBtnSent: { backgroundColor: '#2A4400' },
-  testBtnText: { color: '#000000', fontSize: 12, fontWeight: '900', letterSpacing: 0.3 },
+  sectionLabel: { color: colors.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
+  sectionLabelAlone: {
+    color: colors.textTertiary,
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1,
+    paddingHorizontal: spacing.xl,
+    marginTop: spacing.md,
+    marginBottom: spacing.md,
+  },
+  editLink: { color: colors.accent, fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
 
-  sectionLabel: { color: '#444444', fontSize: 10, fontWeight: '900', letterSpacing: 1, paddingHorizontal: 20, marginBottom: 10 },
+  editor: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    marginHorizontal: spacing.lg,
+    padding: spacing.md,
+    marginBottom: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  editRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: 10,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.sm,
+    marginBottom: 4,
+  },
+  editRowOn: { backgroundColor: colors.accentMuted },
+  editIcon: { width: 30, height: 30, borderRadius: 9, justifyContent: 'center', alignItems: 'center' },
+  editIconText: { color: '#FFFFFF', fontSize: 10, fontWeight: '900' },
+  editLabel: { flex: 1, color: colors.textSecondary, fontSize: 13, fontWeight: '700' },
+  editLabelOn: { color: colors.textPrimary },
+  check: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: colors.border, justifyContent: 'center', alignItems: 'center' },
+  checkOn: { backgroundColor: colors.accent, borderColor: colors.accent },
+  checkGlyph: { color: '#000000', fontSize: 11, fontWeight: '900' },
+
+  editActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
+  cancelBtn: { flex: 1, paddingVertical: 13, alignItems: 'center', borderRadius: radius.sm, backgroundColor: colors.surfaceRaised },
+  cancelText: { color: colors.textSecondary, fontSize: 12, fontWeight: '900' },
+  saveBtn: { flex: 2, paddingVertical: 13, alignItems: 'center', borderRadius: radius.sm, backgroundColor: colors.accent },
+  saveText: { color: '#000000', fontSize: 12, fontWeight: '900' },
 
   appCard: {
-    backgroundColor: '#111111',
-    borderRadius: 16,
-    marginHorizontal: 16,
-    marginBottom: 12,
-    padding: 16,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+    padding: spacing.lg,
     borderWidth: 1,
-    borderColor: '#1C1C1C',
+    borderColor: colors.border,
   },
-  appTopRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 14 },
-  appIcon: { width: 52, height: 52, borderRadius: 13, justifyContent: 'center', alignItems: 'center' },
-  appIconText: { color: '#FFFFFF', fontSize: 15, fontWeight: '900' },
+  appTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  appIcon: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  appIconText: { color: '#FFFFFF', fontSize: 13, fontWeight: '900' },
   appBody: { flex: 1 },
-  appName: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
-  appSub: { color: '#555555', fontSize: 11, marginTop: 3 },
+  appName: { color: colors.textPrimary, fontSize: 15, fontWeight: '800' },
+  appSub: { color: colors.textTertiary, fontSize: 11, marginTop: 2 },
   appRight: { alignItems: 'flex-end' },
-  appRate: { color: '#CCFF00', fontSize: 24, fontWeight: '900' },
-  appRateUnit: { fontSize: 13, color: '#778844' },
-  appRateLabel: { color: '#444444', fontSize: 9, fontWeight: '800', letterSpacing: 0.3 },
-  appNoData: { color: '#333333', fontSize: 24, fontWeight: '900' },
+  appMinutes: { color: colors.textPrimary, fontSize: 15, fontWeight: '900' },
+  appMinutesLabel: { color: colors.textFaint, fontSize: 8, fontWeight: '900', letterSpacing: 0.5, marginTop: 2 },
 
-  appStatsRow: { flexDirection: 'row', borderTopWidth: 1, borderColor: '#1C1C1C', paddingTop: 12 },
-  appStatCell: { flex: 1, alignItems: 'center' },
-  appStatVal: { color: '#DDDDDD', fontSize: 15, fontWeight: '900' },
-  appStatAccent: { color: '#CCFF00' },
-  appStatLabel: { color: '#444444', fontSize: 9, fontWeight: '800', letterSpacing: 0.5, marginTop: 2 },
-  appStatDivider: { width: 1, backgroundColor: '#1C1C1C' },
+  barWrap: { height: 4, backgroundColor: colors.surfaceRaised, borderRadius: 2, overflow: 'hidden', marginTop: spacing.md },
+  bar: { height: '100%', borderRadius: 2 },
 
-  emptyCard: { backgroundColor: '#111111', borderRadius: 14, marginHorizontal: 16, padding: 24, alignItems: 'center' },
-  emptyTitle: { color: '#333333', fontSize: 13, fontWeight: '900', letterSpacing: 0.5, marginBottom: 6 },
-  emptySub: { color: '#2A2A2A', fontSize: 12, textAlign: 'center' },
+  statsRow: { flexDirection: 'row', marginTop: spacing.md, paddingTop: spacing.md, borderTopWidth: 1, borderColor: colors.borderSubtle },
+  statCell: { flex: 1, alignItems: 'center' },
+  statVal: { color: colors.textSecondary, fontSize: 14, fontWeight: '900' },
+  statAccent: { color: colors.accent },
+  statLabel: { color: colors.textFaint, fontSize: 8, fontWeight: '900', letterSpacing: 0.5, marginTop: 3 },
+  statDivider: { width: 1, backgroundColor: colors.borderSubtle },
+
+  allCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    marginHorizontal: spacing.lg,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  stRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: spacing.md },
+  stIcon: { width: 28, height: 28, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+  stIconText: { color: '#FFFFFF', fontSize: 9, fontWeight: '900' },
+  stApp: { color: colors.textSecondary, fontSize: 12, fontWeight: '700', width: 78 },
+  stBarWrap: { flex: 1, height: 5, backgroundColor: colors.surfaceRaised, borderRadius: 3, overflow: 'hidden' },
+  stBar: { height: '100%', backgroundColor: colors.accent, borderRadius: 3 },
+  stTime: { color: colors.accent, fontSize: 12, fontWeight: '900', width: 48, textAlign: 'right' },
+
+  emptyCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    marginHorizontal: spacing.lg,
+    padding: spacing.xxl,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  emptyTitle: { color: colors.textSecondary, fontSize: 13, fontWeight: '900', letterSpacing: 0.5, marginBottom: 6 },
+  emptySub: { color: colors.textFaint, fontSize: 12, textAlign: 'center', lineHeight: 17 },
 });
