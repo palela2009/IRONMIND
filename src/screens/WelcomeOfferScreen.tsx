@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Modal } from 'react-native';
 import { useThemedStyles, useTheme } from '../context/ThemeContext';
-import { Palette, radius, spacing, cardShadow } from '../theme';
+import { Palette, radius, spacing, cardShadow, glowFor } from '../theme';
 import { usePro } from '../context/ProContext';
-import { WELCOME_PLANS, PRO_FEATURES, ProPlanId } from '../constants/pro';
+import { WELCOME_PLANS, PRO_PLANS, PRO_FEATURES, ProPlanId, discountPercent, MAX_WELCOME_DISCOUNT } from '../constants/pro';
 
 export const WelcomeOfferScreen: React.FC = () => {
   const styles = useThemedStyles(makeStyles);
@@ -42,50 +42,77 @@ export const WelcomeOfferScreen: React.FC = () => {
     <Modal visible={welcomeOffer} animationType="slide" onRequestClose={decline}>
       <View style={styles.root}>
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          <View style={styles.tag}>
-            <Text style={styles.tagText}>ONE-TIME WELCOME OFFER</Text>
+          <View style={styles.header}>
+            <View style={styles.tag}>
+              <Text style={styles.tagText}>ONE-TIME WELCOME OFFER</Text>
+            </View>
+
+            <Text style={styles.saveNum}>{MAX_WELCOME_DISCOUNT()}%</Text>
+            <Text style={styles.saveWord}>OFF IRONMIND PRO</Text>
+            <Text style={styles.sub}>
+              Shown once, on your first day. Every plan below is discounted — after this it
+              returns to the normal price.
+            </Text>
           </View>
 
-          <Text style={styles.title}>START AT{'\n'}A LOWER PRICE</Text>
-          <Text style={styles.sub}>
-            Because it is your first day, IronMind Pro is discounted on every plan. This price is
-            only shown once.
-          </Text>
-
-          <View style={styles.features}>
-            {PRO_FEATURES.map((f) => (
-              <View key={f.title} style={styles.featureRow}>
+          <View style={styles.featureCard}>
+            {PRO_FEATURES.map((f, i) => (
+              <View key={f.title} style={[styles.featureRow, i > 0 && styles.featureRowDivided]}>
                 <Text style={styles.featureIcon}>{f.icon}</Text>
                 <Text style={styles.featureText}>{f.title}</Text>
+                <Text style={styles.featureTick}>✓</Text>
               </View>
             ))}
           </View>
 
-          {WELCOME_PLANS.map((p) => (
-            <TouchableOpacity
-              key={p.id}
-              style={[styles.planCard, p.id === 'annual' && styles.planCardFeatured]}
-              onPress={() => handleSelect(p.id)}
-              activeOpacity={0.85}
-              disabled={busy !== null}
-            >
-              <View style={styles.planLeft}>
-                <Text style={styles.planTitle}>{p.title}</Text>
-                <Text style={styles.planCadence}>
-                  {p.cadence}
-                  {p.perMonth ? ` · ${p.perMonth}` : ''}
-                </Text>
-              </View>
-              <View style={styles.planRight}>
-                {busy === p.id ? (
-                  <ActivityIndicator color={palette.accent} size="small" />
-                ) : (
-                  <Text style={styles.planPrice}>{p.price}</Text>
+          {WELCOME_PLANS.map((p) => {
+            const full = PRO_PLANS.find((s) => s.id === p.id);
+            const featured = p.id === 'annual';
+            const off = discountPercent(p.id);
+            return (
+              <TouchableOpacity
+                key={p.id}
+                style={[styles.planCard, featured && styles.planCardFeatured]}
+                onPress={() => handleSelect(p.id)}
+                activeOpacity={0.88}
+                disabled={busy !== null}
+              >
+                {featured && (
+                  <View style={styles.ribbon}>
+                    <Text style={styles.ribbonText}>BEST VALUE</Text>
+                  </View>
                 )}
-                {p.note && <Text style={styles.planNote}>{p.note}</Text>}
-              </View>
-            </TouchableOpacity>
-          ))}
+
+                <View style={styles.planTop}>
+                  <View style={styles.planLeft}>
+                    <Text style={styles.planTitle}>{p.title}</Text>
+                    <Text style={styles.planCadence}>
+                      {p.cadence}
+                      {p.perMonth ? ` · ${p.perMonth}` : ''}
+                    </Text>
+                  </View>
+
+                  <View style={styles.planRight}>
+                    {busy === p.id ? (
+                      <ActivityIndicator color={palette.accent} size="small" />
+                    ) : (
+                      <View style={styles.priceRow}>
+                        <Text style={styles.oldPrice}>{full?.price}</Text>
+                        <Text style={styles.newPrice}>{p.price}</Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+
+                <View style={styles.planFoot}>
+                  <View style={styles.offPill}>
+                    <Text style={styles.offText}>SAVE {off}%</Text>
+                  </View>
+                  <Text style={styles.planGo}>TAP TO CHOOSE →</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
 
           <TouchableOpacity style={styles.declineBtn} onPress={decline} activeOpacity={0.8}>
             <Text style={styles.declineText}>NO THANKS, CONTINUE FREE</Text>
@@ -93,7 +120,8 @@ export const WelcomeOfferScreen: React.FC = () => {
 
           <Text style={styles.legal}>
             Subscriptions renew automatically at the standard price after the first term unless
-            cancelled. Manage or cancel any time in Google Play. Lifetime is a single payment.
+            cancelled. Manage or cancel any time in Google Play. Lifetime is a single payment with
+            no renewal.
           </Text>
         </ScrollView>
       </View>
@@ -103,30 +131,56 @@ export const WelcomeOfferScreen: React.FC = () => {
 
 const makeStyles = (c: Palette) => StyleSheet.create({
   root: { flex: 1, backgroundColor: c.bg },
-  content: { padding: spacing.xl, paddingTop: 64, paddingBottom: 48 },
+  content: { padding: spacing.xl, paddingTop: 60, paddingBottom: 44 },
 
+  header: { alignItems: 'center', marginBottom: spacing.xxl },
   tag: {
-    alignSelf: 'flex-start',
     backgroundColor: c.accentMuted,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.md,
     paddingVertical: 5,
     marginBottom: spacing.lg,
   },
-  tagText: { color: c.accent, fontSize: 9, fontWeight: '900', letterSpacing: 1.2 },
+  tagText: { color: c.accent, fontSize: 9, fontWeight: '900', letterSpacing: 1.4 },
 
-  title: { color: c.textPrimary, fontSize: 30, fontWeight: '900', letterSpacing: -1, lineHeight: 34 },
-  sub: { color: c.textSecondary, fontSize: 13, lineHeight: 19, marginTop: spacing.md, marginBottom: spacing.xxl },
+  saveNum: {
+    color: c.accent,
+    fontSize: 84,
+    fontWeight: '900',
+    letterSpacing: -5,
+    lineHeight: 86,
+    ...glowFor(c),
+  },
+  saveWord: {
+    color: c.textPrimary,
+    fontSize: 15,
+    fontWeight: '900',
+    letterSpacing: 2,
+    marginTop: -spacing.xs,
+  },
+  sub: {
+    color: c.textSecondary,
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: 'center',
+    marginTop: spacing.md,
+  },
 
-  features: { gap: spacing.md, marginBottom: spacing.xxl },
-  featureRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  featureIcon: { color: c.accent, fontSize: 14, width: 20, textAlign: 'center' },
-  featureText: { color: c.textSecondary, fontSize: 13, fontWeight: '700' },
+  featureCard: {
+    backgroundColor: c.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: c.border,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.xxl,
+  },
+  featureRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 13 },
+  featureRowDivided: { borderTopWidth: 1, borderColor: c.borderSubtle },
+  featureIcon: { color: c.accent, fontSize: 15, width: 22, textAlign: 'center' },
+  featureText: { flex: 1, color: c.textPrimary, fontSize: 13, fontWeight: '700' },
+  featureTick: { color: c.accent, fontSize: 13, fontWeight: '900' },
 
   planCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     backgroundColor: c.surface,
     borderRadius: radius.md,
     padding: spacing.lg,
@@ -135,23 +189,56 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     borderColor: c.border,
     ...cardShadow,
   },
-  planCardFeatured: { borderColor: c.accent, borderWidth: 1.5 },
-  planLeft: { flex: 1 },
-  planTitle: { color: c.textPrimary, fontSize: 15, fontWeight: '900', letterSpacing: 0.3 },
-  planCadence: { color: c.textTertiary, fontSize: 11, marginTop: 3 },
-  planRight: { alignItems: 'flex-end' },
-  planPrice: { color: c.accent, fontSize: 22, fontWeight: '900' },
-  planNote: {
-    color: c.textFaint,
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 0.4,
-    marginTop: 3,
-    textDecorationLine: 'line-through',
+  planCardFeatured: { borderColor: c.accent, borderWidth: 1.5, backgroundColor: c.surfaceRaised },
+
+  ribbon: {
+    position: 'absolute',
+    top: -1,
+    right: spacing.lg,
+    backgroundColor: c.accent,
+    borderBottomLeftRadius: 6,
+    borderBottomRightRadius: 6,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
   },
+  ribbonText: { color: c.accentContrast, fontSize: 8, fontWeight: '900', letterSpacing: 0.8 },
+
+  planTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  planLeft: { flex: 1 },
+  planTitle: { color: c.textPrimary, fontSize: 16, fontWeight: '900', letterSpacing: 0.3 },
+  planCadence: { color: c.textTertiary, fontSize: 11, marginTop: 3 },
+
+  planRight: { alignItems: 'flex-end' },
+  priceRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
+  oldPrice: {
+    color: c.textFaint,
+    fontSize: 13,
+    fontWeight: '700',
+    textDecorationLine: 'line-through',
+    marginBottom: 3,
+  },
+  newPrice: { color: c.accent, fontSize: 26, fontWeight: '900', letterSpacing: -0.5 },
+
+  planFoot: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderColor: c.borderSubtle,
+  },
+  offPill: {
+    backgroundColor: c.accentMuted,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 4,
+  },
+  offText: { color: c.accent, fontSize: 9, fontWeight: '900', letterSpacing: 0.8 },
+  planGo: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 0.6 },
 
   declineBtn: { alignItems: 'center', paddingVertical: spacing.lg, marginTop: spacing.sm },
   declineText: { color: c.textTertiary, fontSize: 12, fontWeight: '900', letterSpacing: 0.5 },
 
-  legal: { color: c.textFaint, fontSize: 10, lineHeight: 15, marginTop: spacing.sm },
+  legal: { color: c.textFaint, fontSize: 10, lineHeight: 15 },
 });

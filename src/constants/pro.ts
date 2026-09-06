@@ -53,6 +53,16 @@ export const PRO_PLANS: ProPlan[] = [
 // Shown once, to a brand new account only. These are separate Play Console products from
 // the standard plans rather than a discount applied at runtime, because a client cannot be
 // trusted to decide what a user pays.
+export const discountPercent = (planId: ProPlanId): number => {
+  const full = PRO_PLANS.find((p) => p.id === planId);
+  const sale = WELCOME_PLANS.find((p) => p.id === planId);
+  if (!full || !sale) return 0;
+  return Math.round((1 - sale.priceValue / full.priceValue) * 100);
+};
+
+export const MAX_WELCOME_DISCOUNT = (): number =>
+  Math.max(...(['monthly', 'annual', 'lifetime'] as ProPlanId[]).map(discountPercent));
+
 export const WELCOME_PLANS: ProPlan[] = [
   {
     id: 'monthly',
