@@ -8,6 +8,8 @@ import { useDuels, formatTimeLeft, formatAgo } from '../hooks/useDuels';
 import { useAuth } from '../context/AuthContext';
 import { TrainingState, UserStats } from '../types/training';
 import { rankForLevel, PODIUM } from '../constants/ranks';
+import { Badge, topBadgeFor } from '../constants/badges';
+import { usePro } from '../context/ProContext';
 
 const DUEL_STAKE = 100;
 
@@ -27,6 +29,7 @@ interface Entry {
   totalChallenges: number;
   level: number;
   isMe: boolean;
+  badge: Badge | null;
 }
 
 const abbrFor = (name: string): string => {
@@ -87,6 +90,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
   const palette = useTheme();
 
   const { fbUser } = useAuth();
+  const { isPro } = usePro();
   const { code, friends, requests, loading, error, addByCode, acceptRequest, rejectRequest, removeFriend, refresh: refreshFriends } = useFriends();
   const { duels, challenge, respond, cancel: cancelDuel, error: duelError, refresh: refreshDuels } = useDuels();
   const [refreshing, setRefreshing] = useState(false);
@@ -117,6 +121,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
       totalChallenges: stats.totalChallenges,
       level: stats.level,
       isMe: true,
+      badge: topBadgeFor(stats, isPro),
     };
 
     const others: Entry[] = friends.map((f) => ({
@@ -127,6 +132,18 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
       totalChallenges: f.totalChallenges,
       level: f.level,
       isMe: false,
+      badge: topBadgeFor(
+        {
+          currentStreak: f.currentStreak,
+          longestStreak: f.longestStreak,
+          bestReactionTime: f.bestReactionTime,
+          totalChallenges: f.totalChallenges,
+          successCount: f.successCount,
+          currentXP: f.currentXP,
+          level: f.level,
+        },
+        f.isPro
+      ),
     }));
 
     return [me, ...others].sort(
@@ -135,7 +152,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
         b.level - a.level ||
         b.totalChallenges - a.totalChallenges
     );
-  }, [fbUser?.uid, fbUser?.displayName, fbUser?.email, fbUser?.photoURL, stats, friends]);
+  }, [fbUser?.uid, fbUser?.displayName, fbUser?.email, fbUser?.photoURL, stats, friends, isPro]);
 
   const handleShare = async () => {
     if (!code) return;
@@ -457,9 +474,14 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
                 >
                   {first && <Text style={styles.crown}>♛</Text>}
                   <Avatar entry={entry} size={first ? 64 : 50} ring={metal.color} />
-                  <Text style={[styles.podiumName, entry.isMe && styles.podiumNameMe]} numberOfLines={1}>
-                    {entry.isMe ? 'YOU' : entry.displayName}
-                  </Text>
+                  <View style={styles.nameRow}>
+                    {entry.badge && (
+                      <Text style={[styles.eliteGlyph, { color: entry.badge.color }]}>{entry.badge.glyph}</Text>
+                    )}
+                    <Text style={[styles.podiumName, entry.isMe && styles.podiumNameMe]} numberOfLines={1}>
+                      {entry.isMe ? 'YOU' : entry.displayName}
+                    </Text>
+                  </View>
                   <RankBadge level={entry.level} />
                   <View style={[styles.podiumBlock, { backgroundColor: metal.color, height: first ? 64 : 44 }]}>
                     <Text style={styles.podiumPlace}>{metal.label}</Text>
@@ -481,9 +503,14 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
               <Text style={styles.rank}>{i + 4}</Text>
               <Avatar entry={entry} size={40} />
               <View style={styles.friendBody}>
-                <Text style={styles.friendName} numberOfLines={1}>
-                  {entry.isMe ? 'YOU' : entry.displayName}
-                </Text>
+                <View style={styles.nameRow}>
+                  {entry.badge && (
+                    <Text style={[styles.eliteGlyph, { color: entry.badge.color }]}>{entry.badge.glyph}</Text>
+                  )}
+                  <Text style={styles.friendName} numberOfLines={1}>
+                    {entry.isMe ? 'YOU' : entry.displayName}
+                  </Text>
+                </View>
                 <View style={styles.friendMeta}>
                   <RankBadge level={entry.level} />
                   <Text style={styles.friendSub}>{entry.totalChallenges} challenges</Text>
@@ -605,6 +632,9 @@ const makeStyles = (c: Palette) => StyleSheet.create({
 
   avatar: { justifyContent: 'center', alignItems: 'center', backgroundColor: c.surfaceRaised },
   avatarText: { color: c.textPrimary, fontWeight: '900' },
+
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 4, maxWidth: '100%' },
+  eliteGlyph: { fontSize: 12, fontWeight: '900' },
 
   rankBadge: { borderWidth: 1, borderRadius: 5, paddingHorizontal: 5, paddingVertical: 2, alignSelf: 'flex-start' },
   rankBadgeText: { fontSize: 8, fontWeight: '900', letterSpacing: 0.5 },

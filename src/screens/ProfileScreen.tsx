@@ -8,6 +8,7 @@ import { useAuth } from '../context/AuthContext';
 import { usePro } from '../context/ProContext';
 import { ProScreen } from './ProScreen';
 import { StatusCard } from '../components/StatusCard';
+import { ELITE_BADGES, earnedBadges } from '../constants/badges';
 import { signOut, updateProfile } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import { DIFFICULTY_WINDOW_SECONDS, DEFAULT_DIFFICULTY, DifficultyLevel } from '../constants/difficulty';
@@ -156,6 +157,7 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onSettingsChanged
 
   const achievements = getAchievements(stats);
   const doneCount = achievements.filter((a) => a.done).length;
+  const earnedElite = earnedBadges(stats);
   const rankPct = Math.min(((stats.currentXP % XP_PER_LEVEL) / XP_PER_LEVEL) * 100, 100);
   const rxnDisplay = stats.bestReactionTime > 0 ? `${stats.bestReactionTime.toFixed(2)}s` : '—';
   const successRate = stats.totalChallenges > 0
@@ -412,6 +414,34 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onSettingsChanged
         ))}
       </View>
 
+      <View style={styles.sectionRow}>
+        <Text style={styles.sectionTitle}>ELITE BADGES</Text>
+        <Text style={styles.achieveCount}>
+          {isPro ? `${earnedElite.length} / ${ELITE_BADGES.length}` : 'PRO'}
+        </Text>
+      </View>
+
+      {!isPro && (
+        <TouchableOpacity style={styles.eliteLockRow} onPress={() => setShowPro(true)} activeOpacity={0.85}>
+          <Text style={styles.eliteLockText}>
+            Elite badges appear next to your name on the leaderboard. Unlock with Pro →
+          </Text>
+        </TouchableOpacity>
+      )}
+
+      <View style={styles.eliteGrid}>
+        {ELITE_BADGES.map((b) => {
+          const earned = isPro && b.earned(stats);
+          return (
+            <View key={b.id} style={[styles.eliteCard, !earned && styles.eliteCardLocked]}>
+              <Text style={[styles.eliteGlyph, { color: earned ? b.color : palette.textFaint }]}>{b.glyph}</Text>
+              <Text style={[styles.eliteName, earned && { color: b.color }]}>{b.name}</Text>
+              <Text style={styles.eliteDesc}>{b.desc}</Text>
+            </View>
+          );
+        })}
+      </View>
+
       <Text style={styles.settingsSection}>PERMISSIONS</Text>
 
       <StatusCard />
@@ -551,6 +581,37 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onSettingsChanged
 };
 
 const makeStyles = (c: Palette) => StyleSheet.create({
+  eliteLockRow: {
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.sm,
+    backgroundColor: c.accentMuted,
+  },
+  eliteLockText: { color: c.accent, fontSize: 11, lineHeight: 16, fontWeight: '700' },
+
+  eliteGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.xl,
+  },
+  eliteCard: {
+    width: '31%',
+    flexGrow: 1,
+    backgroundColor: c.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: c.border,
+    padding: spacing.md,
+    alignItems: 'center',
+  },
+  eliteCardLocked: { opacity: 0.45 },
+  eliteGlyph: { fontSize: 22, fontWeight: '900', marginBottom: 4 },
+  eliteName: { color: c.textSecondary, fontSize: 9, fontWeight: '900', letterSpacing: 0.5, textAlign: 'center' },
+  eliteDesc: { color: c.textFaint, fontSize: 8, lineHeight: 11, textAlign: 'center', marginTop: 3 },
+
   proBanner: {
     flexDirection: 'row',
     alignItems: 'center',

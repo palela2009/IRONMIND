@@ -63,8 +63,8 @@ export const PRO_FEATURES = [
   },
   {
     icon: '✦',
-    title: 'Elite Badges',
-    body: 'Pro-only achievement badges shown next to your name on the leaderboard.',
+    title: '7 Elite Badges',
+    body: 'Rare Pro-only badges for milestones like a 100-win run or a sub-half-second exit, shown next to your name on the leaderboard.',
   },
   {
     icon: '◈',

@@ -13,6 +13,10 @@ export interface Friend {
   longestStreak: number;
   totalChallenges: number;
   level: number;
+  successCount: number;
+  bestReactionTime: number;
+  currentXP: number;
+  isPro: boolean;
 }
 
 export interface FriendRequestItem {
