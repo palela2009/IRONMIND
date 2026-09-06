@@ -61,6 +61,14 @@ class UsageMonitorService : Service() {
         // its foreground notification still showing as if everything was fine.
         val apps = intent?.getStringArrayExtra("apps")
         if (apps != null) {
+            val uid = intent.getStringExtra("uid") ?: ""
+            // The fired-today counter lives in device storage, so switching accounts would
+            // otherwise hand a new user the previous account's exhausted daily limit and
+            // fire nothing for them at all.
+            val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            if (uid.isNotEmpty() && prefs.getString("uid", null) != uid) {
+                prefs.edit().putString("uid", uid).putString("date", null).putInt("count", 0).apply()
+            }
             saveConfig(apps, intent.getDoubleExtra("challengeWindowSeconds", 10.0), intent.getDoubleExtra("dailyLimit", 5.0))
         }
 

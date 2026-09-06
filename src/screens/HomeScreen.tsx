@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, ActivityIndicator, NativeModules, Platform, AppState } from 'react-native';
 import { useThemedStyles, useTheme } from '../context/ThemeContext';
 import { UserStats, ChallengeItem, TrainingState } from '../types/training';
 import { useAuth } from '../context/AuthContext';
@@ -62,9 +62,34 @@ const timeAgo = (ts: number) => {
   return `${Math.floor(mins / 60)}h ago`;
 };
 
+// Null while unknown (non-Android, or an older build without the native counter), which the
+// caller falls back on rather than showing a confident wrong number.
+const useFiredRemaining = (): number | null => {
+  const [remaining, setRemaining] = useState<number | null>(null);
+
+  const read = useCallback(async () => {
+    if (Platform.OS !== 'android' || !NativeModules.UsageMonitor?.getChallengeCountToday) return;
+    try {
+      const { fired, limit } = await NativeModules.UsageMonitor.getChallengeCountToday();
+      setRemaining(Math.max(limit - fired, 0));
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    read();
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s === 'active') read();
+    });
+    return () => sub.remove();
+  }, [read]);
+
+  return remaining;
+};
+
 export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallengeLimit, onNavigate }) => {  const styles = useThemedStyles(makeStyles);
   const { coins } = usePro();
   const [showShop, setShowShop] = useState<boolean>(false);
+  const firedRemaining = useFiredRemaining();
 
   const { fbUser } = useAuth();
 
@@ -147,10 +172,12 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallenge
               <Text style={styles.todayCount}>
                 {todaySuccess}<Text style={styles.todayOf}> / {todayCount} done</Text>
               </Text>
-              <Text style={styles.todayRemain}>
-                {dailyChallengeLimit - todayCount > 0
-                  ? `${dailyChallengeLimit - todayCount} more may fire today`
-                  : 'All challenges complete for today'}
+              <Text style={[styles.todayRemain, firedRemaining === 0 && styles.todayCapped]}>
+                {firedRemaining === null
+                  ? `${Math.max(dailyChallengeLimit - todayCount, 0)} more may fire today`
+                  : firedRemaining > 0
+                  ? `${firedRemaining} more may fire today`
+                  : 'Daily limit reached — no more until tomorrow'}
               </Text>
             </View>
             <View style={styles.todayDots}>
@@ -325,6 +352,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   quickVal: { color: c.textPrimary, fontSize: 22, fontWeight: '900', letterSpacing: -0.5 },
   quickLabel: { color: c.textTertiary, fontSize: 9, fontWeight: '800', letterSpacing: 0.5, marginTop: spacing.xs },
   accentVal: { color: c.accent },
+  todayCapped: { color: c.danger },
 
   shopCell: {
     flex: 1,

@@ -28,12 +28,13 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
     )
 
     @ReactMethod
-    fun startMonitoring(apps: ReadableArray, challengeWindowSeconds: Double, dailyLimit: Double) {
+    fun startMonitoring(apps: ReadableArray, challengeWindowSeconds: Double, dailyLimit: Double, uid: String?) {
         val appList = Array(apps.size()) { apps.getString(it) }
         val intent = Intent(reactContext, UsageMonitorService::class.java).apply {
             putExtra("apps", appList)
             putExtra("challengeWindowSeconds", challengeWindowSeconds)
             putExtra("dailyLimit", dailyLimit)
+            putExtra("uid", uid ?: "")
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             reactContext.startForegroundService(intent)
@@ -78,6 +79,30 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
                 }
                 reactContext.startActivity(fallback)
             } catch (_: Exception) {}
+        }
+    }
+
+    // The service caps how many challenges may fire per day, and that counter is the only
+    // thing that decides whether another one can. JS was inferring "challenges today" from
+    // its own history of *resolved* results instead, so a user who had exhausted the cap saw
+    // a screen claiming they had plenty left and no explanation for the silence.
+    @ReactMethod
+    fun getChallengeCountToday(promise: Promise) {
+        try {
+            val prefs = reactContext.getSharedPreferences(
+                UsageMonitorService.PREFS_NAME,
+                Context.MODE_PRIVATE
+            )
+            val cal = java.util.Calendar.getInstance()
+            val todayKey = "${cal.get(java.util.Calendar.YEAR)}-${cal.get(java.util.Calendar.DAY_OF_YEAR)}"
+            val count = if (prefs.getString("date", null) == todayKey) prefs.getInt("count", 0) else 0
+
+            val map = Arguments.createMap()
+            map.putInt("fired", count)
+            map.putInt("limit", prefs.getFloat("limit", 5f).toInt())
+            promise.resolve(map)
+        } catch (e: Exception) {
+            promise.reject("COUNT_ERROR", e.message)
         }
     }
 
