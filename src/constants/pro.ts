@@ -50,6 +50,42 @@ export const PRO_PLANS: ProPlan[] = [
   },
 ];
 
+// Shown once, to a brand new account only. These are separate Play Console products from
+// the standard plans rather than a discount applied at runtime, because a client cannot be
+// trusted to decide what a user pays.
+export const WELCOME_PLANS: ProPlan[] = [
+  {
+    id: 'monthly',
+    productId: 'ironmind_pro_monthly_welcome',
+    title: 'MONTHLY',
+    price: '$1.99',
+    priceValue: 1.99,
+    cadence: 'per month',
+    perMonth: null,
+    note: 'WAS $2.99',
+  },
+  {
+    id: 'annual',
+    productId: 'ironmind_pro_annual_welcome',
+    title: 'ANNUAL',
+    price: '$14.99',
+    priceValue: 14.99,
+    cadence: 'per year',
+    perMonth: '$1.25/mo',
+    note: 'WAS $19.99',
+  },
+  {
+    id: 'lifetime',
+    productId: 'ironmind_pro_lifetime_welcome',
+    title: 'LIFETIME',
+    price: '$29.99',
+    priceValue: 29.99,
+    cadence: 'one-time',
+    perMonth: null,
+    note: 'WAS $39.99',
+  },
+];
+
 export const PRO_FEATURES = [
   {
     icon: '❄',

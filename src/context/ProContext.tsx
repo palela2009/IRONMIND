@@ -11,13 +11,14 @@ const CACHE_KEY = '@ironmind_pro_v1';
 export interface Entitlement {
   isPro: boolean;
   isOwner: boolean;
+  welcomeOffer: boolean;
   plan: ProPlanId | null;
   expiresAt: string | null;
   streakFreezes: number;
   themeId: string;
 }
 
-const FREE: Entitlement = { isPro: false, isOwner: false, plan: null, expiresAt: null, streakFreezes: 0, themeId: 'default' };
+const FREE: Entitlement = { isPro: false, isOwner: false, welcomeOffer: false, plan: null, expiresAt: null, streakFreezes: 0, themeId: 'default' };
 
 interface ProContextValue extends Entitlement {
   loading: boolean;
@@ -27,6 +28,7 @@ interface ProContextValue extends Entitlement {
   useFreeze: () => Promise<boolean>;
   grantFreeze: () => Promise<void>;
   setTheme: (themeId: string) => Promise<void>;
+  closeWelcomeOffer: () => Promise<void>;
 }
 
 const ProContext = createContext<ProContextValue | undefined>(undefined);
@@ -117,6 +119,14 @@ export const ProProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {}
   };
 
+  const closeWelcomeOffer = async () => {
+    await persist({ ...entitlementRef.current, welcomeOffer: false });
+    try {
+      const res = await authedFetch(`${API_URL}/offer/close`, { method: 'POST' });
+      if (res.ok) await persist(await res.json());
+    } catch {}
+  };
+
   const setTheme = async (themeId: string) => {
     await persist({ ...entitlementRef.current, themeId });
     try {
@@ -129,7 +139,7 @@ export const ProProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   return (
     <ProContext.Provider
-      value={{ ...entitlement, loading, refresh, activate, cancel, useFreeze, grantFreeze, setTheme }}
+      value={{ ...entitlement, loading, refresh, activate, cancel, useFreeze, grantFreeze, setTheme, closeWelcomeOffer }}
     >
       {children}
     </ProContext.Provider>

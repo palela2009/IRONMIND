@@ -3,7 +3,8 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, NativeModu
 import { useThemedStyles, useTheme } from '../context/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
-import { UserStats } from '../types/training';
+import { UserStats, ChallengeItem } from '../types/training';
+import { AnalyticsScreen } from './AnalyticsScreen';
 import { useAuth } from '../context/AuthContext';
 import { usePro } from '../context/ProContext';
 import { ProScreen } from './ProScreen';
@@ -20,6 +21,7 @@ import { spacing, radius, cardShadow, Palette } from '../theme';
 
 interface ProfileProps {
   stats: UserStats;
+  history: ChallengeItem[];
   onSettingsChanged?: () => void;
   onNavigate: (state: any) => void;
 }
@@ -57,12 +59,13 @@ const getAchievements = (s: UserStats) => [
   { id: '08', title: 'MARATHON', desc: '500 challenges completed', done: s.totalChallenges >= 500 },
 ];
 
-export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onSettingsChanged }) => {  const styles = useThemedStyles(makeStyles);
+export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettingsChanged }) => {  const styles = useThemedStyles(makeStyles);
   const palette = useTheme();
 
   const { fbUser, refreshUser } = useAuth();
   const { isPro, isOwner, streakFreezes } = usePro();
   const [showPro, setShowPro] = useState<boolean>(false);
+  const [showAnalytics, setShowAnalytics] = useState<boolean>(false);
   const [monitoredApps, setMonitoredApps] = useState<string[]>([]);
 
   const [difficulty, setDifficulty] = useState<DifficultyLevel>(DEFAULT_DIFFICULTY);
@@ -414,6 +417,22 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onSettingsChanged
         ))}
       </View>
 
+      <TouchableOpacity
+        style={styles.analyticsRow}
+        onPress={() => (isPro ? setShowAnalytics(true) : setShowPro(true))}
+        activeOpacity={0.85}
+      >
+        <View style={styles.analyticsBody}>
+          <Text style={styles.analyticsTitle}>ADVANCED ANALYTICS</Text>
+          <Text style={styles.analyticsSub}>
+            {isPro
+              ? 'Screen-time trends, per-app breakdown and challenge performance'
+              : 'Unlock full history and per-app trends with Pro'}
+          </Text>
+        </View>
+        <Text style={styles.analyticsArrow}>{isPro ? '→' : '🔒'}</Text>
+      </TouchableOpacity>
+
       <View style={styles.sectionRow}>
         <Text style={styles.sectionTitle}>ELITE BADGES</Text>
         <Text style={styles.achieveCount}>
@@ -576,11 +595,34 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onSettingsChanged
       </TouchableOpacity>
 
       <ProScreen visible={showPro} onClose={() => setShowPro(false)} />
+
+      <AnalyticsScreen
+        visible={showAnalytics}
+        onClose={() => setShowAnalytics(false)}
+        history={history}
+        stats={stats}
+      />
     </ScrollView>
   );
 };
 
 const makeStyles = (c: Palette) => StyleSheet.create({
+  analyticsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: c.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: c.border,
+    padding: spacing.lg,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.xl,
+  },
+  analyticsBody: { flex: 1 },
+  analyticsTitle: { color: c.textPrimary, fontSize: 13, fontWeight: '900', letterSpacing: 0.4 },
+  analyticsSub: { color: c.textTertiary, fontSize: 11, marginTop: 3, lineHeight: 15 },
+  analyticsArrow: { color: c.accent, fontSize: 15, fontWeight: '900' },
+
   eliteLockRow: {
     marginHorizontal: spacing.lg,
     marginBottom: spacing.md,

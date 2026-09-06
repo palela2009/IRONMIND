@@ -9,6 +9,7 @@ import { StreakReclaimModal } from './src/components/StreakReclaimModal';
 import { StreakSavedOverlay } from './src/components/StreakSavedOverlay';
 import { reportActiveDuels } from './src/hooks/useDuels';
 import { ProScreen } from './src/screens/ProScreen';
+import { WelcomeOfferScreen } from './src/screens/WelcomeOfferScreen';
 import { useStats } from './src/hooks/useStats';
 import { useNotifications } from './src/hooks/useNotifications';
 import { useAppMonitor, syncAppMonitor } from './src/hooks/useAppMonitor';
@@ -249,7 +250,7 @@ function RootNavigator() {
       case 'FRIENDS':
         return <FriendsScreen stats={stats} onNavigate={setScreen} />;
       case 'PROFILE':
-        return <ProfileScreen stats={stats} onSettingsChanged={refreshSettings} onNavigate={setScreen} />;
+        return <ProfileScreen stats={stats} history={history} onSettingsChanged={refreshSettings} onNavigate={setScreen} />;
       default:
         return <HomeScreen stats={stats} history={history} dailyChallengeLimit={DAILY_CHALLENGE_LIMIT} onNavigate={setScreen} />;
     }
@@ -300,6 +301,8 @@ function RootNavigator() {
           setShowPro(true);
         }}
       />
+
+      <WelcomeOfferScreen />
 
       <StreakSavedOverlay
         streak={savedStreak?.streak ?? 0}
