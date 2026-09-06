@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Share, Alert, Image, Modal, RefreshControl } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFriends } from '../hooks/useFriends';
-import { useDuels, formatTimeLeft } from '../hooks/useDuels';
+import { useDuels, formatTimeLeft, formatAgo } from '../hooks/useDuels';
 import { useAuth } from '../context/AuthContext';
 import { TrainingState, UserStats } from '../types/training';
 import { rankForLevel, PODIUM } from '../constants/ranks';
@@ -327,6 +327,9 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {
                       {theirs !== null && <Text style={styles.scoreUnit}>m</Text>}
                     </Text>
                     <Text style={styles.scoreLabel}>THEM</Text>
+                    {theirs !== null && (
+                      <Text style={styles.syncLabel}>{formatAgo(d.theirReportedAt)}</Text>
+                    )}
                   </View>
                 </View>
                 {theirs !== null && (
@@ -636,6 +639,7 @@ const styles = StyleSheet.create({
   scoreWinning: { color: '#CCFF00' },
   duelState: { color: '#7A6070', fontSize: 10, fontWeight: '900', letterSpacing: 0.6, textAlign: 'center', marginTop: 6 },
   scoreLabel: { color: '#4A3A44', fontSize: 9, fontWeight: '900', letterSpacing: 0.5, marginTop: 2 },
+  syncLabel: { color: '#3A2530', fontSize: 8, fontWeight: '700', marginTop: 2 },
   scoreVs: { color: '#3A2530', fontSize: 16, fontWeight: '900' },
 
   resultRow: {

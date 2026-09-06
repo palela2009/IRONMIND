@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { NativeModules, Platform } from 'react-native';
+import { NativeModules, Platform, AppState } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE_URL } from '../config/api';
 import { authedFetch } from '../utils/authFetch';
@@ -115,6 +115,18 @@ export const useDuels = () => {
     load();
   }, [load]);
 
+  const hasActiveDuel = duels.some((d) => d.status === 'active');
+
+  useEffect(() => {
+    if (!hasActiveDuel || !fbUser?.uid) return;
+
+    const id = setInterval(() => {
+      if (AppState.currentState === 'active') load();
+    }, 60_000);
+
+    return () => clearInterval(id);
+  }, [hasActiveDuel, fbUser?.uid, load]);
+
   const challenge = async (toUid: string, app: string, stake = 100): Promise<boolean> => {
     setError('');
     try {
@@ -155,6 +167,15 @@ export const useDuels = () => {
   };
 
   return { duels, loading, error, challenge, respond, refresh: load };
+};
+
+export const formatAgo = (iso: string | null): string => {
+  if (!iso) return 'never';
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  return hours < 24 ? `${hours}h ago` : `${Math.floor(hours / 24)}d ago`;
 };
 
 export const formatTimeLeft = (endAt: string | null): string => {
