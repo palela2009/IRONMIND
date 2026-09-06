@@ -190,7 +190,11 @@ class UsageMonitorService : Service() {
             events.getNextEvent(event)
             val isResume = event.eventType == android.app.usage.UsageEvents.Event.MOVE_TO_FOREGROUND ||
                 event.eventType == android.app.usage.UsageEvents.Event.ACTIVITY_RESUMED
-            if (isResume && event.timeStamp >= latestTime && event.packageName != packageName) {
+            // IRONMIND itself is deliberately not filtered out. Opening this app is one of the
+            // most natural ways to escape a challenge, and ignoring its own resume events left
+            // the challenge unresolved — which then blocked every later challenge, since none
+            // are evaluated while one is active.
+            if (isResume && event.timeStamp >= latestTime) {
                 latestTime = event.timeStamp
                 latestPkg = event.packageName
             }
