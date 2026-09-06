@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { usePro } from '../context/ProContext';
-import { useRewardedAd, AD_UNITS, AD_SDK_INSTALLED } from '../hooks/useRewardedAd';
+import { useRewardedAd, AD_UNITS, ADS_AVAILABLE } from '../hooks/useRewardedAd';
 import { radius, spacing, Palette } from '../theme';
 import { useThemedStyles, useTheme } from '../context/ThemeContext';
 
@@ -27,8 +27,18 @@ export const StreakReclaimModal: React.FC<Props> = ({ lostStreak, onReclaim, onD
 
   const watchAd = async () => {
     const result = await show(AD_UNITS.streakReclaim);
-    if (result === 'rewarded') onReclaim();
-    else onDismiss();
+    if (result === 'rewarded') {
+      onReclaim();
+      return;
+    }
+    // An ad that failed to load is not the user's fault, so the streak is restored anyway
+    // rather than punishing them for a network problem or an unfilled ad slot.
+    if (result === 'unavailable') {
+      Alert.alert('No ad available', 'We could not load an ad just now, so your streak is safe this time.');
+      onReclaim();
+      return;
+    }
+    onDismiss();
   };
 
   return (
@@ -72,10 +82,9 @@ export const StreakReclaimModal: React.FC<Props> = ({ lostStreak, onReclaim, onD
                 Watch a short video and your {lostStreak}-challenge streak is restored.
               </Text>
 
-              {!AD_SDK_INSTALLED && (
+              {__DEV__ && (
                 <Text style={styles.placeholder}>
-                  Ads are not wired up yet — this is a placeholder that grants the reward so the
-                  flow can be tested.
+                  Test ad — real ads serve once AdMob is connected.
                 </Text>
               )}
 

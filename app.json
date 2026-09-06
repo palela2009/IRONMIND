@@ -37,6 +37,12 @@
           "icon": "./assets/icon.png",
           "color": "#CCFF00"
         }
+      ],
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-3940256099942544~3347511713"
+        }
       ]
     ],
     "extra": {

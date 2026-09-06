@@ -15,7 +15,8 @@
     "expo-web-browser": "~56.0.5",
     "firebase": "^12.13.0",
     "react": "19.2.3",
-    "react-native": "0.85.3"
+    "react-native": "0.85.3",
+    "react-native-google-mobile-ads": "^16.5.0"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",

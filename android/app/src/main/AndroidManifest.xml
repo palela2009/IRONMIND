@@ -29,6 +29,12 @@
     <meta-data android:name="expo.modules.updates.ENABLE_BSDIFF_PATCH_SUPPORT" android:value="true"/>
     <meta-data android:name="expo.modules.updates.EXPO_UPDATES_CHECK_ON_LAUNCH" android:value="ALWAYS"/>
     <meta-data android:name="expo.modules.updates.EXPO_UPDATES_LAUNCH_WAIT_MS" android:value="0"/>
+    <!-- Google's public test application id. The SDK refuses to initialise without one, and
+         this serves real test ads with no AdMob account. Swap for the live id, which must
+         match app.json's androidAppId, once AdMob exists. Added here rather than via the
+         config plugin because this project has a checked-in android directory that
+         expo prebuild would regenerate over the custom monitoring service. -->
+    <meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="ca-app-pub-3940256099942544~3347511713" tools:replace="android:value"/>
     <service
       android:name=".UsageMonitorService"
       android:foregroundServiceType="dataSync"

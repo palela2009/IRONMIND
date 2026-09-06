@@ -8,8 +8,25 @@ import { WELCOME_PLANS, PRO_PLANS, PRO_FEATURES, ProPlanId, discountPercent, MAX
 export const WelcomeOfferScreen: React.FC = () => {
   const styles = useThemedStyles(makeStyles);
   const palette = useTheme();
-  const { welcomeOffer, activate, closeWelcomeOffer } = usePro();
+  const { welcomeOffer, trialAvailable, activate, startTrial, closeWelcomeOffer } = usePro();
   const [busy, setBusy] = useState<ProPlanId | null>(null);
+  const [startingTrial, setStartingTrial] = useState(false);
+
+  // Trial first, discount only if they turn it down. Showing both at once makes the reader
+  // choose between two good offers instead of accepting one, and the discount lands far
+  // harder as a response to "no" than as a competing option.
+  const [stage, setStage] = useState<'trial' | 'discount'>(trialAvailable ? 'trial' : 'discount');
+
+  const beginTrial = async () => {
+    setStartingTrial(true);
+    const ok = await startTrial();
+    setStartingTrial(false);
+    if (!ok) {
+      Alert.alert('Could not start trial', 'Try again in a moment.');
+      return;
+    }
+    await closeWelcomeOffer();
+  };
 
   const handleSelect = async (planId: ProPlanId) => {
     setBusy(planId);
@@ -44,14 +61,19 @@ export const WelcomeOfferScreen: React.FC = () => {
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
             <View style={styles.tag}>
-              <Text style={styles.tagText}>ONE-TIME WELCOME OFFER</Text>
+              <Text style={styles.tagText}>
+                {stage === 'trial' ? 'FREE FOR YOUR FIRST WEEK' : 'ONE-TIME WELCOME OFFER'}
+              </Text>
             </View>
 
-            <Text style={styles.saveNum}>{MAX_WELCOME_DISCOUNT()}%</Text>
-            <Text style={styles.saveWord}>OFF IRONMIND PRO</Text>
+            <Text style={styles.saveNum}>{stage === 'trial' ? '7' : `${MAX_WELCOME_DISCOUNT()}%`}</Text>
+            <Text style={styles.saveWord}>
+              {stage === 'trial' ? 'DAYS OF PRO, FREE' : 'OFF IRONMIND PRO'}
+            </Text>
             <Text style={styles.sub}>
-              Shown once, on your first day. Every plan below is discounted — after this it
-              returns to the normal price.
+              {stage === 'trial'
+                ? 'Everything below, unlocked for seven days. No card, no charge — it simply ends unless you choose to continue.'
+                : 'No problem. Here is the lowest price IronMind Pro will ever be, shown once.'}
             </Text>
           </View>
 
@@ -65,7 +87,38 @@ export const WelcomeOfferScreen: React.FC = () => {
             ))}
           </View>
 
-          {WELCOME_PLANS.map((p) => {
+          {stage === 'trial' && (
+            <>
+              <TouchableOpacity
+                style={styles.trialBtn}
+                onPress={beginTrial}
+                activeOpacity={0.88}
+                disabled={startingTrial}
+              >
+                {startingTrial ? (
+                  <ActivityIndicator color={palette.accentContrast} />
+                ) : (
+                  <Text style={styles.trialBtnText}>START MY 7 FREE DAYS</Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.declineBtn}
+                onPress={() => setStage('discount')}
+                activeOpacity={0.8}
+                disabled={startingTrial}
+              >
+                <Text style={styles.declineText}>NOT NOW</Text>
+              </TouchableOpacity>
+
+              <Text style={styles.legal}>
+                The trial unlocks every Pro feature for seven days and then simply stops. No
+                payment details are taken and nothing renews.
+              </Text>
+            </>
+          )}
+
+          {stage === 'discount' && WELCOME_PLANS.map((p) => {
             const full = PRO_PLANS.find((s) => s.id === p.id);
             const featured = p.id === 'annual';
             const off = discountPercent(p.id);
@@ -114,14 +167,16 @@ export const WelcomeOfferScreen: React.FC = () => {
             );
           })}
 
-          <TouchableOpacity style={styles.declineBtn} onPress={decline} activeOpacity={0.8}>
-            <Text style={styles.declineText}>NO THANKS, CONTINUE FREE</Text>
-          </TouchableOpacity>
+          {stage === 'discount' && (
+            <TouchableOpacity style={styles.declineBtn} onPress={decline} activeOpacity={0.8}>
+              <Text style={styles.declineText}>NO THANKS, CONTINUE FREE</Text>
+            </TouchableOpacity>
+          )}
 
           <Text style={styles.legal}>
-            Subscriptions renew automatically at the standard price after the first term unless
+            {stage === 'trial' ? '' : `Subscriptions renew automatically at the standard price after the first term unless
             cancelled. Manage or cancel any time in Google Play. Lifetime is a single payment with
-            no renewal.
+            no renewal.`}
           </Text>
         </ScrollView>
       </View>
@@ -236,6 +291,15 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   },
   offText: { color: c.accent, fontSize: 9, fontWeight: '900', letterSpacing: 0.8 },
   planGo: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 0.6 },
+
+  trialBtn: {
+    backgroundColor: c.accent,
+    borderRadius: radius.md,
+    paddingVertical: 18,
+    alignItems: 'center',
+    ...cardShadow,
+  },
+  trialBtnText: { color: c.accentContrast, fontSize: 14, fontWeight: '900', letterSpacing: 0.8 },
 
   declineBtn: { alignItems: 'center', paddingVertical: spacing.lg, marginTop: spacing.sm },
   declineText: { color: c.textTertiary, fontSize: 12, fontWeight: '900', letterSpacing: 0.5 },

@@ -15,13 +15,16 @@ export interface Entitlement {
   welcomeOffer: boolean;
   coins: number;
   unlockedThemes: string[];
+  onTrial: boolean;
+  trialEndsAt: string | null;
+  trialAvailable: boolean;
   plan: ProPlanId | null;
   expiresAt: string | null;
   streakFreezes: number;
   themeId: string;
 }
 
-const FREE: Entitlement = { isPro: false, isOwner: false, welcomeOffer: false, coins: 0, unlockedThemes: [], plan: null, expiresAt: null, streakFreezes: 0, themeId: 'default' };
+const FREE: Entitlement = { isPro: false, isOwner: false, welcomeOffer: false, coins: 0, unlockedThemes: [], onTrial: false, trialEndsAt: null, trialAvailable: false, plan: null, expiresAt: null, streakFreezes: 0, themeId: 'default' };
 
 interface ProContextValue extends Entitlement {
   loading: boolean;
@@ -32,6 +35,7 @@ interface ProContextValue extends Entitlement {
   grantFreeze: () => Promise<void>;
   setTheme: (themeId: string) => Promise<void>;
   closeWelcomeOffer: () => Promise<void>;
+  startTrial: () => Promise<boolean>;
   awardCoins: (reason: 'challenge_win' | 'perfect_day' | 'rewarded_ad') => Promise<void>;
   buyItem: (item: 'freeze' | 'theme', themeId?: string) => Promise<{ ok: boolean; message?: string }>;
 }
@@ -157,6 +161,17 @@ export const ProProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const startTrial = async (): Promise<boolean> => {
+    try {
+      const res = await authedFetch(`${API_URL}/trial/start`, { method: 'POST' });
+      if (!res.ok) return false;
+      await persist(await res.json());
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   const closeWelcomeOffer = async () => {
     await persist({ ...entitlementRef.current, welcomeOffer: false });
     try {
@@ -177,7 +192,7 @@ export const ProProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   return (
     <ProContext.Provider
-      value={{ ...entitlement, loading, refresh, activate, cancel, useFreeze, grantFreeze, setTheme, closeWelcomeOffer, awardCoins, buyItem }}
+      value={{ ...entitlement, loading, refresh, activate, cancel, useFreeze, grantFreeze, setTheme, closeWelcomeOffer, startTrial, awardCoins, buyItem }}
     >
       {children}
     </ProContext.Provider>
