@@ -82,11 +82,6 @@ function RootNavigator() {
   useNotifications(fbUser?.uid);
 
   useEffect(() => {
-    // Identity (email/displayName/photoURL) previously only reached the backend as a side
-    // effect of changing a setting in Profile, so plenty of existing accounts never sent
-    // it at all — which is why friend requests/leaderboard entries showed "Unknown". This
-    // syncs it automatically on every login; the backend now accepts identity-only updates
-    // without requiring the full onboarding payload, so this can't clobber real settings.
     if (!fbUser?.uid) return;
     authedFetch(`${API_BASE_URL}/api/user/onboarding`, {
       method: 'POST',
@@ -183,10 +178,6 @@ function RootNavigator() {
         const val = await AsyncStorage.getItem('@ironmind_onboarded');
         if (val === 'true') return finish(true);
 
-        // No local flag — before sending this account through onboarding again, check
-        // whether the cloud already has real settings for it. A local reset (e.g. the
-        // account-switch guard clearing stale data from a previous account on this
-        // device) shouldn't force a *returning* account to redo onboarding from scratch.
         if (fbUser?.uid) {
           const res = await authedFetch(`${API_BASE_URL}/api/user/onboarding`);
           if (res.ok) {
@@ -299,8 +290,6 @@ function RootNavigator() {
 export default function App() {
   return (
     <AuthProvider>
-      {/* Inside AuthProvider — entitlement is per-account and reloads whenever the signed-in
-          user changes. */}
       <ProProvider>
         <RootNavigator />
       </ProProvider>

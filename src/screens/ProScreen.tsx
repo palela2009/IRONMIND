@@ -18,9 +18,6 @@ export const ProScreen: React.FC<ProScreenProps> = ({ visible, onClose }) => {
     setBusy(null);
 
     if (!ok) {
-      // The activate endpoint is deliberately gated until real billing exists, so a refusal
-      // here is the expected state rather than a bug — say so plainly instead of showing a
-      // generic failure.
       Alert.alert(
         'Not available yet',
         'In-app purchases are not live yet. They will switch on once IronMind is published to Google Play.'

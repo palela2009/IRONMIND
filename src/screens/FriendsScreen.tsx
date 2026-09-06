@@ -14,8 +14,6 @@ interface FriendsProps {
   onNavigate: (state: TrainingState) => void;
 }
 
-// One row of the leaderboard. `isMe` is what lets the user find themselves instantly in a
-// list where every other entry looks structurally identical.
 interface Entry {
   uid: string;
   displayName: string;
@@ -39,9 +37,6 @@ const colorFor = (uid: string): string => {
   return PALETTE[hash % PALETTE.length];
 };
 
-// Shared avatar so the podium, request rows and list rows can't drift apart visually.
-// Falls back to initials whenever there's no photo, or the photo fails to load at all
-// (a deleted upload, or an offline device) — an empty circle would read as a broken row.
 const Avatar: React.FC<{ entry: { uid: string; displayName: string; photoURL: string | null }; size: number; ring?: string }> = ({
   entry,
   size,
@@ -89,9 +84,6 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {
   const [adding, setAdding] = useState(false);
   const [addResult, setAddResult] = useState<'idle' | 'ok' | 'err'>('idle');
 
-  // A duel is only meaningful on an app this user actually tracks, so the picker offers
-  // their monitored apps rather than a free-text field that could name an app neither
-  // player has installed.
   const [monitoredApps, setMonitoredApps] = useState<string[]>([]);
   const [duelTarget, setDuelTarget] = useState<Entry | null>(null);
   const [sending, setSending] = useState(false);
@@ -106,9 +98,6 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {
       .catch(() => {});
   }, []);
 
-  // The user competes *in* the leaderboard, not alongside it — a "top 3" that structurally
-  // can't contain you is just a list of other people. Merging self in also means the podium
-  // is populated as soon as one friend is added, rather than needing three.
   const leaderboard = useMemo<Entry[]>(() => {
     const me: Entry = {
       uid: fbUser?.uid ?? 'me',
@@ -130,9 +119,6 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {
       isMe: false,
     }));
 
-    // Streak is the headline metric, but two people sitting on the same streak is common
-    // early on — level then volume break the tie so placement stays stable between refreshes
-    // instead of flipping on array order.
     return [me, ...others].sort(
       (a, b) =>
         b.currentStreak - a.currentStreak ||
@@ -211,14 +197,11 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {
   const hasFriends = friends.length > 0;
   const podium = leaderboard.slice(0, 3);
   const rest = leaderboard.slice(3);
-  // Classic podium ordering — 2nd on the left, champion raised in the centre, 3rd on the
-  // right — rather than plain left-to-right, which reads as an ordinary list.
   const podiumOrder = [1, 0, 2].filter((i) => i < podium.length);
 
   const incomingDuels = duels.filter((d) => d.status === 'pending' && d.incoming);
   const outgoingDuels = duels.filter((d) => d.status === 'pending' && !d.incoming);
   const activeDuels = duels.filter((d) => d.status === 'active');
-  // Only a short tail of history — the interesting duel is nearly always the current one.
   const settledDuels = duels.filter((d) => d.status === 'completed' || d.status === 'void').slice(0, 5);
 
   return (
@@ -304,7 +287,6 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {
           <Text style={styles.sectionLabel}>ACTIVE DUELS · {activeDuels.length + outgoingDuels.length}</Text>
 
           {activeDuels.map((d) => {
-            // Lower is better, so the leader is whoever has the smaller number so far.
             const mine = d.myMinutes ?? 0;
             const theirs = d.theirMinutes;
             const winning = theirs === null ? null : mine < theirs;
@@ -552,8 +534,6 @@ const styles = StyleSheet.create({
   rankBadge: { borderWidth: 1, borderRadius: 5, paddingHorizontal: 5, paddingVertical: 2, alignSelf: 'flex-start' },
   rankBadgeText: { fontSize: 8, fontWeight: '900', letterSpacing: 0.5 },
 
-  // Bottom-aligned so the taller champion block lifts the centre slot without pushing the
-  // others out of line.
   podium: {
     flexDirection: 'row',
     alignItems: 'flex-end',

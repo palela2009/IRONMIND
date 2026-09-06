@@ -27,21 +27,14 @@ export interface Duel {
   incoming: boolean;
 }
 
-// Measures this device's own usage of one app across the duel's exact window. Reads the
-// window straight from UsageStatsManager's event stream rather than the daily screen-time
-// buckets, because a rolling 24h duel almost never lines up with a calendar day.
 const measureWindow = async (app: string, startAt: string, endAt: string): Promise<number | null> => {
   if (Platform.OS !== 'android' || !UsageMonitor?.getUsageForRange) return null;
   try {
     const start = new Date(startAt).getTime();
-    // Clamped to the window's end so a duel that has already closed reports the usage it
-    // actually finished on, not everything since.
     const end = Math.min(Date.now(), new Date(endAt).getTime());
     if (!(end > start)) return null;
 
     const usage: AppUsage[] = await UsageMonitor.getUsageForRange(start, end);
-    // Absent from the list means the app was never opened in the window — a real zero, not
-    // missing data, so it must report 0 rather than null (null would void the duel).
     return usage.find((u) => u.app === app)?.minutes ?? 0;
   } catch {
     return null;
@@ -70,9 +63,6 @@ export const useDuels = () => {
       const list = await fetchDuels();
       setDuels(list);
 
-      // Report usage for every live duel, then re-fetch. Reporting has to happen after the
-      // first fetch (that's how we learn which duels exist) but the server's grace period
-      // keeps expired duels unsettled long enough for these final numbers to count.
       const active = list.filter((d) => d.status === 'active' && d.startAt && d.endAt);
       if (active.length > 0) {
         const reports = await Promise.all(
@@ -146,7 +136,6 @@ export const useDuels = () => {
   return { duels, loading, error, challenge, respond, refresh: load };
 };
 
-// "3h 12m left", or a settled state once the window has closed.
 export const formatTimeLeft = (endAt: string | null): string => {
   if (!endAt) return '';
   const ms = new Date(endAt).getTime() - Date.now();

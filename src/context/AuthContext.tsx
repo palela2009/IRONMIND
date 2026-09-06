@@ -13,20 +13,8 @@ const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 
 const LAST_UID_KEY = '@ironmind_last_uid';
 
-// Local caches (stats, history, onboarding) are keyed by a single fixed
-// AsyncStorage key, not per-account. If a different Firebase user signs in
-// on this device than last time, wipe them first — otherwise the new
-// account displays the previous account's cached stats until a cloud sync
-// happens to overwrite them (and never does if the new account has less
-// progress than the stale cache, since sync only pulls cloud data down when
-// it's ahead of local).
 const clearStaleLocalDataOnAccountSwitch = async (uid: string) => {
   const lastUid = await AsyncStorage.getItem(LAST_UID_KEY);
-  // No "&&" guard on lastUid existing — the very first time this check ever runs on a
-  // device, there's no recorded last-uid yet, but there may still be old cached data
-  // sitting from before this check existed. Unknown provenance is treated the same as
-  // "different account": clear it. A legitimate returning user's cloud data will just
-  // resync straight back in on the next load, since cloud is ahead of the reset-to-0 cache.
   if (lastUid !== uid) {
     await AsyncStorage.multiRemove([
       '@ironmind_stats_v2',
@@ -55,17 +43,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return unsubscribe;
   }, []);
 
-  // Firebase's own auth-state listener doesn't refire just because updateProfile()
-  // changed displayName/photoURL on the current user object in place — callers that
-  // edit the profile need this to make the new values actually show up anywhere fbUser
-  // is read, since the object reference (and therefore React's re-render check) doesn't
-  // change on its own.
   const refreshUser = async () => {
     await auth.currentUser?.reload();
     if (auth.currentUser) {
-      // A plain object spread would drop prototype methods (getIdToken, etc.) that other
-      // code calls on fbUser — clone via the prototype chain instead, preserving both the
-      // methods and a new object reference so React actually re-renders on the change.
       const current = auth.currentUser;
       setFbUser(Object.create(Object.getPrototypeOf(current), Object.getOwnPropertyDescriptors(current)));
     }

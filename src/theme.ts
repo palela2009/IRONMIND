@@ -1,5 +1,3 @@
-// Shared design tokens — keeps the black + lime identity but gives every screen a single
-// source for color, spacing, radius and type instead of ad-hoc values duplicated per file.
 
 export const colors = {
   bg: '#08090B',
@@ -35,7 +33,6 @@ export const type = {
   micro: { fontSize: 9, fontWeight: '800' as const, letterSpacing: 0.6 },
 };
 
-// Soft elevation instead of flat 1px borders everywhere — cards read as raised, not just outlined.
 export const cardShadow = {
   shadowColor: '#000000',
   shadowOffset: { width: 0, height: 10 },

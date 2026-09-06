@@ -43,8 +43,6 @@ export const useStats = () => {
     try {
       const raw = await AsyncStorage.getItem('@ironmind_onboarding');
       const data = raw ? JSON.parse(raw) : null;
-      // Set unconditionally (not just when present) — otherwise switching to an account
-      // with no onboarding data yet would leave the previous account's values in memory.
       setMonitoredApps(data?.targetApps?.length > 0 ? data.targetApps : []);
       setDailyChallengeLimit(data?.dailyChallengeLimit ?? DAILY_LIMIT_VALUES[DEFAULT_DAILY_LIMIT]);
     } catch {}
@@ -57,10 +55,6 @@ export const useStats = () => {
         AsyncStorage.getItem(STORAGE_KEYS.HISTORY),
       ]);
 
-      // Set unconditionally, same fix as loadMonitoredApps below — otherwise switching to
-      // (or deleting into) an account with an empty local cache left stats/history frozen
-      // on whatever the PREVIOUS account's values were, since setStats/setHistory were
-      // only ever called when data was actually found.
       const localStats: UserStats = rawStats ? JSON.parse(rawStats) : INITIAL_STATS;
       const localHistory: ChallengeItem[] = rawHistory ? JSON.parse(rawHistory) : [];
       setStats(localStats);
@@ -92,8 +86,6 @@ export const useStats = () => {
 
       if (historyRes.ok) {
         const cloudHistory: ChallengeItem[] = await historyRes.json();
-        // Cloud wins when it holds more than this device does — covers both a fresh
-        // install and an account switch, which each start with nothing stored locally.
         if (cloudHistory.length > localHistory.length) {
           setHistory(cloudHistory);
           await AsyncStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(cloudHistory));
@@ -120,9 +112,6 @@ export const useStats = () => {
             level: updatedStats.level,
           }),
         });
-        // Aggregate totals above cover Home/Profile displays, but nothing previously
-        // persisted the individual challenge record — history only ever lived in local
-        // AsyncStorage, invisible in MongoDB and lost on reinstall/device switch.
         await authedFetch(`${API_URL}/challenge/result`, {
           method: 'POST',
           body: JSON.stringify({
@@ -149,10 +138,6 @@ export const useStats = () => {
 
     const xpEarned = success ? 50 + (stats.currentStreak >= 5 ? 10 : 0) : 0;
 
-    // A failed challenge normally resets the streak to zero. A streak freeze absorbs that
-    // one failure and holds the streak where it was — it does not advance it, so freezing
-    // can never be better than actually succeeding. Only spent when there is a streak worth
-    // saving, otherwise a fail at zero would silently burn one.
     let freezeUsed = false;
     if (!success && stats.currentStreak > 0) {
       freezeUsed = await useFreeze();
@@ -193,8 +178,6 @@ export const useStats = () => {
     setHistory(updatedHistory);
     await persist(updatedStats, updatedHistory, newItem, fbUser?.uid);
 
-    // Reported back so the caller can tell the user a freeze was spent — silently keeping
-    // the streak would look like the failure simply didn't register.
     return { freezeUsed };
   };
 

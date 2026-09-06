@@ -35,8 +35,6 @@ export const ProProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [entitlement, setEntitlement] = useState<Entitlement>(FREE);
   const [loading, setLoading] = useState(true);
 
-  // Lets non-React callers (the challenge handler in useStats) spend a freeze without
-  // needing the provider threaded through them.
   const entitlementRef = useRef(entitlement);
   entitlementRef.current = entitlement;
 
@@ -49,17 +47,12 @@ export const ProProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const refresh = useCallback(async () => {
     if (!fbUser?.uid) {
-      // Reset unconditionally on sign-out rather than leaving the previous account's
-      // entitlement in memory — the same account-switch bug that once left stale stats on
-      // screen would otherwise hand a new account someone else's Pro.
       setEntitlement(FREE);
       await AsyncStorage.removeItem(CACHE_KEY).catch(() => {});
       setLoading(false);
       return;
     }
 
-    // Show the cached entitlement immediately so Pro UI doesn't flicker back to free on
-    // every cold start while the network call is in flight.
     try {
       const cached = await AsyncStorage.getItem(CACHE_KEY);
       if (cached) setEntitlement(JSON.parse(cached));
@@ -101,9 +94,6 @@ export const ProProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // Returns whether a freeze was actually spent. The server owns the decision — it decrements
-  // atomically and answers 409 when none are left — so two challenges resolving at once can't
-  // both spend the same last freeze.
   const useFreeze = async (): Promise<boolean> => {
     if (entitlementRef.current.streakFreezes <= 0) return false;
     try {
@@ -127,7 +117,6 @@ export const ProProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const setTheme = async (themeId: string) => {
-    // Applied locally first so the theme switches instantly; the server call only records it.
     await persist({ ...entitlementRef.current, themeId });
     try {
       await authedFetch(`${API_URL}/theme`, {

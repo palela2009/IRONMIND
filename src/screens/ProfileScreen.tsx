@@ -175,9 +175,6 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onSettingsChanged
         setDeletingAccount(false);
         return;
       }
-      // Server-side data is already gone — clear everything cached locally too, then
-      // sign out. Deleting the Firebase user doesn't invalidate this device's existing
-      // session by itself, so signOut() is still needed to actually leave the account.
       await AsyncStorage.multiRemove([
         '@ironmind_stats_v2',
         '@ironmind_history_v2',
@@ -198,9 +195,6 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onSettingsChanged
   const [pendingName, setPendingName] = useState<string>('');
   const [savingName, setSavingName] = useState<boolean>(false);
 
-  // Every Google account already comes with a name/photo from the OAuth profile, but
-  // email/password sign-ups start with neither — this is what lets those users set both
-  // themselves, and lets anyone override the Google-provided ones if they want to.
   const resyncIdentityToBackend = (displayName?: string | null, photoURL?: string | null) => {
     authedFetch(ONBOARDING_URL, {
       method: 'POST',
@@ -227,8 +221,6 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onSettingsChanged
       if (result.canceled || !result.assets?.[0]?.base64) return;
 
       setUploadingPhoto(true);
-      // Stored in our own MongoDB and served from our own backend — no separate object
-      // storage service (Firebase Storage, S3, etc.) needed.
       const uploadRes = await authedFetch(PHOTO_UPLOAD_URL, {
         method: 'POST',
         body: JSON.stringify({ imageBase64: result.assets[0].base64, contentType: 'image/jpeg' }),
@@ -240,9 +232,6 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onSettingsChanged
         return;
       }
 
-      // A cache-busting query param, not a new file — the URL otherwise stays identical
-      // after a re-upload, and both the OS image cache and RN's <Image> would keep
-      // showing the old bytes at that same address.
       const newPhotoUrl = photoUrlFor(fbUser.uid);
       await updateProfile(auth.currentUser!, { photoURL: newPhotoUrl });
       await refreshUser();

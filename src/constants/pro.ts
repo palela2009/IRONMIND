@@ -1,8 +1,3 @@
-// IronMind Pro plans and the feature list the paywall sells.
-//
-// Product IDs are the identifiers that must be created verbatim in the Play Console before
-// billing can work. They're defined here rather than inline so wiring real purchases later
-// is a matter of importing this list, not hunting for strings.
 
 export type ProPlanId = 'monthly' | 'annual' | 'lifetime';
 
@@ -13,7 +8,6 @@ export interface ProPlan {
   price: string;
   priceValue: number;
   cadence: string;
-  // Non-null only where a per-month equivalent is meaningful (i.e. not one-off purchases).
   perMonth: string | null;
   note: string | null;
 }
@@ -21,10 +15,6 @@ export interface ProPlan {
 const MONTHLY_PRICE = 2.99;
 const ANNUAL_PRICE = 19.99;
 
-// Computed rather than hardcoded so the badge can never contradict the prices next to it.
-// A hand-written "SAVE 45%" silently becomes false the moment either price is edited, and
-// an overstated saving on a paid subscription is exactly the kind of claim store review
-// teams reject.
 export const ANNUAL_SAVING_PERCENT = Math.round((1 - ANNUAL_PRICE / (MONTHLY_PRICE * 12)) * 100);
 
 export const PRO_PLANS: ProPlan[] = [

@@ -9,7 +9,6 @@ import {
 } from 'firebase/auth';
 import { auth } from '../config/firebase';
 
-
 GoogleSignin.configure({
   webClientId: '1094826576454-rus44gke6b6f1o6ujunucs8dk0kfurub.apps.googleusercontent.com',
 });
@@ -23,7 +22,6 @@ export const LoginScreen: React.FC = () => {
   const handleGoogleSignIn = async () => {
     try {
       await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-
 
       const response = await GoogleSignin.signIn();
       const idToken = response.data?.idToken;
