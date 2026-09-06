@@ -28,6 +28,7 @@ class UsageMonitorService : Service() {
     private var activeChallenge: ActiveChallenge? = null
     private var challengeWindowMs = 10_000L
     private var maxDailyChallenges = 5
+    private var lastKnownForeground: String? = null
 
     private val APP_PACKAGES = mapOf(
         "Instagram" to "com.instagram.android",
@@ -54,23 +55,48 @@ class UsageMonitorService : Service() {
         createChannels()
         startForeground(FOREGROUND_ID, buildForegroundNotification())
 
-        val apps = intent?.getStringArrayExtra("apps") ?: emptyArray()
-        monitoredPackages = apps.mapNotNull { appName ->
+        // START_STICKY restarts this service with a NULL intent after the system kills it,
+        // so the config has to survive independently. Reading it only from the intent meant a
+        // restarted service monitored an empty app list and silently never fired again, with
+        // its foreground notification still showing as if everything was fine.
+        val apps = intent?.getStringArrayExtra("apps")
+        if (apps != null) {
+            saveConfig(apps, intent.getDoubleExtra("challengeWindowSeconds", 10.0), intent.getDoubleExtra("dailyLimit", 5.0))
+        }
+
+        val config = loadConfig()
+        monitoredPackages = config.first.mapNotNull { appName ->
             APP_PACKAGES[appName]?.let { pkg -> Pair(appName, pkg) }
         }
-        if (intent?.hasExtra("challengeWindowSeconds") == true) {
-            challengeWindowMs = (intent.getDoubleExtra("challengeWindowSeconds", 10.0) * 1000).toLong()
-        }
-        if (intent?.hasExtra("dailyLimit") == true) {
-            maxDailyChallenges = intent.getDoubleExtra("dailyLimit", 5.0).toInt()
-        }
+        challengeWindowMs = (config.second * 1000).toLong()
+        maxDailyChallenges = config.third.toInt()
+
+        handler.removeCallbacks(pollRunnable)
         handler.post(pollRunnable)
 
         return START_STICKY
     }
 
+    private fun saveConfig(apps: Array<String>, windowSeconds: Double, dailyLimit: Double) {
+        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .putStringSet("apps", apps.toSet())
+            .putFloat("window", windowSeconds.toFloat())
+            .putFloat("limit", dailyLimit.toFloat())
+            .apply()
+    }
+
+    private fun loadConfig(): Triple<List<String>, Double, Double> {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return Triple(
+            prefs.getStringSet("apps", emptySet())?.toList() ?: emptyList(),
+            prefs.getFloat("window", 10f).toDouble(),
+            prefs.getFloat("limit", 5f).toDouble()
+        )
+    }
+
     private fun checkForegroundApp() {
         val foreground = getForegroundPackage() ?: return
+        lastKnownForeground = foreground
         val now = System.currentTimeMillis()
 
         activeChallenge?.let { challenge ->
@@ -82,9 +108,17 @@ class UsageMonitorService : Service() {
                 val success = elapsedMs < challengeWindowMs
                 emitChallengeResult(challenge.appName, elapsedMs / 1000.0, success)
                 activeChallenge = null
+                return
             }
-            // Window expired but they're still in the app: keep waiting rather than firing
-            // an early fail — don't evaluate for a new challenge until this one resolves.
+
+            // A challenge that can never resolve blocks every future challenge, since nothing
+            // else is evaluated while one is active. If we somehow never observe them leaving
+            // — a missed event, a screen-off, a reboot mid-challenge — give up and record the
+            // fail rather than silently disabling the app forever.
+            if (elapsedMs > STUCK_CHALLENGE_MS) {
+                emitChallengeResult(challenge.appName, elapsedMs / 1000.0, false)
+                activeChallenge = null
+            }
             return
         }
 
@@ -140,16 +174,29 @@ class UsageMonitorService : Service() {
         }
     }
 
+    // Reads the raw event stream rather than queryUsageStats. The aggregate query returns
+    // day-length buckets whose lastTimeUsed is only loosely current, so a short window over it
+    // frequently came back empty or stale and a genuine app switch went unnoticed.
     private fun getForegroundPackage(): String? {
         val usm = getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager ?: return null
         val now = System.currentTimeMillis()
-        val stats = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, now - 10_000, now)
-        if (stats.isNullOrEmpty()) return null
 
-        return stats
-            .filter { it.packageName != packageName }
-            .maxByOrNull { it.lastTimeUsed }
-            ?.packageName
+        val events = usm.queryEvents(now - FOREGROUND_LOOKBACK_MS, now) ?: return null
+        val event = android.app.usage.UsageEvents.Event()
+        var latestPkg: String? = null
+        var latestTime = 0L
+
+        while (events.hasNextEvent()) {
+            events.getNextEvent(event)
+            val isResume = event.eventType == android.app.usage.UsageEvents.Event.MOVE_TO_FOREGROUND ||
+                event.eventType == android.app.usage.UsageEvents.Event.ACTIVITY_RESUMED
+            if (isResume && event.timeStamp >= latestTime && event.packageName != packageName) {
+                latestTime = event.timeStamp
+                latestPkg = event.packageName
+            }
+        }
+
+        return latestPkg ?: lastKnownForeground
     }
 
     private fun fireChallengeNotification(appName: String) {
@@ -209,5 +256,7 @@ class UsageMonitorService : Service() {
         const val FOREGROUND_CHANNEL = "ironmind_monitor"
         const val CHALLENGE_CHANNEL = "ironmind_challenges"
         const val PREFS_NAME = "ironmind_challenge_prefs"
+        const val FOREGROUND_LOOKBACK_MS = 60_000L
+        const val STUCK_CHALLENGE_MS = 10 * 60 * 1000L
     }
 }
