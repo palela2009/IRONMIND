@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { usePro } from '../context/ProContext';
 import { useRewardedAd, AD_UNITS, AD_SDK_INSTALLED } from '../hooks/useRewardedAd';
-import { colors, radius, spacing } from '../theme';
+import { radius, spacing, Palette } from '../theme';
+import { useThemedStyles, useTheme } from '../context/ThemeContext';
 
 interface Props {
   lostStreak: number;
@@ -12,6 +13,8 @@ interface Props {
 }
 
 export const StreakReclaimModal: React.FC<Props> = ({ lostStreak, onReclaim, onDismiss, onOpenPro }) => {
+  const styles = useThemedStyles(makeStyles);
+  const palette = useTheme();
   const { isPro, streakFreezes } = usePro();
   const { show, showing } = useRewardedAd();
   const [step, setStep] = useState<'offer' | 'ad'>('offer');
@@ -83,7 +86,7 @@ export const StreakReclaimModal: React.FC<Props> = ({ lostStreak, onReclaim, onD
                 disabled={showing}
               >
                 {showing ? (
-                  <ActivityIndicator color="#000000" size="small" />
+                  <ActivityIndicator color={palette.accentContrast} size="small" />
                 ) : (
                   <Text style={styles.primaryText}>WATCH AD — RECLAIM STREAK</Text>
                 )}
@@ -100,23 +103,23 @@ export const StreakReclaimModal: React.FC<Props> = ({ lostStreak, onReclaim, onD
   );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.88)', justifyContent: 'center', paddingHorizontal: spacing.xxl },
   card: {
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
     borderRadius: radius.lg,
     padding: spacing.xxl,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: c.border,
     alignItems: 'center',
   },
-  broken: { color: colors.danger, fontSize: 26, fontWeight: '900', marginBottom: spacing.sm },
-  title: { color: colors.danger, fontSize: 12, fontWeight: '900', letterSpacing: 1.5 },
-  streakValue: { color: colors.textPrimary, fontSize: 56, fontWeight: '900', letterSpacing: -2, marginTop: spacing.sm },
-  streakLabel: { color: colors.textTertiary, fontSize: 9, fontWeight: '900', letterSpacing: 1, marginBottom: spacing.xl },
-  body: { color: colors.textSecondary, fontSize: 13, lineHeight: 19, textAlign: 'center', marginBottom: spacing.xl },
+  broken: { color: c.danger, fontSize: 26, fontWeight: '900', marginBottom: spacing.sm },
+  title: { color: c.danger, fontSize: 12, fontWeight: '900', letterSpacing: 1.5 },
+  streakValue: { color: c.textPrimary, fontSize: 56, fontWeight: '900', letterSpacing: -2, marginTop: spacing.sm },
+  streakLabel: { color: c.textTertiary, fontSize: 9, fontWeight: '900', letterSpacing: 1, marginBottom: spacing.xl },
+  body: { color: c.textSecondary, fontSize: 13, lineHeight: 19, textAlign: 'center', marginBottom: spacing.xl },
   placeholder: {
-    color: colors.textFaint,
+    color: c.textFaint,
     fontSize: 10,
     lineHeight: 15,
     textAlign: 'center',
@@ -124,23 +127,23 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   primaryBtn: {
-    backgroundColor: colors.accent,
+    backgroundColor: c.accent,
     borderRadius: radius.sm,
     paddingVertical: 15,
     alignItems: 'center',
     alignSelf: 'stretch',
     marginBottom: spacing.sm,
   },
-  primaryText: { color: '#000000', fontSize: 12, fontWeight: '900', letterSpacing: 0.3 },
+  primaryText: { color: c.accentContrast, fontSize: 12, fontWeight: '900', letterSpacing: 0.3 },
   secondaryBtn: {
-    backgroundColor: colors.surfaceRaised,
+    backgroundColor: c.surfaceRaised,
     borderRadius: radius.sm,
     paddingVertical: 15,
     alignItems: 'center',
     alignSelf: 'stretch',
     marginBottom: spacing.sm,
   },
-  secondaryText: { color: colors.textPrimary, fontSize: 12, fontWeight: '900', letterSpacing: 0.3 },
+  secondaryText: { color: c.textPrimary, fontSize: 12, fontWeight: '900', letterSpacing: 0.3 },
   ghostBtn: { paddingVertical: spacing.md, alignItems: 'center', alignSelf: 'stretch' },
-  ghostText: { color: colors.textFaint, fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
+  ghostText: { color: c.textFaint, fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
 });

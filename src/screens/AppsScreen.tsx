@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, AppState, ActivityIndicator } from 'react-native';
+import { useThemedStyles, useTheme } from '../context/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ChallengeItem } from '../types/training';
 import { useAuth } from '../context/AuthContext';
@@ -8,7 +9,7 @@ import { syncAppMonitor } from '../hooks/useAppMonitor';
 import { APPS_LIST, colorForApp, abbrForApp } from '../constants/apps';
 import { API_BASE_URL } from '../config/api';
 import { authedFetch } from '../utils/authFetch';
-import { colors, radius, spacing, cardShadow } from '../theme';
+import { radius, spacing, cardShadow, Palette } from '../theme';
 
 interface AppsProps {
   history: ChallengeItem[];
@@ -18,7 +19,9 @@ interface AppsProps {
 
 const ONBOARDING_URL = `${API_BASE_URL}/api/user/onboarding`;
 
-export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged }) => {
+export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged }) => {  const styles = useThemedStyles(makeStyles);
+  const palette = useTheme();
+
   const { fbUser } = useAuth();
   const { screenTime, loading: stLoading } = useScreenTime(fbUser?.uid);
   const [monitoredApps, setMonitoredApps] = useState<string[]>([]);
@@ -147,7 +150,7 @@ export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged }) 
               <Text style={styles.cancelText}>CANCEL</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.saveBtn} onPress={save} disabled={saving} activeOpacity={0.85}>
-              {saving ? <ActivityIndicator color="#000000" size="small" /> : <Text style={styles.saveText}>SAVE</Text>}
+              {saving ? <ActivityIndicator color={palette.accentContrast} size="small" /> : <Text style={styles.saveText}>SAVE</Text>}
             </TouchableOpacity>
           </View>
         </View>
@@ -236,26 +239,26 @@ export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged }) 
   );
 };
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.bg },
   content: { paddingTop: 52, paddingBottom: 48 },
 
   header: { paddingHorizontal: spacing.xl, marginBottom: spacing.lg },
-  headerTitle: { color: colors.textPrimary, fontSize: 18, fontWeight: '900', letterSpacing: 0.5 },
-  headerSub: { color: colors.textTertiary, fontSize: 12, marginTop: 3 },
+  headerTitle: { color: c.textPrimary, fontSize: 18, fontWeight: '900', letterSpacing: 0.5 },
+  headerSub: { color: c.textTertiary, fontSize: 12, marginTop: 3 },
 
   hero: {
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
     borderRadius: radius.lg,
     marginHorizontal: spacing.lg,
     padding: spacing.xl,
     marginBottom: spacing.xl,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: c.border,
     ...cardShadow,
   },
-  heroLabel: { color: colors.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 1.2 },
-  heroValue: { color: colors.textPrimary, fontSize: 40, fontWeight: '900', letterSpacing: -1.5, marginTop: 6 },
+  heroLabel: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 1.2 },
+  heroValue: { color: c.textPrimary, fontSize: 40, fontWeight: '900', letterSpacing: -1.5, marginTop: 6 },
 
   sectionRow: {
     flexDirection: 'row',
@@ -264,9 +267,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     marginBottom: spacing.md,
   },
-  sectionLabel: { color: colors.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
+  sectionLabel: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
   sectionLabelAlone: {
-    color: colors.textTertiary,
+    color: c.textTertiary,
     fontSize: 10,
     fontWeight: '900',
     letterSpacing: 1,
@@ -274,16 +277,16 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     marginBottom: spacing.md,
   },
-  editLink: { color: colors.accent, fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
+  editLink: { color: c.accent, fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
 
   editor: {
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
     borderRadius: radius.md,
     marginHorizontal: spacing.lg,
     padding: spacing.md,
     marginBottom: spacing.lg,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: c.border,
   },
   editRow: {
     flexDirection: 'row',
@@ -294,75 +297,75 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
     marginBottom: 4,
   },
-  editRowOn: { backgroundColor: colors.accentMuted },
+  editRowOn: { backgroundColor: c.accentMuted },
   editIcon: { width: 30, height: 30, borderRadius: 9, justifyContent: 'center', alignItems: 'center' },
-  editIconText: { color: '#FFFFFF', fontSize: 10, fontWeight: '900' },
-  editLabel: { flex: 1, color: colors.textSecondary, fontSize: 13, fontWeight: '700' },
-  editLabelOn: { color: colors.textPrimary },
-  check: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: colors.border, justifyContent: 'center', alignItems: 'center' },
-  checkOn: { backgroundColor: colors.accent, borderColor: colors.accent },
-  checkGlyph: { color: '#000000', fontSize: 11, fontWeight: '900' },
+  editIconText: { color: c.textPrimary, fontSize: 10, fontWeight: '900' },
+  editLabel: { flex: 1, color: c.textSecondary, fontSize: 13, fontWeight: '700' },
+  editLabelOn: { color: c.textPrimary },
+  check: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: c.border, justifyContent: 'center', alignItems: 'center' },
+  checkOn: { backgroundColor: c.accent, borderColor: c.accent },
+  checkGlyph: { color: c.accentContrast, fontSize: 11, fontWeight: '900' },
 
   editActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
-  cancelBtn: { flex: 1, paddingVertical: 13, alignItems: 'center', borderRadius: radius.sm, backgroundColor: colors.surfaceRaised },
-  cancelText: { color: colors.textSecondary, fontSize: 12, fontWeight: '900' },
-  saveBtn: { flex: 2, paddingVertical: 13, alignItems: 'center', borderRadius: radius.sm, backgroundColor: colors.accent },
-  saveText: { color: '#000000', fontSize: 12, fontWeight: '900' },
+  cancelBtn: { flex: 1, paddingVertical: 13, alignItems: 'center', borderRadius: radius.sm, backgroundColor: c.surfaceRaised },
+  cancelText: { color: c.textSecondary, fontSize: 12, fontWeight: '900' },
+  saveBtn: { flex: 2, paddingVertical: 13, alignItems: 'center', borderRadius: radius.sm, backgroundColor: c.accent },
+  saveText: { color: c.accentContrast, fontSize: 12, fontWeight: '900' },
 
   appCard: {
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
     borderRadius: radius.md,
     marginHorizontal: spacing.lg,
     marginBottom: spacing.md,
     padding: spacing.lg,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: c.border,
   },
   appTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   appIcon: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  appIconText: { color: '#FFFFFF', fontSize: 13, fontWeight: '900' },
+  appIconText: { color: c.textPrimary, fontSize: 13, fontWeight: '900' },
   appBody: { flex: 1 },
-  appName: { color: colors.textPrimary, fontSize: 15, fontWeight: '800' },
-  appSub: { color: colors.textTertiary, fontSize: 11, marginTop: 2 },
+  appName: { color: c.textPrimary, fontSize: 15, fontWeight: '800' },
+  appSub: { color: c.textTertiary, fontSize: 11, marginTop: 2 },
   appRight: { alignItems: 'flex-end' },
-  appMinutes: { color: colors.textPrimary, fontSize: 15, fontWeight: '900' },
-  appMinutesLabel: { color: colors.textFaint, fontSize: 8, fontWeight: '900', letterSpacing: 0.5, marginTop: 2 },
+  appMinutes: { color: c.textPrimary, fontSize: 15, fontWeight: '900' },
+  appMinutesLabel: { color: c.textFaint, fontSize: 8, fontWeight: '900', letterSpacing: 0.5, marginTop: 2 },
 
-  barWrap: { height: 4, backgroundColor: colors.surfaceRaised, borderRadius: 2, overflow: 'hidden', marginTop: spacing.md },
+  barWrap: { height: 4, backgroundColor: c.surfaceRaised, borderRadius: 2, overflow: 'hidden', marginTop: spacing.md },
   bar: { height: '100%', borderRadius: 2 },
 
-  statsRow: { flexDirection: 'row', marginTop: spacing.md, paddingTop: spacing.md, borderTopWidth: 1, borderColor: colors.borderSubtle },
+  statsRow: { flexDirection: 'row', marginTop: spacing.md, paddingTop: spacing.md, borderTopWidth: 1, borderColor: c.borderSubtle },
   statCell: { flex: 1, alignItems: 'center' },
-  statVal: { color: colors.textSecondary, fontSize: 14, fontWeight: '900' },
-  statAccent: { color: colors.accent },
-  statLabel: { color: colors.textFaint, fontSize: 8, fontWeight: '900', letterSpacing: 0.5, marginTop: 3 },
-  statDivider: { width: 1, backgroundColor: colors.borderSubtle },
+  statVal: { color: c.textSecondary, fontSize: 14, fontWeight: '900' },
+  statAccent: { color: c.accent },
+  statLabel: { color: c.textFaint, fontSize: 8, fontWeight: '900', letterSpacing: 0.5, marginTop: 3 },
+  statDivider: { width: 1, backgroundColor: c.borderSubtle },
 
   allCard: {
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
     borderRadius: radius.md,
     marginHorizontal: spacing.lg,
     padding: spacing.lg,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: c.border,
   },
   stRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: spacing.md },
   stIcon: { width: 28, height: 28, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
-  stIconText: { color: '#FFFFFF', fontSize: 9, fontWeight: '900' },
-  stApp: { color: colors.textSecondary, fontSize: 12, fontWeight: '700', width: 78 },
-  stBarWrap: { flex: 1, height: 5, backgroundColor: colors.surfaceRaised, borderRadius: 3, overflow: 'hidden' },
-  stBar: { height: '100%', backgroundColor: colors.accent, borderRadius: 3 },
-  stTime: { color: colors.accent, fontSize: 12, fontWeight: '900', width: 48, textAlign: 'right' },
+  stIconText: { color: c.textPrimary, fontSize: 9, fontWeight: '900' },
+  stApp: { color: c.textSecondary, fontSize: 12, fontWeight: '700', width: 78 },
+  stBarWrap: { flex: 1, height: 5, backgroundColor: c.surfaceRaised, borderRadius: 3, overflow: 'hidden' },
+  stBar: { height: '100%', backgroundColor: c.accent, borderRadius: 3 },
+  stTime: { color: c.accent, fontSize: 12, fontWeight: '900', width: 48, textAlign: 'right' },
 
   emptyCard: {
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
     borderRadius: radius.md,
     marginHorizontal: spacing.lg,
     padding: spacing.xxl,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: c.border,
   },
-  emptyTitle: { color: colors.textSecondary, fontSize: 13, fontWeight: '900', letterSpacing: 0.5, marginBottom: 6 },
-  emptySub: { color: colors.textFaint, fontSize: 12, textAlign: 'center', lineHeight: 17 },
+  emptyTitle: { color: c.textSecondary, fontSize: 13, fontWeight: '900', letterSpacing: 0.5, marginBottom: 6 },
+  emptySub: { color: c.textFaint, fontSize: 12, textAlign: 'center', lineHeight: 17 },
 });

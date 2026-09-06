@@ -1,9 +1,10 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, ActivityIndicator } from 'react-native';
+import { useThemedStyles, useTheme } from '../context/ThemeContext';
 import { UserStats, ChallengeItem, TrainingState } from '../types/training';
 import { useAuth } from '../context/AuthContext';
 import { XP_PER_LEVEL } from '../constants/leveling';
-import { colors, spacing, radius, type, cardShadow, glowShadow } from '../theme';
+import { spacing, radius, type, cardShadow, glowFor, Palette } from '../theme';
 
 interface HomeProps {
   stats: UserStats;
@@ -59,7 +60,8 @@ const timeAgo = (ts: number) => {
   return `${Math.floor(mins / 60)}h ago`;
 };
 
-export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallengeLimit, onNavigate }) => {
+export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallengeLimit, onNavigate }) => {  const styles = useThemedStyles(makeStyles);
+
   const { fbUser } = useAuth();
 
   const now = new Date();
@@ -228,8 +230,8 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallenge
   );
 };
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.bg },
   content: { paddingTop: 50, paddingBottom: 30 },
 
   header: {
@@ -241,15 +243,15 @@ const styles = StyleSheet.create({
   },
   brand: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   logoBox: { width: 30, height: 30, borderRadius: radius.sm },
-  brandName: { color: colors.textPrimary, fontSize: 15, fontWeight: '900', letterSpacing: 1.5 },
+  brandName: { color: c.textPrimary, fontSize: 15, fontWeight: '900', letterSpacing: 1.5 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  dateText: { color: colors.textTertiary, fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
-  avatarBtn: { width: 34, height: 34, borderRadius: radius.pill, backgroundColor: colors.accent, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
+  dateText: { color: c.textTertiary, fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
+  avatarBtn: { width: 34, height: 34, borderRadius: radius.pill, backgroundColor: c.accent, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
   avatarImg: { width: '100%', height: '100%' },
-  avatarBtnText: { color: '#000000', fontSize: 11, fontWeight: '900' },
+  avatarBtnText: { color: c.accentContrast, fontSize: 11, fontWeight: '900' },
 
   heroCard: {
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
     marginHorizontal: spacing.lg,
     borderRadius: radius.xl,
     padding: spacing.xl,
@@ -264,25 +266,25 @@ const styles = StyleSheet.create({
     width: 220,
     height: 220,
     borderRadius: 110,
-    backgroundColor: colors.accent,
+    backgroundColor: c.accent,
     opacity: 0.08,
   },
   heroTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
-  metaChipText: { color: colors.textTertiary, fontSize: 11, fontWeight: '800', letterSpacing: 1 },
-  lvBadge: { backgroundColor: colors.accentMuted, paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.pill },
-  lvText: { color: colors.accent, fontSize: 11, fontWeight: '900', letterSpacing: 0.3 },
+  metaChipText: { color: c.textTertiary, fontSize: 11, fontWeight: '800', letterSpacing: 1 },
+  lvBadge: { backgroundColor: c.accentMuted, paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.pill },
+  lvText: { color: c.accent, fontSize: 11, fontWeight: '900', letterSpacing: 0.3 },
 
-  heroNum: { color: colors.textPrimary, fontSize: 92, fontWeight: '900', letterSpacing: -4, lineHeight: 92 },
-  streakLabel: { color: colors.textSecondary, fontSize: 12, fontWeight: '700', marginBottom: spacing.lg, letterSpacing: 0.3 },
+  heroNum: { color: c.textPrimary, fontSize: 92, fontWeight: '900', letterSpacing: -4, lineHeight: 92 },
+  streakLabel: { color: c.textSecondary, fontSize: 12, fontWeight: '700', marginBottom: spacing.lg, letterSpacing: 0.3 },
 
-  xpBarBg: { height: 6, backgroundColor: colors.borderSubtle, borderRadius: radius.pill, marginBottom: spacing.sm, overflow: 'hidden' },
-  xpBarFill: { height: '100%', backgroundColor: colors.accent, borderRadius: radius.pill },
+  xpBarBg: { height: 6, backgroundColor: c.borderSubtle, borderRadius: radius.pill, marginBottom: spacing.sm, overflow: 'hidden' },
+  xpBarFill: { height: '100%', backgroundColor: c.accent, borderRadius: radius.pill },
   xpLabelRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  xpLabel: { color: colors.textTertiary, fontSize: 11, fontWeight: '600' },
-  xpNext: { color: colors.accent, fontSize: 11, fontWeight: '700' },
+  xpLabel: { color: c.textTertiary, fontSize: 11, fontWeight: '600' },
+  xpNext: { color: c.accent, fontSize: 11, fontWeight: '700' },
 
   todayCard: {
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
     marginHorizontal: spacing.lg,
     borderRadius: radius.lg,
     padding: spacing.xl,
@@ -293,14 +295,14 @@ const styles = StyleSheet.create({
     ...cardShadow,
   },
   todayLeft: { flex: 1 },
-  todayLabel: { color: colors.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 1, marginBottom: spacing.sm },
-  todayCount: { color: colors.textPrimary, fontSize: 34, fontWeight: '900', letterSpacing: -1, lineHeight: 36 },
-  todayOf: { fontSize: 15, color: colors.textTertiary, fontWeight: '600' },
-  todayRemain: { color: colors.textSecondary, fontSize: 11, marginTop: spacing.xs },
+  todayLabel: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 1, marginBottom: spacing.sm },
+  todayCount: { color: c.textPrimary, fontSize: 34, fontWeight: '900', letterSpacing: -1, lineHeight: 36 },
+  todayOf: { fontSize: 15, color: c.textTertiary, fontWeight: '600' },
+  todayRemain: { color: c.textSecondary, fontSize: 11, marginTop: spacing.xs },
   todayDots: { gap: 7 },
-  dot: { width: 10, height: 10, borderRadius: radius.pill, backgroundColor: colors.borderSubtle, borderWidth: 1, borderColor: colors.border },
-  dotSuccess: { backgroundColor: colors.accent, borderColor: colors.accent },
-  dotFail: { backgroundColor: colors.danger, borderColor: colors.danger },
+  dot: { width: 10, height: 10, borderRadius: radius.pill, backgroundColor: c.borderSubtle, borderWidth: 1, borderColor: c.border },
+  dotSuccess: { backgroundColor: c.accent, borderColor: c.accent },
+  dotFail: { backgroundColor: c.danger, borderColor: c.danger },
 
   quickRow: {
     flexDirection: 'row',
@@ -311,48 +313,48 @@ const styles = StyleSheet.create({
   quickCell: {
     flex: 1,
     alignItems: 'center',
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
     borderRadius: radius.md,
     paddingVertical: spacing.lg,
   },
-  quickVal: { color: colors.textPrimary, fontSize: 22, fontWeight: '900', letterSpacing: -0.5 },
-  quickLabel: { color: colors.textTertiary, fontSize: 9, fontWeight: '800', letterSpacing: 0.5, marginTop: spacing.xs },
-  accentVal: { color: colors.accent },
+  quickVal: { color: c.textPrimary, fontSize: 22, fontWeight: '900', letterSpacing: -0.5 },
+  quickLabel: { color: c.textTertiary, fontSize: 9, fontWeight: '800', letterSpacing: 0.5, marginTop: spacing.xs },
+  accentVal: { color: c.accent },
 
   chartCard: {
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
     marginHorizontal: spacing.lg,
     borderRadius: radius.lg,
     padding: spacing.xl,
     marginBottom: spacing.xl,
   },
-  chartLabel: { color: colors.textTertiary, fontSize: 10, fontWeight: '800', letterSpacing: 1, marginBottom: spacing.lg },
+  chartLabel: { color: c.textTertiary, fontSize: 10, fontWeight: '800', letterSpacing: 1, marginBottom: spacing.lg },
   barChart: { flexDirection: 'row', alignItems: 'flex-end', height: 84, justifyContent: 'space-between' },
   barCol: { flex: 1, alignItems: 'center', gap: spacing.sm },
   barTrack: { height: 72, justifyContent: 'flex-end' },
-  bar: { width: 22, backgroundColor: colors.borderSubtle, borderRadius: radius.pill },
-  barToday: { backgroundColor: colors.accent },
-  dayLabel: { color: colors.textFaint, fontSize: 10, fontWeight: '700' },
-  dayToday: { color: colors.accent },
+  bar: { width: 22, backgroundColor: c.borderSubtle, borderRadius: radius.pill },
+  barToday: { backgroundColor: c.accent },
+  dayLabel: { color: c.textFaint, fontSize: 10, fontWeight: '700' },
+  dayToday: { color: c.accent },
 
   recentHeader: { paddingHorizontal: spacing.xl, marginBottom: spacing.xs },
-  recentTitle: { color: colors.textPrimary, fontSize: 12, fontWeight: '900', letterSpacing: 0.5 },
+  recentTitle: { color: c.textPrimary, fontSize: 12, fontWeight: '900', letterSpacing: 0.5 },
 
   repRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.lg, gap: spacing.md },
   repDot: { width: 8, height: 8, borderRadius: radius.pill },
-  repDotOk: { backgroundColor: colors.accent },
-  repDotFail: { backgroundColor: colors.danger },
-  repApp: { flex: 1, color: colors.textPrimary, fontSize: 14, fontWeight: '800', letterSpacing: 0.3 },
-  repTime: { color: colors.textFaint, fontSize: 11, fontWeight: '600' },
+  repDotOk: { backgroundColor: c.accent },
+  repDotFail: { backgroundColor: c.danger },
+  repApp: { flex: 1, color: c.textPrimary, fontSize: 14, fontWeight: '800', letterSpacing: 0.3 },
+  repTime: { color: c.textFaint, fontSize: 11, fontWeight: '600' },
   repRight: { alignItems: 'flex-end', minWidth: 52 },
-  repReact: { color: colors.accent, fontSize: 14, fontWeight: '900' },
-  repFailTime: { color: colors.textSecondary, fontSize: 14, fontWeight: '800' },
-  repFailLabel: { color: colors.danger, fontSize: 9, fontWeight: '900', letterSpacing: 0.5, marginTop: 1 },
-  repDivider: { height: 1, backgroundColor: colors.borderSubtle, marginHorizontal: spacing.xl },
+  repReact: { color: c.accent, fontSize: 14, fontWeight: '900' },
+  repFailTime: { color: c.textSecondary, fontSize: 14, fontWeight: '800' },
+  repFailLabel: { color: c.danger, fontSize: 9, fontWeight: '900', letterSpacing: 0.5, marginTop: 1 },
+  repDivider: { height: 1, backgroundColor: c.borderSubtle, marginHorizontal: spacing.xl },
 
   emptyState: { alignItems: 'center', paddingVertical: 40, paddingHorizontal: spacing.xl },
-  emptyTitle: { color: colors.textFaint, fontSize: 14, fontWeight: '900', letterSpacing: 0.5, marginBottom: spacing.sm },
-  emptySub: { color: colors.textFaint, fontSize: 12, textAlign: 'center', lineHeight: 18, marginBottom: spacing.xl },
-  emptyBtn: { backgroundColor: colors.accentMuted, paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderRadius: radius.pill },
-  emptyBtnText: { color: colors.accent, fontSize: 12, fontWeight: '900', letterSpacing: 0.5 },
+  emptyTitle: { color: c.textFaint, fontSize: 14, fontWeight: '900', letterSpacing: 0.5, marginBottom: spacing.sm },
+  emptySub: { color: c.textFaint, fontSize: 12, textAlign: 'center', lineHeight: 18, marginBottom: spacing.xl },
+  emptyBtn: { backgroundColor: c.accentMuted, paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderRadius: radius.pill },
+  emptyBtnText: { color: c.accent, fontSize: 12, fontWeight: '900', letterSpacing: 0.5 },
 });

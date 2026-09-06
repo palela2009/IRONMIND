@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Linking, Platform } from 'react-native';
+import { useThemedStyles, useTheme } from '../context/ThemeContext';
+import { Palette } from '../theme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 
@@ -24,7 +26,9 @@ import { syncAppMonitor } from '../hooks/useAppMonitor';
 
 const ONBOARDING_URL = `${API_BASE_URL}/api/user/onboarding`;
 
-export const OnboardingScreen: React.FC<OnboardingProps> = ({ onComplete }) => {
+export const OnboardingScreen: React.FC<OnboardingProps> = ({ onComplete }) => {  const styles = useThemedStyles(makeStyles);
+  const palette = useTheme();
+
   const { fbUser } = useAuth();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [selectedApps, setSelectedApps] = useState<string[]>([]);
@@ -259,7 +263,7 @@ export const OnboardingScreen: React.FC<OnboardingProps> = ({ onComplete }) => {
           activeOpacity={0.85}
         >
           {saving ? (
-            <ActivityIndicator color="#000000" />
+            <ActivityIndicator color={palette.accentContrast} />
           ) : (
             <Text style={styles.nextBtnText}>
               {step < 3 ? 'CONTINUE →' : "ALL SET — ENTER IRONMIND →"}
@@ -271,64 +275,64 @@ export const OnboardingScreen: React.FC<OnboardingProps> = ({ onComplete }) => {
   );
 };
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#0A0A0A' },
-  progressBar: { height: 2, backgroundColor: '#1A1A1A' },
-  progressFill: { height: '100%', backgroundColor: '#CCFF00' },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.bg },
+  progressBar: { height: 2, backgroundColor: c.surfaceRaised },
+  progressFill: { height: '100%', backgroundColor: c.accent },
   stepTag: { alignSelf: 'flex-end', paddingHorizontal: 20, paddingTop: 14, marginBottom: 4 },
-  stepTagText: { color: '#444444', fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
+  stepTagText: { color: c.textFaint, fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
 
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 24, paddingTop: 8, paddingBottom: 20 },
 
-  title: { color: '#FFFFFF', fontSize: 34, fontWeight: '900', lineHeight: 40, letterSpacing: -0.5, marginBottom: 10 },
-  sub: { color: '#555555', fontSize: 13, lineHeight: 20, marginBottom: 28 },
+  title: { color: c.textPrimary, fontSize: 34, fontWeight: '900', lineHeight: 40, letterSpacing: -0.5, marginBottom: 10 },
+  sub: { color: c.textTertiary, fontSize: 13, lineHeight: 20, marginBottom: 28 },
 
-  appRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#111111', borderWidth: 1, borderColor: '#1E1E21', paddingHorizontal: 18, paddingVertical: 17, borderRadius: 14, marginBottom: 10 },
-  appRowOn: { borderColor: '#CCFF00', backgroundColor: '#0B1800' },
-  appLabel: { color: '#888888', fontSize: 16, fontWeight: '700' },
-  appLabelOn: { color: '#CCFF00' },
-  appCheck: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: '#2E2E2E', justifyContent: 'center', alignItems: 'center' },
-  appCheckOn: { backgroundColor: '#CCFF00', borderColor: '#CCFF00' },
-  checkGlyph: { color: '#000000', fontSize: 12, fontWeight: '900' },
+  appRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: c.surface, borderWidth: 1, borderColor: c.surfaceRaised, paddingHorizontal: 18, paddingVertical: 17, borderRadius: 14, marginBottom: 10 },
+  appRowOn: { borderColor: c.accent, backgroundColor: c.accentMuted },
+  appLabel: { color: c.textSecondary, fontSize: 16, fontWeight: '700' },
+  appLabelOn: { color: c.accent },
+  appCheck: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: c.border, justifyContent: 'center', alignItems: 'center' },
+  appCheckOn: { backgroundColor: c.accent, borderColor: c.accent },
+  checkGlyph: { color: c.accentContrast, fontSize: 12, fontWeight: '900' },
 
-  goalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#111111', borderWidth: 1, borderColor: '#1E1E21', paddingHorizontal: 18, paddingVertical: 16, borderRadius: 14, marginBottom: 10 },
-  goalRowOn: { borderColor: '#CCFF00', backgroundColor: '#0B1800' },
+  goalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: c.surface, borderWidth: 1, borderColor: c.surfaceRaised, paddingHorizontal: 18, paddingVertical: 16, borderRadius: 14, marginBottom: 10 },
+  goalRowOn: { borderColor: c.accent, backgroundColor: c.accentMuted },
   goalLeft: { flex: 1, marginRight: 16 },
-  goalLabel: { color: '#888888', fontSize: 14, fontWeight: '800', letterSpacing: 0.2 },
-  goalLabelOn: { color: '#CCFF00' },
-  goalSub: { color: '#444444', fontSize: 11, marginTop: 3 },
-  radioOuter: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: '#2E2E2E', justifyContent: 'center', alignItems: 'center' },
-  radioOuterOn: { borderColor: '#CCFF00' },
-  radioInner: { width: 9, height: 9, borderRadius: 5, backgroundColor: '#CCFF00' },
+  goalLabel: { color: c.textSecondary, fontSize: 14, fontWeight: '800', letterSpacing: 0.2 },
+  goalLabelOn: { color: c.accent },
+  goalSub: { color: c.textFaint, fontSize: 11, marginTop: 3 },
+  radioOuter: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: c.border, justifyContent: 'center', alignItems: 'center' },
+  radioOuterOn: { borderColor: c.accent },
+  radioInner: { width: 9, height: 9, borderRadius: 5, backgroundColor: c.accent },
 
-  permCard: { backgroundColor: '#111111', borderRadius: 14, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#1C1C1C' },
-  permCardDone: { borderColor: '#2A4400', backgroundColor: '#0B1800' },
-  permCardPending: { borderColor: '#2A3A44', backgroundColor: '#080E12' },
+  permCard: { backgroundColor: c.surface, borderRadius: 14, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: c.border },
+  permCardDone: { borderColor: c.accentDim, backgroundColor: c.accentMuted },
+  permCardPending: { borderColor: c.border, backgroundColor: c.bg },
   permRow: { flexDirection: 'row', gap: 12, alignItems: 'flex-start', marginBottom: 14 },
-  permNumBadge: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#1E1E1E', justifyContent: 'center', alignItems: 'center', flexShrink: 0 },
-  permNumBadgeDone: { backgroundColor: '#CCFF00' },
-  permNumBadgePending: { backgroundColor: '#1A4A5A' },
-  permNumText: { color: '#666666', fontSize: 11, fontWeight: '900' },
-  permNumTextDone: { color: '#000000' },
+  permNumBadge: { width: 30, height: 30, borderRadius: 15, backgroundColor: c.surfaceRaised, justifyContent: 'center', alignItems: 'center', flexShrink: 0 },
+  permNumBadgeDone: { backgroundColor: c.accent },
+  permNumBadgePending: { backgroundColor: c.accentDim },
+  permNumText: { color: c.textSecondary, fontSize: 11, fontWeight: '900' },
+  permNumTextDone: { color: c.accentContrast },
   permInfo: { flex: 1 },
-  permTitle: { color: '#FFFFFF', fontSize: 13, fontWeight: '900', marginBottom: 4 },
-  permDesc: { color: '#666666', fontSize: 12, lineHeight: 18 },
-  permAction: { backgroundColor: '#CCFF00', borderRadius: 10, paddingVertical: 13, alignItems: 'center' },
-  permActionText: { color: '#000000', fontSize: 13, fontWeight: '900', letterSpacing: 0.3 },
-  permDenied: { color: '#FF4400', fontSize: 11, marginTop: 10, lineHeight: 17 },
+  permTitle: { color: c.textPrimary, fontSize: 13, fontWeight: '900', marginBottom: 4 },
+  permDesc: { color: c.textSecondary, fontSize: 12, lineHeight: 18 },
+  permAction: { backgroundColor: c.accent, borderRadius: 10, paddingVertical: 13, alignItems: 'center' },
+  permActionText: { color: c.accentContrast, fontSize: 13, fontWeight: '900', letterSpacing: 0.3 },
+  permDenied: { color: c.danger, fontSize: 11, marginTop: 10, lineHeight: 17 },
 
-  usageNote: { marginTop: 14, borderTopWidth: 1, borderColor: '#1C1C1C', paddingTop: 12 },
-  usageNoteTitle: { color: '#CCFF00', fontSize: 9, fontWeight: '900', letterSpacing: 1, marginBottom: 6 },
-  usageNoteBody: { color: '#555555', fontSize: 12, lineHeight: 19 },
+  usageNote: { marginTop: 14, borderTopWidth: 1, borderColor: c.border, paddingTop: 12 },
+  usageNoteTitle: { color: c.accent, fontSize: 9, fontWeight: '900', letterSpacing: 1, marginBottom: 6 },
+  usageNoteBody: { color: c.textTertiary, fontSize: 12, lineHeight: 19 },
 
-  skipNote: { backgroundColor: '#0D0D0D', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#1A1A1A' },
-  skipNoteText: { color: '#444444', fontSize: 12, lineHeight: 19, textAlign: 'center' },
+  skipNote: { backgroundColor: c.surface, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: c.surfaceRaised },
+  skipNoteText: { color: c.textFaint, fontSize: 12, lineHeight: 19, textAlign: 'center' },
 
-  footer: { flexDirection: 'row', gap: 10, paddingHorizontal: 20, paddingBottom: 36, paddingTop: 14, borderTopWidth: 1, borderColor: '#141414', backgroundColor: '#0A0A0A' },
-  backBtn: { width: 54, height: 56, backgroundColor: '#111111', borderRadius: 14, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#1E1E1E' },
-  backBtnText: { color: '#FFFFFF', fontSize: 18, fontWeight: '900' },
-  nextBtn: { flex: 1, height: 56, backgroundColor: '#CCFF00', borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
-  nextBtnDisabled: { backgroundColor: '#1A1A1A' },
-  nextBtnText: { color: '#000000', fontSize: 13, fontWeight: '900', letterSpacing: 0.3 },
+  footer: { flexDirection: 'row', gap: 10, paddingHorizontal: 20, paddingBottom: 36, paddingTop: 14, borderTopWidth: 1, borderColor: c.surface, backgroundColor: c.bg },
+  backBtn: { width: 54, height: 56, backgroundColor: c.surface, borderRadius: 14, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: c.surfaceRaised },
+  backBtnText: { color: c.textPrimary, fontSize: 18, fontWeight: '900' },
+  nextBtn: { flex: 1, height: 56, backgroundColor: c.accent, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
+  nextBtnDisabled: { backgroundColor: c.surfaceRaised },
+  nextBtnText: { color: c.accentContrast, fontSize: 13, fontWeight: '900', letterSpacing: 0.3 },
 });

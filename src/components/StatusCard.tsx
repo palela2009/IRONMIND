@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Linking, Platform, AppState, NativeModules } from 'react-native';
 import * as Notifications from 'expo-notifications';
-import { colors, radius, spacing } from '../theme';
+import { radius, spacing, Palette } from '../theme';
+import { useThemedStyles } from '../context/ThemeContext';
 
 export const StatusCard: React.FC = () => {
+  const styles = useThemedStyles(makeStyles);
   const [notifGranted, setNotifGranted] = useState(false);
   const [usageAccessGranted, setUsageAccessGranted] = useState(false);
   const [batteryExempt, setBatteryExempt] = useState(false);
@@ -99,25 +101,25 @@ export const StatusCard: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   card: {
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
     borderRadius: radius.md,
     marginHorizontal: spacing.lg,
     paddingHorizontal: spacing.lg,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: c.border,
   },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14 },
-  divider: { height: 1, backgroundColor: colors.borderSubtle },
+  divider: { height: 1, backgroundColor: c.borderSubtle },
   left: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.danger },
-  dotOn: { backgroundColor: colors.accent },
-  label: { color: colors.textPrimary, fontSize: 13, fontWeight: '700' },
-  ok: { color: colors.accent, fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
-  fix: { color: colors.textPrimary, fontSize: 11, fontWeight: '900', letterSpacing: 0.3 },
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: c.danger },
+  dotOn: { backgroundColor: c.accent },
+  label: { color: c.textPrimary, fontSize: 13, fontWeight: '700' },
+  ok: { color: c.accent, fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
+  fix: { color: c.textPrimary, fontSize: 11, fontWeight: '900', letterSpacing: 0.3 },
   hint: {
-    color: colors.textTertiary,
+    color: c.textTertiary,
     fontSize: 11,
     lineHeight: 16,
     marginHorizontal: spacing.lg,

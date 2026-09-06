@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Share, Alert, Image, Modal, RefreshControl } from 'react-native';
+import { useThemedStyles, useTheme } from '../context/ThemeContext';
+import { Palette } from '../theme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFriends } from '../hooks/useFriends';
 import { useDuels, formatTimeLeft, formatAgo } from '../hooks/useDuels';
@@ -44,7 +46,8 @@ const Avatar: React.FC<{ entry: { uid: string; displayName: string; photoURL: st
   entry,
   size,
   ring,
-}) => {
+}) => {  const styles = useThemedStyles(makeStyles);
+
   const [failed, setFailed] = useState(false);
   const boxStyle = {
     width: size,
@@ -70,7 +73,8 @@ const Avatar: React.FC<{ entry: { uid: string; displayName: string; photoURL: st
   );
 };
 
-const RankBadge: React.FC<{ level: number }> = ({ level }) => {
+const RankBadge: React.FC<{ level: number }> = ({ level }) => {  const styles = useThemedStyles(makeStyles);
+
   const rank = rankForLevel(level);
   return (
     <View style={[styles.rankBadge, { borderColor: rank.color }]}>
@@ -79,7 +83,9 @@ const RankBadge: React.FC<{ level: number }> = ({ level }) => {
   );
 };
 
-export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {
+export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const styles = useThemedStyles(makeStyles);
+  const palette = useTheme();
+
   const { fbUser } = useAuth();
   const { code, friends, requests, loading, error, addByCode, acceptRequest, rejectRequest, removeFriend, refresh: refreshFriends } = useFriends();
   const { duels, challenge, respond, cancel: cancelDuel, error: duelError, refresh: refreshDuels } = useDuels();
@@ -213,7 +219,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {
   if (loading) {
     return (
       <View style={[styles.root, styles.centerFill]}>
-        <ActivityIndicator color="#CCFF00" />
+        <ActivityIndicator color={palette.accent} />
       </View>
     );
   }
@@ -235,7 +241,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {
       style={styles.root}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#CCFF00" colors={['#CCFF00']} />}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.accent} colors={[palette.accent]} />}
     >
       <View style={styles.header}>
         <Text style={styles.headerTitle}>FRIENDS</Text>
@@ -255,7 +261,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {
           <TextInput
             style={styles.addInput}
             placeholder="Enter their code"
-            placeholderTextColor="#444444"
+            placeholderTextColor={palette.textFaint}
             autoCapitalize="characters"
             autoCorrect={false}
             value={inputCode}
@@ -263,7 +269,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {
             maxLength={6}
           />
           <TouchableOpacity style={styles.addBtn} onPress={handleAdd} activeOpacity={0.85} disabled={adding}>
-            {adding ? <ActivityIndicator color="#000000" size="small" /> : <Text style={styles.addBtnText}>ADD</Text>}
+            {adding ? <ActivityIndicator color={palette.accentContrast} size="small" /> : <Text style={styles.addBtnText}>ADD</Text>}
           </TouchableOpacity>
         </View>
         {addResult === 'ok' && <Text style={styles.addOk}>Friend added ✓</Text>}
@@ -520,7 +526,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {
               </TouchableOpacity>
             ))}
 
-            {sending && <ActivityIndicator color="#CCFF00" style={styles.modalSpinner} />}
+            {sending && <ActivityIndicator color={palette.accent} style={styles.modalSpinner} />}
 
             <TouchableOpacity style={styles.modalCancel} onPress={() => setDuelTarget(null)} activeOpacity={0.8}>
               <Text style={styles.modalCancelText}>CANCEL</Text>
@@ -532,73 +538,73 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {
   );
 };
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#0A0A0A' },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.bg },
   content: { paddingTop: 52, paddingBottom: 48 },
   centerFill: { justifyContent: 'center', alignItems: 'center' },
 
   header: { paddingHorizontal: 20, marginBottom: 16 },
-  headerTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '900', letterSpacing: 0.5 },
+  headerTitle: { color: c.textPrimary, fontSize: 18, fontWeight: '900', letterSpacing: 0.5 },
 
   codeCard: {
-    backgroundColor: '#0A1400',
+    backgroundColor: c.accentMuted,
     borderRadius: 14,
     marginHorizontal: 16,
     padding: 20,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#1E3300',
+    borderColor: c.accentDim,
     alignItems: 'center',
   },
-  codeLabel: { color: '#556644', fontSize: 10, fontWeight: '900', letterSpacing: 1, marginBottom: 10 },
-  codeValue: { color: '#CCFF00', fontSize: 32, fontWeight: '900', letterSpacing: 6, marginBottom: 16 },
-  shareBtn: { backgroundColor: '#CCFF00', borderRadius: 10, paddingVertical: 12, paddingHorizontal: 24 },
-  shareBtnText: { color: '#000000', fontSize: 12, fontWeight: '900', letterSpacing: 0.3 },
+  codeLabel: { color: c.accentDim, fontSize: 10, fontWeight: '900', letterSpacing: 1, marginBottom: 10 },
+  codeValue: { color: c.accent, fontSize: 32, fontWeight: '900', letterSpacing: 6, marginBottom: 16 },
+  shareBtn: { backgroundColor: c.accent, borderRadius: 10, paddingVertical: 12, paddingHorizontal: 24 },
+  shareBtnText: { color: c.accentContrast, fontSize: 12, fontWeight: '900', letterSpacing: 0.3 },
 
-  addCard: { backgroundColor: '#111111', borderRadius: 14, marginHorizontal: 16, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: '#1C1C1C' },
-  addLabel: { color: '#555555', fontSize: 10, fontWeight: '900', letterSpacing: 1, marginBottom: 10 },
+  addCard: { backgroundColor: c.surface, borderRadius: 14, marginHorizontal: 16, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: c.border },
+  addLabel: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 1, marginBottom: 10 },
   addRow: { flexDirection: 'row', gap: 10 },
   addInput: {
     flex: 1,
-    backgroundColor: '#1A1A1A',
+    backgroundColor: c.surfaceRaised,
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    color: '#FFFFFF',
+    color: c.textPrimary,
     fontSize: 14,
     fontWeight: '700',
     letterSpacing: 2,
     borderWidth: 1,
-    borderColor: '#2A2A2A',
+    borderColor: c.border,
   },
-  addBtn: { backgroundColor: '#CCFF00', borderRadius: 10, paddingHorizontal: 20, justifyContent: 'center', alignItems: 'center' },
-  addBtnText: { color: '#000000', fontSize: 12, fontWeight: '900' },
-  addOk: { color: '#CCFF00', fontSize: 12, fontWeight: '700', marginTop: 10 },
-  addErr: { color: '#FF4444', fontSize: 12, fontWeight: '700', marginTop: 10 },
+  addBtn: { backgroundColor: c.accent, borderRadius: 10, paddingHorizontal: 20, justifyContent: 'center', alignItems: 'center' },
+  addBtnText: { color: c.accentContrast, fontSize: 12, fontWeight: '900' },
+  addOk: { color: c.accent, fontSize: 12, fontWeight: '700', marginTop: 10 },
+  addErr: { color: c.danger, fontSize: 12, fontWeight: '700', marginTop: 10 },
 
-  sectionLabel: { color: '#444444', fontSize: 10, fontWeight: '900', letterSpacing: 1, paddingHorizontal: 20, marginBottom: 10 },
-  duelHint: { color: '#3A3A3A', fontSize: 11, paddingHorizontal: 20, marginTop: -4, marginBottom: 14 },
+  sectionLabel: { color: c.textFaint, fontSize: 10, fontWeight: '900', letterSpacing: 1, paddingHorizontal: 20, marginBottom: 10 },
+  duelHint: { color: c.textFaint, fontSize: 11, paddingHorizontal: 20, marginTop: -4, marginBottom: 14 },
 
   requestRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: '#111111',
+    backgroundColor: c.surface,
     borderRadius: 14,
     marginHorizontal: 16,
     marginBottom: 10,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#1C1C1C',
+    borderColor: c.border,
   },
-  requestName: { flex: 1, color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
-  rejectBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#1A1A1A', justifyContent: 'center', alignItems: 'center' },
-  rejectBtnText: { color: '#666666', fontSize: 13, fontWeight: '900' },
-  acceptBtn: { backgroundColor: '#CCFF00', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 8 },
-  acceptBtnText: { color: '#000000', fontSize: 11, fontWeight: '900' },
+  requestName: { flex: 1, color: c.textPrimary, fontSize: 13, fontWeight: '700' },
+  rejectBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: c.surfaceRaised, justifyContent: 'center', alignItems: 'center' },
+  rejectBtnText: { color: c.textSecondary, fontSize: 13, fontWeight: '900' },
+  acceptBtn: { backgroundColor: c.accent, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 8 },
+  acceptBtnText: { color: c.accentContrast, fontSize: 11, fontWeight: '900' },
 
-  avatar: { justifyContent: 'center', alignItems: 'center', backgroundColor: '#1A1A1A' },
-  avatarText: { color: '#FFFFFF', fontWeight: '900' },
+  avatar: { justifyContent: 'center', alignItems: 'center', backgroundColor: c.surfaceRaised },
+  avatarText: { color: c.textPrimary, fontWeight: '900' },
 
   rankBadge: { borderWidth: 1, borderRadius: 5, paddingHorizontal: 5, paddingVertical: 2, alignSelf: 'flex-start' },
   rankBadgeText: { fontSize: 8, fontWeight: '900', letterSpacing: 0.5 },
@@ -614,8 +620,8 @@ const styles = StyleSheet.create({
   podiumSlot: { flex: 1, alignItems: 'center', gap: 6 },
   podiumSlotFirst: { marginBottom: 0 },
   crown: { color: '#FFD700', fontSize: 16, marginBottom: -2 },
-  podiumName: { color: '#FFFFFF', fontSize: 11, fontWeight: '800', maxWidth: '100%' },
-  podiumNameMe: { color: '#CCFF00' },
+  podiumName: { color: c.textPrimary, fontSize: 11, fontWeight: '800', maxWidth: '100%' },
+  podiumNameMe: { color: c.accent },
   podiumBlock: {
     width: '100%',
     borderTopLeftRadius: 8,
@@ -625,60 +631,60 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   podiumPlace: { color: 'rgba(0,0,0,0.55)', fontSize: 9, fontWeight: '900', letterSpacing: 0.5 },
-  podiumStreak: { color: '#000000', fontSize: 18, fontWeight: '900' },
+  podiumStreak: { color: c.accentContrast, fontSize: 18, fontWeight: '900' },
 
   friendCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: '#111111',
+    backgroundColor: c.surface,
     borderRadius: 14,
     marginHorizontal: 16,
     marginBottom: 10,
     padding: 14,
     borderWidth: 1,
-    borderColor: '#1C1C1C',
+    borderColor: c.border,
   },
-  friendCardMe: { borderColor: '#2E3D00', backgroundColor: '#0D1200' },
-  rank: { color: '#444444', fontSize: 12, fontWeight: '900', width: 16, textAlign: 'center' },
+  friendCardMe: { borderColor: c.accentDim, backgroundColor: c.accentMuted },
+  rank: { color: c.textFaint, fontSize: 12, fontWeight: '900', width: 16, textAlign: 'center' },
   friendBody: { flex: 1, gap: 4 },
-  friendName: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
+  friendName: { color: c.textPrimary, fontSize: 14, fontWeight: '800' },
   friendMeta: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  friendSub: { color: '#555555', fontSize: 11 },
+  friendSub: { color: c.textTertiary, fontSize: 11 },
   friendRight: { alignItems: 'flex-end' },
-  friendStreak: { color: '#CCFF00', fontSize: 20, fontWeight: '900' },
-  friendStreakLabel: { color: '#444444', fontSize: 9, fontWeight: '800', letterSpacing: 0.3 },
+  friendStreak: { color: c.accent, fontSize: 20, fontWeight: '900' },
+  friendStreakLabel: { color: c.textFaint, fontSize: 9, fontWeight: '800', letterSpacing: 0.3 },
 
   duelCard: {
-    backgroundColor: '#12080F',
+    backgroundColor: c.surface,
     borderRadius: 14,
     marginHorizontal: 16,
     marginBottom: 10,
     padding: 14,
     borderWidth: 1,
-    borderColor: '#3A1226',
+    borderColor: c.border,
   },
-  duelCardMuted: { backgroundColor: '#111111', borderColor: '#1C1C1C' },
+  duelCardMuted: { backgroundColor: c.surface, borderColor: c.border },
   duelHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
-  duelTitle: { flex: 1, color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
-  duelStake: { color: '#FF4D8D', fontSize: 12, fontWeight: '900' },
-  duelTimer: { color: '#FF4D8D', fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
-  duelPending: { color: '#555555', fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
-  duelSub: { color: '#7A6070', fontSize: 11, marginBottom: 10 },
+  duelTitle: { flex: 1, color: c.textPrimary, fontSize: 14, fontWeight: '800' },
+  duelStake: { color: c.danger, fontSize: 12, fontWeight: '900' },
+  duelTimer: { color: c.danger, fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
+  duelPending: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
+  duelSub: { color: c.textTertiary, fontSize: 11, marginBottom: 10 },
   duelActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 10 },
   duelWarn: { color: '#8A6A20', fontSize: 10, marginTop: 8, lineHeight: 14 },
   cancelDuelBtn: { alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 16, marginTop: 6 },
-  cancelDuelText: { color: '#6A4A58', fontSize: 10, fontWeight: '900', letterSpacing: 0.6 },
+  cancelDuelText: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 0.6 },
 
   scoreRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 20, paddingVertical: 4 },
   scoreSide: { alignItems: 'center', minWidth: 60 },
-  scoreVal: { color: '#666666', fontSize: 26, fontWeight: '900' },
+  scoreVal: { color: c.textSecondary, fontSize: 26, fontWeight: '900' },
   scoreUnit: { fontSize: 13, fontWeight: '800' },
-  scoreWinning: { color: '#CCFF00' },
-  duelState: { color: '#7A6070', fontSize: 10, fontWeight: '900', letterSpacing: 0.6, textAlign: 'center', marginTop: 6 },
-  scoreLabel: { color: '#4A3A44', fontSize: 9, fontWeight: '900', letterSpacing: 0.5, marginTop: 2 },
-  syncLabel: { color: '#3A2530', fontSize: 8, fontWeight: '700', marginTop: 2 },
-  scoreVs: { color: '#3A2530', fontSize: 16, fontWeight: '900' },
+  scoreWinning: { color: c.accent },
+  duelState: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 0.6, textAlign: 'center', marginTop: 6 },
+  scoreLabel: { color: c.textFaint, fontSize: 9, fontWeight: '900', letterSpacing: 0.5, marginTop: 2 },
+  syncLabel: { color: c.borderSubtle, fontSize: 8, fontWeight: '700', marginTop: 2 },
+  scoreVs: { color: c.borderSubtle, fontSize: 16, fontWeight: '900' },
 
   resultRow: {
     flexDirection: 'row',
@@ -688,38 +694,38 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    backgroundColor: '#0E0E0E',
+    backgroundColor: c.surface,
     borderRadius: 10,
   },
   resultTag: { fontSize: 9, fontWeight: '900', letterSpacing: 0.5, width: 34 },
-  resultWin: { color: '#CCFF00' },
-  resultLoss: { color: '#FF4D8D' },
-  resultVoid: { color: '#555555' },
-  resultName: { flex: 1, color: '#AAAAAA', fontSize: 12, fontWeight: '700' },
-  resultDetail: { color: '#555555', fontSize: 11, fontWeight: '700' },
+  resultWin: { color: c.accent },
+  resultLoss: { color: c.danger },
+  resultVoid: { color: c.textTertiary },
+  resultName: { flex: 1, color: c.textSecondary, fontSize: 12, fontWeight: '700' },
+  resultDetail: { color: c.textTertiary, fontSize: 11, fontWeight: '700' },
 
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.82)', justifyContent: 'center', paddingHorizontal: 24 },
-  modalCard: { backgroundColor: '#121212', borderRadius: 18, padding: 20, borderWidth: 1, borderColor: '#242424' },
-  modalTitle: { color: '#FFFFFF', fontSize: 15, fontWeight: '900', letterSpacing: 0.3, marginBottom: 8 },
-  modalSub: { color: '#777777', fontSize: 12, lineHeight: 18, marginBottom: 18 },
-  modalLabel: { color: '#555555', fontSize: 10, fontWeight: '900', letterSpacing: 1, marginBottom: 10 },
+  modalCard: { backgroundColor: c.surface, borderRadius: 18, padding: 20, borderWidth: 1, borderColor: c.border },
+  modalTitle: { color: c.textPrimary, fontSize: 15, fontWeight: '900', letterSpacing: 0.3, marginBottom: 8 },
+  modalSub: { color: c.textSecondary, fontSize: 12, lineHeight: 18, marginBottom: 18 },
+  modalLabel: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 1, marginBottom: 10 },
   appOption: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#1A1A1A',
+    backgroundColor: c.surfaceRaised,
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 14,
     marginBottom: 8,
   },
-  appOptionText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
-  appOptionArrow: { color: '#CCFF00', fontSize: 14, fontWeight: '900' },
+  appOptionText: { color: c.textPrimary, fontSize: 13, fontWeight: '800' },
+  appOptionArrow: { color: c.accent, fontSize: 14, fontWeight: '900' },
   modalSpinner: { marginVertical: 8 },
   modalCancel: { alignItems: 'center', paddingVertical: 14, marginTop: 4 },
-  modalCancelText: { color: '#555555', fontSize: 12, fontWeight: '900', letterSpacing: 0.5 },
+  modalCancelText: { color: c.textTertiary, fontSize: 12, fontWeight: '900', letterSpacing: 0.5 },
 
-  emptyCard: { backgroundColor: '#111111', borderRadius: 14, marginHorizontal: 16, padding: 24, alignItems: 'center' },
-  emptyTitle: { color: '#333333', fontSize: 13, fontWeight: '900', letterSpacing: 0.5, marginBottom: 6 },
-  emptySub: { color: '#2A2A2A', fontSize: 12, textAlign: 'center', lineHeight: 18 },
+  emptyCard: { backgroundColor: c.surface, borderRadius: 14, marginHorizontal: 16, padding: 24, alignItems: 'center' },
+  emptyTitle: { color: c.textFaint, fontSize: 13, fontWeight: '900', letterSpacing: 0.5, marginBottom: 6 },
+  emptySub: { color: c.border, fontSize: 12, textAlign: 'center', lineHeight: 18 },
 });

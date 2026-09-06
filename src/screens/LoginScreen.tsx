@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { useThemedStyles, useTheme } from '../context/ThemeContext';
+import { Palette } from '../theme';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import {
   GoogleAuthProvider,
@@ -13,7 +15,9 @@ GoogleSignin.configure({
   webClientId: '1094826576454-rus44gke6b6f1o6ujunucs8dk0kfurub.apps.googleusercontent.com',
 });
 
-export const LoginScreen: React.FC = () => {
+export const LoginScreen: React.FC = () => {  const styles = useThemedStyles(makeStyles);
+  const palette = useTheme();
+
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -88,7 +92,7 @@ export const LoginScreen: React.FC = () => {
           <TextInput
             style={styles.input}
             placeholder="Email"
-            placeholderTextColor="#555555"
+            placeholderTextColor={palette.textTertiary}
             autoCapitalize="none"
             keyboardType="email-address"
             value={email}
@@ -97,7 +101,7 @@ export const LoginScreen: React.FC = () => {
           <TextInput
             style={styles.input}
             placeholder="Password"
-            placeholderTextColor="#555555"
+            placeholderTextColor={palette.textTertiary}
             secureTextEntry
             value={password}
             onChangeText={setPassword}
@@ -110,7 +114,7 @@ export const LoginScreen: React.FC = () => {
             activeOpacity={0.85}
           >
             {submitting ? (
-              <ActivityIndicator color="#000000" />
+              <ActivityIndicator color={palette.accentContrast} />
             ) : (
               <Text style={styles.buttonText}>{mode === 'signup' ? 'CREATE ACCOUNT' : 'LOG IN'}</Text>
             )}
@@ -132,42 +136,42 @@ export const LoginScreen: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#080808' },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.bg },
   scrollContent: { flexGrow: 1, paddingHorizontal: 24, justifyContent: 'space-between', paddingBottom: 50, paddingTop: 100 },
   centerBlock: { alignItems: 'center', marginBottom: 40 },
-  logoBox: { backgroundColor: '#CCFF00', width: 60, height: 60, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
-  logoText: { color: '#000000', fontSize: 24, fontWeight: '900' },
-  mainTitle: { color: '#FFFFFF', fontSize: 36, fontWeight: '900', letterSpacing: 1 },
-  tagline: { color: '#666666', fontSize: 15, fontWeight: '500', marginTop: 6 },
+  logoBox: { backgroundColor: c.accent, width: 60, height: 60, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
+  logoText: { color: c.accentContrast, fontSize: 24, fontWeight: '900' },
+  mainTitle: { color: c.textPrimary, fontSize: 36, fontWeight: '900', letterSpacing: 1 },
+  tagline: { color: c.textSecondary, fontSize: 15, fontWeight: '500', marginTop: 6 },
   actionBlock: { width: '100%' },
 
-  modeSwitch: { flexDirection: 'row', backgroundColor: '#141414', borderRadius: 14, padding: 4, marginBottom: 16 },
+  modeSwitch: { flexDirection: 'row', backgroundColor: c.surface, borderRadius: 14, padding: 4, marginBottom: 16 },
   modeTab: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
-  modeTabActive: { backgroundColor: '#CCFF00' },
-  modeTabText: { color: '#666666', fontSize: 12, fontWeight: '900', letterSpacing: 0.5 },
-  modeTabTextActive: { color: '#000000' },
+  modeTabActive: { backgroundColor: c.accent },
+  modeTabText: { color: c.textSecondary, fontSize: 12, fontWeight: '900', letterSpacing: 0.5 },
+  modeTabTextActive: { color: c.accentContrast },
 
   input: {
-    backgroundColor: '#141414',
+    backgroundColor: c.surface,
     borderRadius: 14,
     paddingHorizontal: 18,
     paddingVertical: 16,
-    color: '#FFFFFF',
+    color: c.textPrimary,
     fontSize: 15,
     fontWeight: '600',
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#222222',
+    borderColor: c.border,
   },
 
-  primaryButton: { backgroundColor: '#CCFF00', borderRadius: 20, paddingVertical: 20, alignItems: 'center', justifyContent: 'center', marginTop: 4, marginBottom: 20 },
+  primaryButton: { backgroundColor: c.accent, borderRadius: 20, paddingVertical: 20, alignItems: 'center', justifyContent: 'center', marginTop: 4, marginBottom: 20 },
 
   dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 20 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: '#1E1E1E' },
-  dividerText: { color: '#444444', fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: c.surfaceRaised },
+  dividerText: { color: c.textFaint, fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
 
-  googleButton: { backgroundColor: '#FFFFFF', borderRadius: 20, paddingVertical: 20, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-  buttonText: { color: '#000000', fontSize: 16, fontWeight: '900', letterSpacing: 0.5 },
-  footerNote: { color: '#444444', fontSize: 12, textAlign: 'center', fontWeight: '600' }
+  googleButton: { backgroundColor: c.textPrimary, borderRadius: 20, paddingVertical: 20, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  buttonText: { color: c.accentContrast, fontSize: 16, fontWeight: '900', letterSpacing: 0.5 },
+  footerNote: { color: c.textFaint, fontSize: 12, textAlign: 'center', fontWeight: '600' }
 });

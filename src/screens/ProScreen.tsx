@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Modal } from 'react-native';
+import { useThemedStyles, useTheme } from '../context/ThemeContext';
+import { Palette, PALETTES } from '../theme';
 import { usePro } from '../context/ProContext';
 import { PRO_PLANS, PRO_FEATURES, ProPlanId } from '../constants/pro';
 
@@ -9,8 +11,18 @@ interface ProScreenProps {
 }
 
 export const ProScreen: React.FC<ProScreenProps> = ({ visible, onClose }) => {
-  const { isPro, plan, expiresAt, streakFreezes, activate, cancel } = usePro();
+  const styles = useThemedStyles(makeStyles);
+  const palette = useTheme();
+  const { isPro, plan, expiresAt, streakFreezes, themeId, setTheme, activate, cancel } = usePro();
   const [busy, setBusy] = useState<ProPlanId | null>(null);
+
+  const chooseTheme = (id: string, requiresPro: boolean) => {
+    if (requiresPro && !isPro) {
+      Alert.alert('Pro theme', 'Unlock this theme with IronMind Pro to use it.');
+      return;
+    }
+    setTheme(id);
+  };
 
   const handleSelect = async (planId: ProPlanId) => {
     setBusy(planId);
@@ -80,6 +92,43 @@ export const ProScreen: React.FC<ProScreenProps> = ({ visible, onClose }) => {
             ))}
           </View>
 
+          <Text style={styles.sectionLabel}>THEMES</Text>
+          <View style={styles.themeGrid}>
+            {PALETTES.map((p) => {
+              const locked = p.pro && !isPro;
+              const active = themeId === p.id;
+              return (
+                <TouchableOpacity
+                  key={p.id}
+                  style={[
+                    styles.themeCard,
+                    { backgroundColor: p.surface, borderColor: active ? p.accent : p.border },
+                    locked && styles.themeCardLocked,
+                  ]}
+                  onPress={() => chooseTheme(p.id, p.pro)}
+                  activeOpacity={0.85}
+                >
+                  <View style={styles.swatchRow}>
+                    <View style={[styles.swatch, { backgroundColor: p.bg }]} />
+                    <View style={[styles.swatch, { backgroundColor: p.surfaceRaised }]} />
+                    <View style={[styles.swatchAccent, { backgroundColor: p.accent }]} />
+                  </View>
+                  <Text style={[styles.themeName, { color: p.textPrimary }]}>{p.name}</Text>
+                  <Text style={[styles.themeTagline, { color: p.textTertiary }]} numberOfLines={2}>
+                    {p.tagline}
+                  </Text>
+                  {locked ? (
+                    <Text style={[styles.themeBadge, { color: p.textTertiary }]}>PRO</Text>
+                  ) : active ? (
+                    <Text style={[styles.themeBadge, { color: p.accent }]}>ACTIVE</Text>
+                  ) : (
+                    <Text style={styles.themeBadgeSpacer}> </Text>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
           {!isPro && (
             <>
               <Text style={styles.sectionLabel}>CHOOSE YOUR PLAN</Text>
@@ -100,7 +149,7 @@ export const ProScreen: React.FC<ProScreenProps> = ({ visible, onClose }) => {
                   </View>
                   <View style={styles.planRight}>
                     {busy === p.id ? (
-                      <ActivityIndicator color="#CCFF00" size="small" />
+                      <ActivityIndicator color={palette.accent} size="small" />
                     ) : (
                       <Text style={styles.planPrice}>{p.price}</Text>
                     )}
@@ -127,52 +176,69 @@ export const ProScreen: React.FC<ProScreenProps> = ({ visible, onClose }) => {
   );
 };
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#08090B' },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.bg },
   content: { padding: 20, paddingTop: 56, paddingBottom: 48 },
 
-  close: { position: 'absolute', top: 52, right: 16, width: 36, height: 36, borderRadius: 18, backgroundColor: '#16181C', justifyContent: 'center', alignItems: 'center', zIndex: 2 },
-  closeText: { color: '#9A9DA5', fontSize: 14, fontWeight: '900' },
+  close: { position: 'absolute', top: 52, right: 16, width: 36, height: 36, borderRadius: 18, backgroundColor: c.surfaceRaised, justifyContent: 'center', alignItems: 'center', zIndex: 2 },
+  closeText: { color: c.textSecondary, fontSize: 14, fontWeight: '900' },
 
-  brand: { color: '#F5F6F7', fontSize: 26, fontWeight: '900', letterSpacing: -0.5 },
-  brandPro: { color: '#CCFF00', fontSize: 46, fontWeight: '900', letterSpacing: -2, marginTop: -8, marginBottom: 12 },
-  tagline: { color: '#9A9DA5', fontSize: 14, lineHeight: 20, marginBottom: 28 },
+  brand: { color: c.textPrimary, fontSize: 26, fontWeight: '900', letterSpacing: -0.5 },
+  brandPro: { color: c.accent, fontSize: 46, fontWeight: '900', letterSpacing: -2, marginTop: -8, marginBottom: 12 },
+  tagline: { color: c.textSecondary, fontSize: 14, lineHeight: 20, marginBottom: 28 },
 
-  activeCard: { backgroundColor: '#0F1500', borderRadius: 16, padding: 18, borderWidth: 1, borderColor: '#2E3D00', marginBottom: 28 },
-  activeTitle: { color: '#CCFF00', fontSize: 14, fontWeight: '900', letterSpacing: 0.5 },
-  activeSub: { color: '#9A9DA5', fontSize: 12, marginTop: 6 },
-  activeFreezes: { color: '#5A5D64', fontSize: 11, marginTop: 10, fontWeight: '700' },
+  activeCard: { backgroundColor: c.accentMuted, borderRadius: 16, padding: 18, borderWidth: 1, borderColor: c.accentDim, marginBottom: 28 },
+  activeTitle: { color: c.accent, fontSize: 14, fontWeight: '900', letterSpacing: 0.5 },
+  activeSub: { color: c.textSecondary, fontSize: 12, marginTop: 6 },
+  activeFreezes: { color: c.textTertiary, fontSize: 11, marginTop: 10, fontWeight: '700' },
 
   features: { gap: 18, marginBottom: 32 },
   featureRow: { flexDirection: 'row', gap: 14, alignItems: 'flex-start' },
-  featureIcon: { color: '#CCFF00', fontSize: 18, width: 24, textAlign: 'center', marginTop: 1 },
+  featureIcon: { color: c.accent, fontSize: 18, width: 24, textAlign: 'center', marginTop: 1 },
   featureBody: { flex: 1 },
-  featureTitle: { color: '#F5F6F7', fontSize: 14, fontWeight: '800', marginBottom: 3 },
-  featureText: { color: '#5A5D64', fontSize: 12, lineHeight: 17 },
+  featureTitle: { color: c.textPrimary, fontSize: 14, fontWeight: '800', marginBottom: 3 },
+  featureText: { color: c.textTertiary, fontSize: 12, lineHeight: 17 },
 
-  sectionLabel: { color: '#5A5D64', fontSize: 10, fontWeight: '900', letterSpacing: 1, marginBottom: 12 },
+  sectionLabel: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 1, marginBottom: 12 },
+
+  themeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 32 },
+  themeCard: {
+    width: '47%',
+    flexGrow: 1,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    padding: 14,
+  },
+  themeCardLocked: { opacity: 0.55 },
+  swatchRow: { flexDirection: 'row', gap: 4, marginBottom: 10 },
+  swatch: { width: 16, height: 16, borderRadius: 5 },
+  swatchAccent: { width: 28, height: 16, borderRadius: 5 },
+  themeName: { fontSize: 13, fontWeight: '900', letterSpacing: 0.4 },
+  themeTagline: { fontSize: 10, lineHeight: 14, marginTop: 3, minHeight: 28 },
+  themeBadge: { fontSize: 8, fontWeight: '900', letterSpacing: 0.8, marginTop: 4 },
+  themeBadgeSpacer: { fontSize: 8, marginTop: 4 },
 
   planCard: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#131418',
+    backgroundColor: c.surface,
     borderRadius: 14,
     padding: 18,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#212328',
+    borderColor: c.border,
   },
-  planCardFeatured: { borderColor: '#CCFF00', backgroundColor: '#101403' },
+  planCardFeatured: { borderColor: c.accent, backgroundColor: c.accentMuted },
   planLeft: { flex: 1 },
-  planTitle: { color: '#F5F6F7', fontSize: 15, fontWeight: '900', letterSpacing: 0.3 },
-  planCadence: { color: '#5A5D64', fontSize: 11, marginTop: 3 },
+  planTitle: { color: c.textPrimary, fontSize: 15, fontWeight: '900', letterSpacing: 0.3 },
+  planCadence: { color: c.textTertiary, fontSize: 11, marginTop: 3 },
   planRight: { alignItems: 'flex-end' },
-  planPrice: { color: '#CCFF00', fontSize: 20, fontWeight: '900' },
-  planNote: { color: '#7A9900', fontSize: 9, fontWeight: '900', letterSpacing: 0.5, marginTop: 3 },
+  planPrice: { color: c.accent, fontSize: 20, fontWeight: '900' },
+  planNote: { color: c.accentDim, fontSize: 9, fontWeight: '900', letterSpacing: 0.5, marginTop: 3 },
 
-  legal: { color: '#35373C', fontSize: 10, lineHeight: 15, marginTop: 14 },
+  legal: { color: c.textFaint, fontSize: 10, lineHeight: 15, marginTop: 14 },
 
   cancelBtn: { alignItems: 'center', paddingVertical: 16, marginTop: 8 },
-  cancelText: { color: '#5A5D64', fontSize: 12, fontWeight: '900', letterSpacing: 0.5 },
+  cancelText: { color: c.textTertiary, fontSize: 12, fontWeight: '900', letterSpacing: 0.5 },
 });

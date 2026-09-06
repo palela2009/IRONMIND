@@ -11,7 +11,8 @@ import { ProScreen } from './src/screens/ProScreen';
 import { useStats } from './src/hooks/useStats';
 import { useNotifications } from './src/hooks/useNotifications';
 import { useAppMonitor, syncAppMonitor } from './src/hooks/useAppMonitor';
-import { colors, radius, spacing, cardShadow } from './src/theme';
+import { radius, spacing, cardShadow, Palette } from './src/theme';
+import { ThemeProvider, useThemedStyles, useTheme } from './src/context/ThemeContext';
 import { authedFetch } from './src/utils/authFetch';
 import { API_BASE_URL } from './src/config/api';
 
@@ -33,7 +34,8 @@ import { FriendsScreen } from './src/screens/FriendsScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 
 const HomeIcon = ({ active }: { active: boolean }) => {
-  const c = active ? '#000000' : colors.textFaint;
+  const palette = useTheme();
+  const c = active ? palette.accentContrast : palette.textFaint;
   return (
     <View style={{ alignItems: 'center', gap: 2 }}>
       <View style={{ width: 14, height: 9, borderTopLeftRadius: 7, borderTopRightRadius: 7, backgroundColor: c }} />
@@ -43,7 +45,8 @@ const HomeIcon = ({ active }: { active: boolean }) => {
 };
 
 const AppsIcon = ({ active }: { active: boolean }) => {
-  const c = active ? '#000000' : colors.textFaint;
+  const palette = useTheme();
+  const c = active ? palette.accentContrast : palette.textFaint;
   return (
     <View style={{ width: 14, height: 14, flexDirection: 'row', flexWrap: 'wrap', gap: 2 }}>
       {[0, 1, 2, 3].map((i) => (
@@ -57,7 +60,8 @@ const SCREEN_ORDER: TrainingState[] = ['HOME', 'APPS', 'FRIENDS', 'PROFILE'];
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
 const FriendsIcon = ({ active }: { active: boolean }) => {
-  const c = active ? '#000000' : colors.textFaint;
+  const palette = useTheme();
+  const c = active ? palette.accentContrast : palette.textFaint;
   return (
     <View style={{ flexDirection: 'row' }}>
       <View style={{ width: 9, height: 9, borderRadius: 4.5, backgroundColor: c, marginRight: -3, marginTop: 2 }} />
@@ -67,7 +71,8 @@ const FriendsIcon = ({ active }: { active: boolean }) => {
 };
 
 const ProfileIcon = ({ active }: { active: boolean }) => {
-  const c = active ? '#000000' : colors.textFaint;
+  const palette = useTheme();
+  const c = active ? palette.accentContrast : palette.textFaint;
   return (
     <View style={{ alignItems: 'center', gap: 2 }}>
       <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: c }} />
@@ -77,6 +82,9 @@ const ProfileIcon = ({ active }: { active: boolean }) => {
 };
 
 function RootNavigator() {
+  const styles = useThemedStyles(makeStyles);
+  const nav = useThemedStyles(makeNav);
+  const palette = useTheme();
   const { fbUser, loading } = useAuth();
   const { stats, history, recordChallenge, DAILY_CHALLENGE_LIMIT, refreshSettings, lostStreak, reclaimStreak, dismissLostStreak } = useStats();
   const [showPro, setShowPro] = useState<boolean>(false);
@@ -223,7 +231,7 @@ function RootNavigator() {
   if (loading || checkingOnboarding) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#CCFF00" />
+        <ActivityIndicator size="large" color={palette.accent} />
       </View>
     );
   }
@@ -301,23 +309,25 @@ export default function App() {
   return (
     <AuthProvider>
       <ProProvider>
-        <RootNavigator />
+        <ThemeProvider>
+          <RootNavigator />
+        </ThemeProvider>
       </ProProvider>
     </AuthProvider>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bg },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.bg },
   mainContent: { flex: 1 },
-  loadingContainer: { flex: 1, backgroundColor: colors.bg, justifyContent: 'center', alignItems: 'center' },
+  loadingContainer: { flex: 1, backgroundColor: c.bg, justifyContent: 'center', alignItems: 'center' },
 });
 
-const nav = StyleSheet.create({
+const makeNav = (c: Palette) => StyleSheet.create({
   container: { paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
   bar: {
     flexDirection: 'row',
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
     borderRadius: radius.xl,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.sm,
@@ -331,7 +341,7 @@ const nav = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  iconWrapActive: { backgroundColor: colors.accent },
-  label: { fontSize: 9, fontWeight: '800', letterSpacing: 0.8, color: colors.textFaint },
-  labelActive: { color: colors.accent },
+  iconWrapActive: { backgroundColor: c.accent },
+  label: { fontSize: 9, fontWeight: '800', letterSpacing: 0.8, color: c.textFaint },
+  labelActive: { color: c.accent },
 });

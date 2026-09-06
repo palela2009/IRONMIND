@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, NativeModules, Platform, ActivityIndicator, Alert, TextInput } from 'react-native';
+import { useThemedStyles, useTheme } from '../context/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { UserStats } from '../types/training';
@@ -14,7 +15,7 @@ import { DAILY_LIMIT_VALUES, DEFAULT_DAILY_LIMIT, DailyLimitLevel } from '../con
 import { API_BASE_URL } from '../config/api';
 import { authedFetch } from '../utils/authFetch';
 import { XP_PER_LEVEL } from '../constants/leveling';
-import { colors, spacing, radius, cardShadow } from '../theme';
+import { spacing, radius, cardShadow, Palette } from '../theme';
 
 interface ProfileProps {
   stats: UserStats;
@@ -55,7 +56,9 @@ const getAchievements = (s: UserStats) => [
   { id: '08', title: 'MARATHON', desc: '500 challenges completed', done: s.totalChallenges >= 500 },
 ];
 
-export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onSettingsChanged }) => {
+export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onSettingsChanged }) => {  const styles = useThemedStyles(makeStyles);
+  const palette = useTheme();
+
   const { fbUser, refreshUser } = useAuth();
   const { isPro, streakFreezes } = usePro();
   const [showPro, setShowPro] = useState<boolean>(false);
@@ -300,7 +303,7 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onSettingsChanged
         <View style={styles.cardBody}>
           <TouchableOpacity onPress={handlePickPhoto} activeOpacity={0.8} disabled={uploadingPhoto}>
             {uploadingPhoto ? (
-              <View style={styles.avatarBox}><ActivityIndicator color="#000000" /></View>
+              <View style={styles.avatarBox}><ActivityIndicator color={palette.accentContrast} /></View>
             ) : fbUser?.photoURL ? (
               <Image source={{ uri: fbUser.photoURL }} style={styles.avatarImage} />
             ) : (
@@ -318,13 +321,13 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onSettingsChanged
                   value={pendingName}
                   onChangeText={setPendingName}
                   placeholder="Your name"
-                  placeholderTextColor={colors.textFaint}
+                  placeholderTextColor={palette.textFaint}
                   autoFocus
                   maxLength={40}
                   editable={!savingName}
                 />
                 <TouchableOpacity onPress={saveName} disabled={savingName} style={styles.nameSaveBtn}>
-                  {savingName ? <ActivityIndicator color="#000000" size="small" /> : <Text style={styles.nameSaveBtnText}>✓</Text>}
+                  {savingName ? <ActivityIndicator color={palette.accentContrast} size="small" /> : <Text style={styles.nameSaveBtnText}>✓</Text>}
                 </TouchableOpacity>
               </View>
             ) : (
@@ -459,7 +462,7 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onSettingsChanged
               disabled={savingDifficulty}
             >
               {savingDifficulty ? (
-                <ActivityIndicator color="#000000" size="small" />
+                <ActivityIndicator color={palette.accentContrast} size="small" />
               ) : (
                 <Text style={styles.appEditSaveText}>SAVE</Text>
               )}
@@ -512,7 +515,7 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onSettingsChanged
               disabled={savingDailyLimit}
             >
               {savingDailyLimit ? (
-                <ActivityIndicator color="#000000" size="small" />
+                <ActivityIndicator color={palette.accentContrast} size="small" />
               ) : (
                 <Text style={styles.appEditSaveText}>SAVE</Text>
               )}
@@ -536,7 +539,7 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onSettingsChanged
 
       <TouchableOpacity style={styles.settingRow} onPress={handleDeleteAccount} disabled={deletingAccount}>
         {deletingAccount ? (
-          <ActivityIndicator color={colors.danger} size="small" />
+          <ActivityIndicator color={palette.danger} size="small" />
         ) : (
           <Text style={styles.deleteAccount}>DELETE ACCOUNT</Text>
         )}
@@ -547,26 +550,26 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onSettingsChanged
   );
 };
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   proBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#101403',
+    backgroundColor: c.accentMuted,
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: colors.accent,
+    borderColor: c.accent,
     padding: spacing.lg,
     marginHorizontal: spacing.lg,
     marginBottom: spacing.xl,
     ...cardShadow,
   },
-  proBannerActive: { backgroundColor: colors.surface, borderColor: '#2E3D00' },
+  proBannerActive: { backgroundColor: c.surface, borderColor: c.accentDim },
   proBannerBody: { flex: 1 },
-  proBannerTitle: { color: colors.accent, fontSize: 14, fontWeight: '900', letterSpacing: 0.4 },
-  proBannerSub: { color: colors.textTertiary, fontSize: 11, marginTop: 4 },
-  proBannerArrow: { color: colors.accent, fontSize: 16, fontWeight: '900' },
+  proBannerTitle: { color: c.accent, fontSize: 14, fontWeight: '900', letterSpacing: 0.4 },
+  proBannerSub: { color: c.textTertiary, fontSize: 11, marginTop: 4 },
+  proBannerArrow: { color: c.accent, fontSize: 16, fontWeight: '900' },
 
-  root: { flex: 1, backgroundColor: colors.bg },
+  root: { flex: 1, backgroundColor: c.bg },
   content: { paddingBottom: 48 },
 
   header: {
@@ -574,10 +577,10 @@ const styles = StyleSheet.create({
     paddingTop: 52,
     paddingBottom: spacing.xl,
   },
-  headerTitle: { color: colors.textPrimary, fontSize: 18, fontWeight: '900', letterSpacing: 0.5 },
+  headerTitle: { color: c.textPrimary, fontSize: 18, fontWeight: '900', letterSpacing: 0.5 },
 
   athleteCard: {
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
     marginHorizontal: spacing.lg,
     borderRadius: radius.xl,
     padding: spacing.xl,
@@ -592,62 +595,62 @@ const styles = StyleSheet.create({
     width: 220,
     height: 220,
     borderRadius: 110,
-    backgroundColor: colors.accent,
+    backgroundColor: c.accent,
     opacity: 0.08,
   },
   cardTopRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.lg },
-  athleteBadge: { backgroundColor: colors.accentMuted, paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.pill },
-  athleteBadgeText: { color: colors.accent, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
-  athleteNo: { color: colors.textTertiary, fontSize: 11, fontWeight: '700' },
+  athleteBadge: { backgroundColor: c.accentMuted, paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.pill },
+  athleteBadgeText: { color: c.accent, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
+  athleteNo: { color: c.textTertiary, fontSize: 11, fontWeight: '700' },
 
   cardBody: { flexDirection: 'row', gap: spacing.lg, alignItems: 'center', marginBottom: spacing.lg },
-  avatarBox: { width: 76, height: 76, backgroundColor: colors.accent, borderRadius: radius.lg, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
+  avatarBox: { width: 76, height: 76, backgroundColor: c.accent, borderRadius: radius.lg, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
   avatarImage: { width: 76, height: 76, borderRadius: radius.lg },
-  avatarLetters: { color: '#000000', fontSize: 26, fontWeight: '900' },
-  avatarEditBadge: { position: 'absolute', bottom: -2, right: -2, width: 22, height: 22, borderRadius: 11, backgroundColor: colors.surfaceRaised, borderWidth: 2, borderColor: colors.surface, justifyContent: 'center', alignItems: 'center' },
-  avatarEditBadgeText: { color: colors.textPrimary, fontSize: 11 },
+  avatarLetters: { color: c.accentContrast, fontSize: 26, fontWeight: '900' },
+  avatarEditBadge: { position: 'absolute', bottom: -2, right: -2, width: 22, height: 22, borderRadius: 11, backgroundColor: c.surfaceRaised, borderWidth: 2, borderColor: c.surface, justifyContent: 'center', alignItems: 'center' },
+  avatarEditBadgeText: { color: c.textPrimary, fontSize: 11 },
 
-  nameEditHint: { color: colors.textFaint, fontSize: 14 },
+  nameEditHint: { color: c.textFaint, fontSize: 14 },
   nameEditRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  nameInput: { flex: 1, color: colors.textPrimary, fontSize: 18, fontWeight: '800', borderBottomWidth: 1, borderColor: colors.accent, paddingVertical: 2 },
-  nameSaveBtn: { width: 28, height: 28, borderRadius: radius.pill, backgroundColor: colors.accent, justifyContent: 'center', alignItems: 'center' },
-  nameSaveBtnText: { color: '#000000', fontSize: 14, fontWeight: '900' },
+  nameInput: { flex: 1, color: c.textPrimary, fontSize: 18, fontWeight: '800', borderBottomWidth: 1, borderColor: c.accent, paddingVertical: 2 },
+  nameSaveBtn: { width: 28, height: 28, borderRadius: radius.pill, backgroundColor: c.accent, justifyContent: 'center', alignItems: 'center' },
+  nameSaveBtnText: { color: c.accentContrast, fontSize: 14, fontWeight: '900' },
   athleteDetails: { flex: 1, overflow: 'hidden' },
-  handleText: { color: colors.textPrimary, fontSize: 22, fontWeight: '900', letterSpacing: -0.5 },
-  emailText: { color: colors.textTertiary, fontSize: 11, fontWeight: '600', marginBottom: spacing.md },
+  handleText: { color: c.textPrimary, fontSize: 22, fontWeight: '900', letterSpacing: -0.5 },
+  emailText: { color: c.textTertiary, fontSize: 11, fontWeight: '600', marginBottom: spacing.md },
   threeStats: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
   tStat: { alignItems: 'center' },
-  tStatVal: { color: colors.textPrimary, fontSize: 18, fontWeight: '900' },
-  tStatLabel: { color: colors.textTertiary, fontSize: 8, fontWeight: '900', letterSpacing: 0.5 },
+  tStatVal: { color: c.textPrimary, fontSize: 18, fontWeight: '900' },
+  tStatLabel: { color: c.textTertiary, fontSize: 8, fontWeight: '900', letterSpacing: 0.5 },
 
   rankLabelRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.sm },
-  rankLabel: { color: colors.textTertiary, fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
-  rankPct: { color: colors.accent, fontSize: 10, fontWeight: '800' },
-  rankBarBg: { height: 6, backgroundColor: colors.borderSubtle, borderRadius: radius.pill, overflow: 'hidden' },
-  rankBarFill: { height: '100%', backgroundColor: colors.accent, borderRadius: radius.pill },
+  rankLabel: { color: c.textTertiary, fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
+  rankPct: { color: c.accent, fontSize: 10, fontWeight: '800' },
+  rankBarBg: { height: 6, backgroundColor: c.borderSubtle, borderRadius: radius.pill, overflow: 'hidden' },
+  rankBarFill: { height: '100%', backgroundColor: c.accent, borderRadius: radius.pill },
 
   quickRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.lg, marginBottom: spacing.xl },
-  quickStat: { flex: 1, alignItems: 'center', backgroundColor: colors.surface, borderRadius: radius.md, paddingVertical: spacing.lg },
-  quickStatVal: { color: colors.textPrimary, fontSize: 19, fontWeight: '900' },
-  quickStatLabel: { color: colors.textTertiary, fontSize: 9, fontWeight: '800', letterSpacing: 0.3, marginTop: spacing.xs },
-  accentVal: { color: colors.accent },
+  quickStat: { flex: 1, alignItems: 'center', backgroundColor: c.surface, borderRadius: radius.md, paddingVertical: spacing.lg },
+  quickStatVal: { color: c.textPrimary, fontSize: 19, fontWeight: '900' },
+  quickStatLabel: { color: c.textTertiary, fontSize: 9, fontWeight: '800', letterSpacing: 0.3, marginTop: spacing.xs },
+  accentVal: { color: c.accent },
 
   sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.md },
-  sectionTitle: { color: colors.textPrimary, fontSize: 13, fontWeight: '900', letterSpacing: 0.5 },
-  achieveCount: { color: colors.accent, fontSize: 12, fontWeight: '800' },
+  sectionTitle: { color: c.textPrimary, fontSize: 13, fontWeight: '900', letterSpacing: 0.5 },
+  achieveCount: { color: c.accent, fontSize: 12, fontWeight: '800' },
 
   achieveGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.lg, gap: spacing.sm, marginBottom: spacing.xxl },
-  achieveCard: { width: '47.5%', backgroundColor: colors.surface, borderRadius: radius.md, padding: spacing.md },
+  achieveCard: { width: '47.5%', backgroundColor: c.surface, borderRadius: radius.md, padding: spacing.md },
   achieveCardLocked: { opacity: 0.4 },
   achieveTopRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.sm },
-  achieveId: { color: colors.textFaint, fontSize: 10, fontWeight: '800' },
-  achieveIdDone: { color: colors.accent },
-  checkMark: { color: colors.accent, fontSize: 12, fontWeight: '900' },
-  achieveTitle: { color: colors.textPrimary, fontSize: 12, fontWeight: '900', marginBottom: spacing.xs },
-  achieveTitleLocked: { color: colors.textTertiary },
-  achieveDesc: { color: colors.textFaint, fontSize: 10, lineHeight: 14 },
+  achieveId: { color: c.textFaint, fontSize: 10, fontWeight: '800' },
+  achieveIdDone: { color: c.accent },
+  checkMark: { color: c.accent, fontSize: 12, fontWeight: '900' },
+  achieveTitle: { color: c.textPrimary, fontSize: 12, fontWeight: '900', marginBottom: spacing.xs },
+  achieveTitleLocked: { color: c.textTertiary },
+  achieveDesc: { color: c.textFaint, fontSize: 10, lineHeight: 14 },
 
-  settingsSection: { color: colors.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 1, paddingHorizontal: spacing.xl, marginBottom: spacing.sm },
+  settingsSection: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 1, paddingHorizontal: spacing.xl, marginBottom: spacing.sm },
   settingRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -656,32 +659,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     marginHorizontal: spacing.lg,
     marginBottom: spacing.sm,
-    backgroundColor: colors.surface,
+    backgroundColor: c.surface,
     borderRadius: radius.md,
   },
-  settingLabel: { color: colors.textPrimary, fontSize: 13, fontWeight: '700' },
-  settingValue: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
-  signOut: { color: colors.danger, fontSize: 13, fontWeight: '900' },
-  deleteAccount: { color: colors.textTertiary, fontSize: 12, fontWeight: '700' },
+  settingLabel: { color: c.textPrimary, fontSize: 13, fontWeight: '700' },
+  settingValue: { color: c.textSecondary, fontSize: 13, fontWeight: '600' },
+  signOut: { color: c.danger, fontSize: 13, fontWeight: '900' },
+  deleteAccount: { color: c.textTertiary, fontSize: 12, fontWeight: '700' },
 
-  appEditor: { backgroundColor: colors.surface, marginHorizontal: spacing.lg, marginTop: -spacing.xs, marginBottom: spacing.md, borderRadius: radius.lg, padding: spacing.md, ...cardShadow },
-  appEditRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.surfaceRaised, paddingHorizontal: spacing.lg, paddingVertical: spacing.lg, borderRadius: radius.md, marginBottom: spacing.sm },
-  appEditRowOn: { backgroundColor: colors.accentMuted },
-  appEditLabel: { color: colors.textSecondary, fontSize: 14, fontWeight: '700' },
-  appEditLabelOn: { color: colors.accent },
-  appEditCheck: { width: 20, height: 20, borderRadius: radius.pill, borderWidth: 1.5, borderColor: colors.border, justifyContent: 'center', alignItems: 'center' },
-  appEditCheckOn: { backgroundColor: colors.accent, borderColor: colors.accent },
-  appEditCheckGlyph: { color: '#000000', fontSize: 11, fontWeight: '900' },
+  appEditor: { backgroundColor: c.surface, marginHorizontal: spacing.lg, marginTop: -spacing.xs, marginBottom: spacing.md, borderRadius: radius.lg, padding: spacing.md, ...cardShadow },
+  appEditRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: c.surfaceRaised, paddingHorizontal: spacing.lg, paddingVertical: spacing.lg, borderRadius: radius.md, marginBottom: spacing.sm },
+  appEditRowOn: { backgroundColor: c.accentMuted },
+  appEditLabel: { color: c.textSecondary, fontSize: 14, fontWeight: '700' },
+  appEditLabelOn: { color: c.accent },
+  appEditCheck: { width: 20, height: 20, borderRadius: radius.pill, borderWidth: 1.5, borderColor: c.border, justifyContent: 'center', alignItems: 'center' },
+  appEditCheckOn: { backgroundColor: c.accent, borderColor: c.accent },
+  appEditCheckGlyph: { color: c.accentContrast, fontSize: 11, fontWeight: '900' },
   appEditActions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.xs },
-  appEditCancel: { flex: 1, height: 46, backgroundColor: colors.surfaceRaised, borderRadius: radius.md, justifyContent: 'center', alignItems: 'center' },
-  appEditCancelText: { color: colors.textSecondary, fontSize: 12, fontWeight: '900', letterSpacing: 0.3 },
-  appEditSave: { flex: 1, height: 46, backgroundColor: colors.accent, borderRadius: radius.md, justifyContent: 'center', alignItems: 'center' },
-  appEditSaveText: { color: '#000000', fontSize: 12, fontWeight: '900', letterSpacing: 0.3 },
+  appEditCancel: { flex: 1, height: 46, backgroundColor: c.surfaceRaised, borderRadius: radius.md, justifyContent: 'center', alignItems: 'center' },
+  appEditCancelText: { color: c.textSecondary, fontSize: 12, fontWeight: '900', letterSpacing: 0.3 },
+  appEditSave: { flex: 1, height: 46, backgroundColor: c.accent, borderRadius: radius.md, justifyContent: 'center', alignItems: 'center' },
+  appEditSaveText: { color: c.accentContrast, fontSize: 12, fontWeight: '900', letterSpacing: 0.3 },
 
-  diffRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: colors.surfaceRaised, paddingHorizontal: spacing.lg, paddingVertical: spacing.lg, borderRadius: radius.md, marginBottom: spacing.sm },
+  diffRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: c.surfaceRaised, paddingHorizontal: spacing.lg, paddingVertical: spacing.lg, borderRadius: radius.md, marginBottom: spacing.sm },
   diffLeft: { flex: 1, marginRight: spacing.md },
-  diffDesc: { color: colors.textTertiary, fontSize: 11, marginTop: spacing.xs },
-  radioOuter: { width: 20, height: 20, borderRadius: radius.pill, borderWidth: 2, borderColor: colors.border, justifyContent: 'center', alignItems: 'center' },
-  radioOuterOn: { borderColor: colors.accent },
-  radioInner: { width: 9, height: 9, borderRadius: 5, backgroundColor: colors.accent },
+  diffDesc: { color: c.textTertiary, fontSize: 11, marginTop: spacing.xs },
+  radioOuter: { width: 20, height: 20, borderRadius: radius.pill, borderWidth: 2, borderColor: c.border, justifyContent: 'center', alignItems: 'center' },
+  radioOuterOn: { borderColor: c.accent },
+  radioInner: { width: 9, height: 9, borderRadius: 5, backgroundColor: c.accent },
 });
