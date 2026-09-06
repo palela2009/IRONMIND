@@ -36,8 +36,15 @@ const startMonitoringFromStorage = async () => {
     const difficulty: DifficultyLevel = data.difficultyLevel ?? DEFAULT_DIFFICULTY;
     const windowSeconds = DIFFICULTY_WINDOW_SECONDS[difficulty] ?? DIFFICULTY_WINDOW_SECONDS[DEFAULT_DIFFICULTY];
     const dailyLimit: number = data.dailyChallengeLimit ?? DAILY_LIMIT_VALUES[DEFAULT_DAILY_LIMIT];
+    // Sent as a JSON object keyed by app name, which is what the service stores and reloads
+    // after a sticky restart.
+    const limits: Record<string, number> = {};
+    for (const entry of data.appLimits ?? []) {
+      if (entry?.app && Number(entry.minutes) > 0) limits[entry.app] = Math.round(entry.minutes);
+    }
+
     if (apps.length > 0 && UsageMonitor) {
-      UsageMonitor.startMonitoring(apps, windowSeconds, dailyLimit, currentUid);
+      UsageMonitor.startMonitoring(apps, windowSeconds, dailyLimit, currentUid, JSON.stringify(limits));
     }
   } catch {}
 };

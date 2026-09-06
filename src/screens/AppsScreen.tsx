@@ -28,6 +28,8 @@ export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged }) 
   const [editing, setEditing] = useState(false);
   const [pending, setPending] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const [appLimits, setAppLimits] = useState<Record<string, number>>({});
+  const [editingLimitFor, setEditingLimitFor] = useState<string | null>(null);
 
   const loadApps = useCallback(async () => {
     const raw = await AsyncStorage.getItem('@ironmind_onboarding').catch(() => null);
@@ -35,6 +37,11 @@ export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged }) 
     try {
       const data = JSON.parse(raw);
       setMonitoredApps(Array.isArray(data.targetApps) ? data.targetApps : []);
+      const limits: Record<string, number> = {};
+      for (const entry of data.appLimits ?? []) {
+        if (entry?.app && Number(entry.minutes) > 0) limits[entry.app] = entry.minutes;
+      }
+      setAppLimits(limits);
     } catch {}
   }, []);
 
@@ -84,6 +91,46 @@ export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged }) 
     } finally {
       setSaving(false);
     }
+  };
+
+  const limitFor = (app: string): number => appLimits[app] ?? 0;
+
+  // Suggests a real cut from what they actually do, rounded to something memorable. An
+  // arbitrary round number is easy to dismiss; "you average 84, try 60" is not.
+  const suggestFor = (app: string): number => {
+    const mins = minutesForApp(app);
+    if (mins <= 0) return 30;
+    const target = Math.max(10, Math.round((mins * 0.7) / 5) * 5);
+    return target;
+  };
+
+  const saveLimit = async (app: string, minutes: number) => {
+    const next = { ...appLimits };
+    if (minutes > 0) next[app] = minutes;
+    else delete next[app];
+    setAppLimits(next);
+    setEditingLimitFor(null);
+
+    try {
+      const raw = await AsyncStorage.getItem('@ironmind_onboarding');
+      const data = raw ? JSON.parse(raw) : {};
+      const asArray = Object.entries(next).map(([a, m]) => ({ app: a, minutes: m }));
+      await AsyncStorage.setItem('@ironmind_onboarding', JSON.stringify({ ...data, appLimits: asArray }));
+
+      await authedFetch(ONBOARDING_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          targetApps: data.targetApps ?? monitoredApps,
+          goals: data.goals ?? [],
+          difficultyLevel: data.difficultyLevel ?? 'EASY',
+          dailyChallengeLimit: data.dailyChallengeLimit ?? 5,
+          appLimits: asArray,
+        }),
+      }).catch(() => {});
+
+      await syncAppMonitor();
+      onSettingsChanged?.();
+    } catch {}
   };
 
   const statsForApp = (app: string) => {
@@ -188,9 +235,63 @@ export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged }) 
                 </View>
               </View>
 
-              <View style={styles.barWrap}>
-                <View style={[styles.bar, { width: `${barPct}%`, backgroundColor: colorForApp(app) }]} />
-              </View>
+              {(() => {
+                const limit = limitFor(app);
+                const over = limit > 0 && mins >= limit;
+                const near = limit > 0 && !over && mins >= limit * 0.8;
+                const pct = limit > 0 ? Math.min((mins / limit) * 100, 100) : barPct;
+                const barColor = over ? palette.danger : near ? '#FFA23B' : colorForApp(app);
+
+                return (
+                  <>
+                    <View style={styles.barWrap}>
+                      <View style={[styles.bar, { width: `${pct}%`, backgroundColor: barColor }]} />
+                    </View>
+
+                    <TouchableOpacity
+                      style={styles.limitRow}
+                      onPress={() => setEditingLimitFor(editingLimitFor === app ? null : app)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.limitText, over && styles.limitOver, near && styles.limitNear]}>
+                        {limit > 0
+                          ? over
+                            ? `Over limit — ${formatMinutes(mins)} of ${limit}m`
+                            : `${formatMinutes(mins)} of ${limit}m used`
+                          : 'No daily limit set'}
+                      </Text>
+                      <Text style={styles.limitAction}>{limit > 0 ? 'CHANGE' : 'SET LIMIT'}</Text>
+                    </TouchableOpacity>
+
+                    {editingLimitFor === app && (
+                      <View style={styles.limitEditor}>
+                        <Text style={styles.limitHint}>
+                          {mins > 0
+                            ? `You have used ${formatMinutes(mins)} today. Suggested: ${suggestFor(app)}m`
+                            : 'Pick a daily budget for this app.'}
+                        </Text>
+                        <View style={styles.limitChips}>
+                          {[15, 30, 45, 60, 90, 120].map((m) => (
+                            <TouchableOpacity
+                              key={m}
+                              style={[styles.chip, limit === m && styles.chipOn, suggestFor(app) === m && styles.chipSuggested]}
+                              onPress={() => saveLimit(app, m)}
+                              activeOpacity={0.85}
+                            >
+                              <Text style={[styles.chipText, limit === m && styles.chipTextOn]}>{m}m</Text>
+                            </TouchableOpacity>
+                          ))}
+                          {limit > 0 && (
+                            <TouchableOpacity style={styles.chip} onPress={() => saveLimit(app, 0)} activeOpacity={0.85}>
+                              <Text style={styles.chipText}>OFF</Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      </View>
+                    )}
+                  </>
+                );
+              })()}
 
               <View style={styles.statsRow}>
                 <View style={styles.statCell}>
@@ -333,6 +434,33 @@ const makeStyles = (c: Palette) => StyleSheet.create({
 
   barWrap: { height: 4, backgroundColor: c.surfaceRaised, borderRadius: 2, overflow: 'hidden', marginTop: spacing.md },
   bar: { height: '100%', borderRadius: 2 },
+
+  limitRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.sm,
+  },
+  limitText: { color: c.textTertiary, fontSize: 11, fontWeight: '600' },
+  limitNear: { color: '#FFA23B' },
+  limitOver: { color: c.danger, fontWeight: '900' },
+  limitAction: { color: c.accent, fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
+
+  limitEditor: { marginTop: spacing.md, paddingTop: spacing.md, borderTopWidth: 1, borderColor: c.borderSubtle },
+  limitHint: { color: c.textTertiary, fontSize: 11, marginBottom: spacing.md, lineHeight: 15 },
+  limitChips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  chip: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.pill,
+    backgroundColor: c.surfaceRaised,
+    borderWidth: 1,
+    borderColor: c.border,
+  },
+  chipOn: { backgroundColor: c.accent, borderColor: c.accent },
+  chipSuggested: { borderColor: c.accentDim },
+  chipText: { color: c.textSecondary, fontSize: 11, fontWeight: '900' },
+  chipTextOn: { color: c.accentContrast },
 
   statsRow: { flexDirection: 'row', marginTop: spacing.md, paddingTop: spacing.md, borderTopWidth: 1, borderColor: c.borderSubtle },
   statCell: { flex: 1, alignItems: 'center' },

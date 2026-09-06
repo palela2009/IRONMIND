@@ -28,13 +28,20 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
     )
 
     @ReactMethod
-    fun startMonitoring(apps: ReadableArray, challengeWindowSeconds: Double, dailyLimit: Double, uid: String?) {
+    fun startMonitoring(
+        apps: ReadableArray,
+        challengeWindowSeconds: Double,
+        dailyLimit: Double,
+        uid: String?,
+        appLimitsJson: String?
+    ) {
         val appList = Array(apps.size()) { apps.getString(it) }
         val intent = Intent(reactContext, UsageMonitorService::class.java).apply {
             putExtra("apps", appList)
             putExtra("challengeWindowSeconds", challengeWindowSeconds)
             putExtra("dailyLimit", dailyLimit)
             putExtra("uid", uid ?: "")
+            putExtra("appLimits", appLimitsJson ?: "{}")
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             reactContext.startForegroundService(intent)

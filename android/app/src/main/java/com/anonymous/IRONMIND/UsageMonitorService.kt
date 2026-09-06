@@ -29,6 +29,9 @@ class UsageMonitorService : Service() {
     private var challengeWindowMs = 10_000L
     private var maxDailyChallenges = 5
     private var lastKnownForeground: String? = null
+    private var appLimits: Map<String, Int> = emptyMap()
+    private var warnedToday: MutableSet<String> = mutableSetOf()
+    private var warnedDate: String = ""
 
     private val APP_PACKAGES = mapOf(
         "Instagram" to "com.instagram.android",
@@ -70,7 +73,9 @@ class UsageMonitorService : Service() {
                 prefs.edit().putString("uid", uid).putString("date", null).putInt("count", 0).apply()
             }
             saveConfig(apps, intent.getDoubleExtra("challengeWindowSeconds", 10.0), intent.getDoubleExtra("dailyLimit", 5.0))
+            intent.getStringExtra("appLimits")?.let { saveLimits(it) }
         }
+        appLimits = loadLimits()
 
         val config = loadConfig()
         monitoredPackages = config.first.mapNotNull { appName ->
@@ -91,6 +96,60 @@ class UsageMonitorService : Service() {
             .putFloat("window", windowSeconds.toFloat())
             .putFloat("limit", dailyLimit.toFloat())
             .apply()
+    }
+
+    // Stored as the raw JSON string the bridge delivered. Persisting it alongside the rest of
+    // the config matters for the same reason: a sticky restart arrives with a null intent and
+    // would otherwise come back with no budgets at all.
+    private fun saveLimits(json: String) {
+        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putString("appLimits", json).apply()
+    }
+
+    private fun loadLimits(): Map<String, Int> {
+        val raw = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString("appLimits", null)
+            ?: return emptyMap()
+        return try {
+            val obj = org.json.JSONObject(raw)
+            obj.keys().asSequence().associateWith { obj.getInt(it) }
+        } catch (_: Exception) {
+            emptyMap()
+        }
+    }
+
+    private fun minutesUsedToday(pkg: String): Int {
+        val usm = getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager ?: return 0
+        val cal = java.util.Calendar.getInstance()
+        cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+        cal.set(java.util.Calendar.MINUTE, 0)
+        cal.set(java.util.Calendar.SECOND, 0)
+        cal.set(java.util.Calendar.MILLISECOND, 0)
+        val now = System.currentTimeMillis()
+
+        val events = usm.queryEvents(cal.timeInMillis, now) ?: return 0
+        val event = android.app.usage.UsageEvents.Event()
+        var total = 0L
+        var openedAt = 0L
+
+        while (events.hasNextEvent()) {
+            events.getNextEvent(event)
+            if (event.packageName != pkg) continue
+            when (event.eventType) {
+                android.app.usage.UsageEvents.Event.MOVE_TO_FOREGROUND,
+                android.app.usage.UsageEvents.Event.ACTIVITY_RESUMED -> openedAt = event.timeStamp
+                android.app.usage.UsageEvents.Event.MOVE_TO_BACKGROUND,
+                android.app.usage.UsageEvents.Event.ACTIVITY_PAUSED -> {
+                    if (openedAt > 0L) {
+                        total += event.timeStamp - openedAt
+                        openedAt = 0L
+                    }
+                }
+            }
+        }
+        // Still open right now: count the session so far, or a budget would only ever update
+        // after the user closed the app.
+        if (openedAt > 0L) total += now - openedAt
+
+        return (total / 60000L).toInt()
     }
 
     private fun loadConfig(): Triple<List<String>, Double, Double> {
@@ -132,17 +191,51 @@ class UsageMonitorService : Service() {
 
         for ((appName, pkg) in monitoredPackages) {
             if (foreground == pkg) {
+                val limit = appLimits[appName] ?: 0
+                val used = if (limit > 0) minutesUsedToday(pkg) else 0
+                val overBudget = limit > 0 && used >= limit
+
+                if (limit > 0 && !overBudget && used >= (limit * 8 / 10)) {
+                    maybeWarn(appName, limit - used)
+                }
+
+                // Past the budget the usual restraints are lifted: every open is challenged,
+                // ignoring both the per-app cooldown and the daily cap. Those exist to stop
+                // IRONMIND nagging during normal use, and this is by definition not that.
                 val sameAppCooldown = appName == lastChallengedApp && (now - lastChallengeTime) < cooldownMs
-                if (!sameAppCooldown && getFiredCountToday() < maxDailyChallenges) {
+                val allowed = overBudget || (!sameAppCooldown && getFiredCountToday() < maxDailyChallenges)
+
+                if (allowed) {
                     lastChallengedApp = appName
                     lastChallengeTime = now
                     activeChallenge = ActiveChallenge(appName, pkg, now)
-                    fireChallengeNotification(appName)
-                    incrementFiredCountToday()
+                    fireChallengeNotification(appName, overBudget)
+                    if (!overBudget) incrementFiredCountToday()
                 }
                 return
             }
         }
+    }
+
+    // One warning per app per day. Repeating it every poll would turn the approach to a
+    // budget into exactly the nagging the cooldown exists to prevent.
+    private fun maybeWarn(appName: String, minutesLeft: Int) {
+        val today = getTodayKey()
+        if (warnedDate != today) {
+            warnedDate = today
+            warnedToday = mutableSetOf()
+        }
+        if (!warnedToday.add(appName)) return
+
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val notification = NotificationCompat.Builder(this, CHALLENGE_CHANNEL)
+            .setContentTitle("$appName — ${minutesLeft}m left")
+            .setContentText("You are close to your daily limit. Every open past it triggers a challenge.")
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setAutoCancel(true)
+            .build()
+        nm.notify(WARNING_ID, notification)
     }
 
     private fun getTodayKey(): String {
@@ -211,12 +304,15 @@ class UsageMonitorService : Service() {
         return latestPkg ?: lastKnownForeground
     }
 
-    private fun fireChallengeNotification(appName: String) {
+    private fun fireChallengeNotification(appName: String, overBudget: Boolean = false) {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val windowSeconds = challengeWindowMs / 1000
         val notification = NotificationCompat.Builder(this, CHALLENGE_CHANNEL)
-            .setContentTitle("IRONMIND CHALLENGE")
-            .setContentText("You opened $appName — exit in $windowSeconds seconds.")
+            .setContentTitle(if (overBudget) "OVER YOUR LIMIT" else "IRONMIND CHALLENGE")
+            .setContentText(
+                if (overBudget) "$appName is past its daily limit — exit in $windowSeconds seconds."
+                else "You opened $appName — exit in $windowSeconds seconds."
+            )
             .setSmallIcon(android.R.drawable.ic_dialog_alert)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
@@ -265,6 +361,7 @@ class UsageMonitorService : Service() {
     companion object {
         const val FOREGROUND_ID = 1001
         const val CHALLENGE_ID = 1002
+        const val WARNING_ID = 1003
         const val FOREGROUND_CHANNEL = "ironmind_monitor"
         const val CHALLENGE_CHANNEL = "ironmind_challenges"
         const val PREFS_NAME = "ironmind_challenge_prefs"
