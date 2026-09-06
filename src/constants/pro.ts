@@ -53,8 +53,8 @@ export const PRO_PLANS: ProPlan[] = [
 export const PRO_FEATURES = [
   {
     icon: '❄',
-    title: 'Streak Protection',
-    body: 'Streak freezes absorb a failed challenge so one slip does not erase weeks of work.',
+    title: '20 Streak Freezes a Month',
+    body: 'Each freeze absorbs one failed challenge automatically, so a single slip never wipes out a long run.',
   },
   {
     icon: '◑',

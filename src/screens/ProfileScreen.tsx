@@ -49,8 +49,8 @@ const getAchievements = (s: UserStats) => [
   { id: '01', title: 'FIRST STEP', desc: 'Completed your first challenge', done: s.totalChallenges >= 1 },
   { id: '02', title: 'SPEED DEMON', desc: 'Exit in under 3 seconds', done: s.bestReactionTime > 0 && s.bestReactionTime < 3.0 },
   { id: '03', title: 'REFLEXES OF STEEL', desc: 'Exit in under 1 second', done: s.bestReactionTime > 0 && s.bestReactionTime < 1.0 },
-  { id: '04', title: 'WEEK ONE', desc: '7-day streak unbroken', done: s.longestStreak >= 7 },
-  { id: '05', title: 'IRON DISCIPLINE', desc: '30-day streak', done: s.longestStreak >= 30 },
+  { id: '04', title: 'ON A ROLL', desc: '7 challenges won in a row', done: s.longestStreak >= 7 },
+  { id: '05', title: 'IRON DISCIPLINE', desc: '30 challenges won in a row', done: s.longestStreak >= 30 },
   { id: '06', title: 'CENTURY', desc: '100 challenges completed', done: s.totalChallenges >= 100 },
   { id: '07', title: 'PERFECT DAY', desc: 'All 5 daily challenges won', done: false },
   { id: '08', title: 'MARATHON', desc: '500 challenges completed', done: s.totalChallenges >= 500 },
@@ -369,7 +369,7 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, onSettingsChanged
           { label: 'CHALLENGES', val: String(stats.totalChallenges) },
           { label: 'BEST RXN', val: rxnDisplay, accent: true },
           { label: 'SUCCESS', val: successRate },
-          { label: 'LONGEST', val: `${stats.longestStreak}d` },
+          { label: 'LONGEST', val: String(stats.longestStreak) },
         ].map((s) => (
           <View key={s.label} style={styles.quickStat}>
             <Text style={[styles.quickStatVal, s.accent && styles.accentVal]}>{s.val}</Text>
