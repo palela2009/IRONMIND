@@ -302,9 +302,9 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {
           <Text style={styles.sectionLabel}>ACTIVE DUELS · {activeDuels.length + outgoingDuels.length}</Text>
 
           {activeDuels.map((d) => {
-            const mine = d.myMinutes ?? 0;
-            const theirs = d.theirMinutes;
-            const winning = theirs === null ? null : mine < theirs;
+            const mine = Math.round(d.myMinutes ?? 0);
+            const theirs = d.theirMinutes === null ? null : Math.round(d.theirMinutes);
+            const leader = theirs === null || mine === theirs ? null : mine < theirs ? 'me' : 'them';
             return (
               <View key={d.id} style={styles.duelCard}>
                 <View style={styles.duelHead}>
@@ -314,19 +314,30 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {
                 <Text style={styles.duelSub}>{d.app} · fewest minutes wins · {d.stake} XP</Text>
                 <View style={styles.scoreRow}>
                   <View style={styles.scoreSide}>
-                    <Text style={[styles.scoreVal, winning === true && styles.scoreWinning]}>
-                      {mine.toFixed(0)}
+                    <Text style={[styles.scoreVal, leader === 'me' && styles.scoreWinning]}>
+                      {mine}
+                      <Text style={styles.scoreUnit}>m</Text>
                     </Text>
                     <Text style={styles.scoreLabel}>YOU</Text>
                   </View>
                   <Text style={styles.scoreVs}>—</Text>
                   <View style={styles.scoreSide}>
-                    <Text style={[styles.scoreVal, winning === false && styles.scoreWinning]}>
-                      {theirs === null ? '·' : theirs.toFixed(0)}
+                    <Text style={[styles.scoreVal, leader === 'them' && styles.scoreWinning]}>
+                      {theirs === null ? '·' : theirs}
+                      {theirs !== null && <Text style={styles.scoreUnit}>m</Text>}
                     </Text>
                     <Text style={styles.scoreLabel}>THEM</Text>
                   </View>
                 </View>
+                {theirs !== null && (
+                  <Text style={styles.duelState}>
+                    {leader === null
+                      ? 'TIED'
+                      : leader === 'me'
+                      ? `YOU LEAD BY ${theirs - mine}m`
+                      : `BEHIND BY ${mine - theirs}m`}
+                  </Text>
+                )}
                 {theirs === null && (
                   <Text style={styles.duelWarn}>
                     {hoursSince(d.startAt) >= 1
@@ -621,7 +632,9 @@ const styles = StyleSheet.create({
   scoreRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 20, paddingVertical: 4 },
   scoreSide: { alignItems: 'center', minWidth: 60 },
   scoreVal: { color: '#666666', fontSize: 26, fontWeight: '900' },
+  scoreUnit: { fontSize: 13, fontWeight: '800' },
   scoreWinning: { color: '#CCFF00' },
+  duelState: { color: '#7A6070', fontSize: 10, fontWeight: '900', letterSpacing: 0.6, textAlign: 'center', marginTop: 6 },
   scoreLabel: { color: '#4A3A44', fontSize: 9, fontWeight: '900', letterSpacing: 0.5, marginTop: 2 },
   scoreVs: { color: '#3A2530', fontSize: 16, fontWeight: '900' },
 
