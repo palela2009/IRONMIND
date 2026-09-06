@@ -82,7 +82,7 @@ const RankBadge: React.FC<{ level: number }> = ({ level }) => {
 export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {
   const { fbUser } = useAuth();
   const { code, friends, requests, loading, error, addByCode, acceptRequest, rejectRequest, removeFriend, refresh: refreshFriends } = useFriends();
-  const { duels, challenge, respond, error: duelError, refresh: refreshDuels } = useDuels();
+  const { duels, challenge, respond, cancel: cancelDuel, error: duelError, refresh: refreshDuels } = useDuels();
   const [refreshing, setRefreshing] = useState(false);
   const [inputCode, setInputCode] = useState('');
   const [adding, setAdding] = useState(false);
@@ -191,6 +191,20 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {
     setRefreshing(false);
   };
 
+  const handleCancelDuel = (id: string, opponent: string) => {
+    Alert.alert('Cancel duel?', `Your duel with ${opponent} ends now. Nobody wins and no XP changes hands.`, [
+      { text: 'Keep duelling', style: 'cancel' },
+      {
+        text: 'Cancel duel',
+        style: 'destructive',
+        onPress: async () => {
+          const ok = await cancelDuel(id);
+          if (!ok) Alert.alert('Could not cancel duel', duelError || 'Try again.');
+        },
+      },
+    ]);
+  };
+
   const handleDuelResponse = async (id: string, action: 'accept' | 'decline') => {
     const ok = await respond(id, action);
     if (!ok) Alert.alert(`Could not ${action} duel`, duelError || 'Try again.');
@@ -212,7 +226,9 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {
   const incomingDuels = duels.filter((d) => d.status === 'pending' && d.incoming);
   const outgoingDuels = duels.filter((d) => d.status === 'pending' && !d.incoming);
   const activeDuels = duels.filter((d) => d.status === 'active');
-  const settledDuels = duels.filter((d) => d.status === 'completed' || d.status === 'void').slice(0, 5);
+  const settledDuels = duels
+    .filter((d) => d.status === 'completed' || d.status === 'void' || d.status === 'cancelled')
+    .slice(0, 5);
 
   return (
     <ScrollView
@@ -348,6 +364,13 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {
                       : 'Waiting for their first sync. Scores update when each of you opens IRONMIND.'}
                   </Text>
                 )}
+                <TouchableOpacity
+                  style={styles.cancelDuelBtn}
+                  onPress={() => handleCancelDuel(d.id, d.opponentName)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.cancelDuelText}>CANCEL DUEL</Text>
+                </TouchableOpacity>
               </View>
             );
           })}
@@ -359,6 +382,13 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {
                 <Text style={styles.duelPending}>WAITING</Text>
               </View>
               <Text style={styles.duelSub}>{d.app} · {d.stake} XP · not accepted yet</Text>
+              <TouchableOpacity
+                style={styles.cancelDuelBtn}
+                onPress={() => handleCancelDuel(d.id, d.opponentName)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.cancelDuelText}>WITHDRAW CHALLENGE</Text>
+              </TouchableOpacity>
             </View>
           ))}
         </>
@@ -372,16 +402,22 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {
               <Text
                 style={[
                   styles.resultTag,
-                  d.status === 'void' ? styles.resultVoid : d.iWon ? styles.resultWin : styles.resultLoss,
+                  d.status === 'completed'
+                    ? d.iWon
+                      ? styles.resultWin
+                      : styles.resultLoss
+                    : styles.resultVoid,
                 ]}
               >
-                {d.status === 'void' ? 'VOID' : d.iWon ? 'WON' : 'LOST'}
+                {d.status === 'void' ? 'VOID' : d.status === 'cancelled' ? 'ENDED' : d.iWon ? 'WON' : 'LOST'}
               </Text>
               <Text style={styles.resultName} numberOfLines={1}>{d.opponentName}</Text>
               <Text style={styles.resultDetail}>
                 {d.status === 'void'
                   ? 'no data'
-                  : `${(d.myMinutes ?? 0).toFixed(0)}–${(d.theirMinutes ?? 0).toFixed(0)}m`}
+                  : d.status === 'cancelled'
+                  ? 'cancelled'
+                  : `${Math.round(d.myMinutes ?? 0)}–${Math.round(d.theirMinutes ?? 0)}m`}
               </Text>
             </View>
           ))}
@@ -631,6 +667,8 @@ const styles = StyleSheet.create({
   duelSub: { color: '#7A6070', fontSize: 11, marginBottom: 10 },
   duelActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 10 },
   duelWarn: { color: '#8A6A20', fontSize: 10, marginTop: 8, lineHeight: 14 },
+  cancelDuelBtn: { alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 16, marginTop: 6 },
+  cancelDuelText: { color: '#6A4A58', fontSize: 10, fontWeight: '900', letterSpacing: 0.6 },
 
   scoreRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 20, paddingVertical: 4 },
   scoreSide: { alignItems: 'center', minWidth: 60 },

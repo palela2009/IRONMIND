@@ -8,7 +8,7 @@ import { AppUsage } from './useScreenTime';
 const { UsageMonitor } = NativeModules;
 const API_URL = `${API_BASE_URL}/api/duels`;
 
-export type DuelStatus = 'pending' | 'active' | 'completed' | 'declined' | 'void';
+export type DuelStatus = 'pending' | 'active' | 'completed' | 'declined' | 'void' | 'cancelled';
 
 export interface Duel {
   id: string;
@@ -147,6 +147,23 @@ export const useDuels = () => {
     }
   };
 
+  const cancel = async (id: string): Promise<boolean> => {
+    setError('');
+    try {
+      const res = await authedFetch(`${API_URL}/${id}/cancel`, { method: 'POST' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.message ?? 'Could not cancel duel');
+        return false;
+      }
+      await load();
+      return true;
+    } catch {
+      setError('Network error — try again');
+      return false;
+    }
+  };
+
   const respond = async (id: string, action: 'accept' | 'decline'): Promise<boolean> => {
     setError('');
     try {
@@ -166,7 +183,7 @@ export const useDuels = () => {
     }
   };
 
-  return { duels, loading, error, challenge, respond, refresh: load };
+  return { duels, loading, error, challenge, respond, cancel, refresh: load };
 };
 
 export const formatAgo = (iso: string | null): string => {
