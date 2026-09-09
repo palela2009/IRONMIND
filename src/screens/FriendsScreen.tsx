@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Share, Alert, Image, Modal, RefreshControl } from 'react-native';
 import { useThemedStyles, useTheme } from '../context/ThemeContext';
-import { Palette } from '../theme';
+import { Palette, radius } from '../theme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFriends } from '../hooks/useFriends';
 import { useDuels, formatTimeLeft, formatAgo } from '../hooks/useDuels';
@@ -11,7 +11,8 @@ import { rankForLevel, PODIUM } from '../constants/ranks';
 import { Badge, topBadgeFor } from '../constants/badges';
 import { usePro } from '../context/ProContext';
 
-const DUEL_STAKE = 100;
+const DUEL_STAKE = 50;
+const FREE_STAKE = 0;
 
 const hoursSince = (iso: string | null): number =>
   iso ? (Date.now() - new Date(iso).getTime()) / 3_600_000 : 0;
@@ -100,6 +101,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
 
   const [monitoredApps, setMonitoredApps] = useState<string[]>([]);
   const [duelTarget, setDuelTarget] = useState<Entry | null>(null);
+  const [duelStake, setDuelStake] = useState<number>(DUEL_STAKE);
   const [sending, setSending] = useState(false);
 
   useEffect(() => {
@@ -197,13 +199,14 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
       Alert.alert('No apps tracked', 'Pick at least one app to track in the APPS tab before starting a duel.');
       return;
     }
+    setDuelStake(DUEL_STAKE);
     setDuelTarget(entry);
   };
 
   const sendChallenge = async (app: string) => {
     if (!duelTarget) return;
     setSending(true);
-    const ok = await challenge(duelTarget.uid, app, DUEL_STAKE);
+    const ok = await challenge(duelTarget.uid, app, duelStake);
     setSending(false);
     setDuelTarget(null);
     if (!ok) Alert.alert('Could not start duel', duelError || 'Try again.');
@@ -537,13 +540,35 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
             <Text style={styles.modalTitle}>CHALLENGE {duelTarget?.displayName.toUpperCase()}</Text>
             <Text style={styles.modalSub}>
               Whoever spends fewer minutes on the chosen app over the next 24 hours wins.
-              You each ante ◉ {DUEL_STAKE} coins and the winner takes the pot of ◉ {DUEL_STAKE * 2}.
+              Whoever spends fewer minutes on the chosen app over the next 24 hours wins.
             </Text>
-            <Text style={[styles.modalBalance, coins < DUEL_STAKE && styles.modalBalanceLow]}>
-              {coins < DUEL_STAKE
-                ? `You have ◉ ${coins} — not enough to start this duel.`
-                : `Your balance: ◉ ${coins}`}
-            </Text>
+
+            <Text style={styles.modalLabel}>STAKE</Text>
+            <View style={styles.stakeRow}>
+              <TouchableOpacity
+                style={[styles.stakeChip, duelStake === FREE_STAKE && styles.stakeChipOn]}
+                onPress={() => setDuelStake(FREE_STAKE)}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.stakeText, duelStake === FREE_STAKE && styles.stakeTextOn]}>FREE</Text>
+                <Text style={[styles.stakeSub, duelStake === FREE_STAKE && styles.stakeSubOn]}>bragging rights</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.stakeChip,
+                  duelStake === DUEL_STAKE && styles.stakeChipOn,
+                  coins < DUEL_STAKE && styles.stakeChipDisabled,
+                ]}
+                onPress={() => coins >= DUEL_STAKE && setDuelStake(DUEL_STAKE)}
+                activeOpacity={coins < DUEL_STAKE ? 1 : 0.85}
+              >
+                <Text style={[styles.stakeText, duelStake === DUEL_STAKE && styles.stakeTextOn]}>◉ {DUEL_STAKE}</Text>
+                <Text style={[styles.stakeSub, duelStake === DUEL_STAKE && styles.stakeSubOn]}>
+                  {coins < DUEL_STAKE ? `you have ${coins}` : `win ${DUEL_STAKE * 2}`}
+                </Text>
+              </TouchableOpacity>
+            </View>
 
             <Text style={styles.modalLabel}>PICK THE APP</Text>
             {monitoredApps.map((app) => (
@@ -744,6 +769,23 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   modalCard: { backgroundColor: c.surface, borderRadius: 18, padding: 20, borderWidth: 1, borderColor: c.border },
   modalTitle: { color: c.textPrimary, fontSize: 15, fontWeight: '900', letterSpacing: 0.3, marginBottom: 8 },
   modalSub: { color: c.textSecondary, fontSize: 12, lineHeight: 18, marginBottom: 18 },
+  stakeRow: { flexDirection: 'row', gap: 10, marginBottom: 18 },
+  stakeChip: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderRadius: radius.sm,
+    backgroundColor: c.surfaceRaised,
+    borderWidth: 1.5,
+    borderColor: c.border,
+  },
+  stakeChipOn: { borderColor: c.accent, backgroundColor: c.accentMuted },
+  stakeChipDisabled: { opacity: 0.4 },
+  stakeText: { color: c.textPrimary, fontSize: 14, fontWeight: '900' },
+  stakeTextOn: { color: c.accent },
+  stakeSub: { color: c.textFaint, fontSize: 9, fontWeight: '700', marginTop: 2 },
+  stakeSubOn: { color: c.accentDim },
+
   modalBalance: { color: c.accent, fontSize: 11, fontWeight: '900', marginBottom: 14, marginTop: -8 },
   modalBalanceLow: { color: c.danger },
   modalLabel: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 1, marginBottom: 10 },
