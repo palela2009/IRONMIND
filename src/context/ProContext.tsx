@@ -48,6 +48,18 @@ interface ProContextValue extends Entitlement {
   equipCosmetic: (slot: 'frame' | 'nameEffect', cosmeticId: string | null) => Promise<void>;
 }
 
+// Every entitlement is merged over the free defaults before it is used, whether it came from
+// the network or the cache. A payload written before a field existed - an older cached
+// entitlement, or a server that has not deployed yet - would otherwise leave array fields
+// undefined and crash the first screen that called .includes() on one.
+const normalize = (raw: Partial<Entitlement> | null | undefined): Entitlement => ({
+  ...FREE,
+  ...(raw ?? {}),
+  unlockedThemes: raw?.unlockedThemes ?? [],
+  ownedFrames: raw?.ownedFrames ?? [],
+  ownedNameEffects: raw?.ownedNameEffects ?? [],
+});
+
 const ProContext = createContext<ProContextValue | undefined>(undefined);
 
 export const ProProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -58,7 +70,8 @@ export const ProProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const entitlementRef = useRef(entitlement);
   entitlementRef.current = entitlement;
 
-  const persist = async (next: Entitlement) => {
+  const persist = async (raw: Partial<Entitlement>) => {
+    const next = normalize(raw);
     setEntitlement(next);
     try {
       await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(next));
@@ -75,7 +88,7 @@ export const ProProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     try {
       const cached = await AsyncStorage.getItem(CACHE_KEY);
-      if (cached) setEntitlement(JSON.parse(cached));
+      if (cached) setEntitlement(normalize(JSON.parse(cached)));
     } catch {}
 
     try {
