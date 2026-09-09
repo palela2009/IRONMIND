@@ -253,8 +253,11 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
   const incomingDuels = duels.filter((d) => d.status === 'pending' && d.incoming);
   const outgoingDuels = duels.filter((d) => d.status === 'pending' && !d.incoming);
   const activeDuels = duels.filter((d) => d.status === 'active');
+  // Cancelled duels are deliberately excluded. A cancelled duel is one that never took
+  // place, so listing it as history gives a row that reports no result and reads as clutter.
+  // Void duels stay, because those did run and the empty result is the informative part.
   const settledDuels = duels
-    .filter((d) => d.status === 'completed' || d.status === 'void' || d.status === 'cancelled')
+    .filter((d) => d.status === 'completed' || d.status === 'void')
     .slice(0, 5);
 
   return (
@@ -436,14 +439,12 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
                     : styles.resultVoid,
                 ]}
               >
-                {d.status === 'void' ? 'VOID' : d.status === 'cancelled' ? 'ENDED' : d.iWon ? 'WON' : 'LOST'}
+                {d.status === 'void' ? 'VOID' : d.iWon ? 'WON' : 'LOST'}
               </Text>
               <Text style={styles.resultName} numberOfLines={1}>{d.opponentName}</Text>
               <Text style={styles.resultDetail}>
                 {d.status === 'void'
                   ? 'no data'
-                  : d.status === 'cancelled'
-                  ? 'cancelled'
                   : `${Math.round(d.myMinutes ?? 0)}–${Math.round(d.theirMinutes ?? 0)}m`}
               </Text>
             </View>
