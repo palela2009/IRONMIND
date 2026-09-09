@@ -28,6 +28,8 @@ export interface FriendRequestItem {
   createdAt: string;
 }
 
+export type AddOutcome = 'accepted' | 'pending' | 'error';
+
 export const useFriends = () => {
   const { fbUser } = useAuth();
   const [code, setCode] = useState<string>('');
@@ -62,7 +64,10 @@ export const useFriends = () => {
     load();
   }, [load]);
 
-  const addByCode = async (inputCode: string): Promise<boolean> => {
+  // Returns which of the two outcomes happened rather than a bare success flag. Adding
+  // someone usually only sends a request; reporting that as "friend added" told people they
+  // had a friend who had not agreed yet, and the leaderboard then showed nobody.
+  const addByCode = async (inputCode: string): Promise<AddOutcome> => {
     setError('');
     try {
       const res = await authedFetch(`${API_URL}/add`, {
@@ -72,13 +77,13 @@ export const useFriends = () => {
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError(body.message ?? 'Could not add friend');
-        return false;
+        return 'error';
       }
       await load();
-      return true;
+      return body.status === 'accepted' ? 'accepted' : 'pending';
     } catch {
       setError('Network error — try again');
-      return false;
+      return 'error';
     }
   };
 

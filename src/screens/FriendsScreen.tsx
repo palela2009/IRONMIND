@@ -97,7 +97,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
   const [refreshing, setRefreshing] = useState(false);
   const [inputCode, setInputCode] = useState('');
   const [adding, setAdding] = useState(false);
-  const [addResult, setAddResult] = useState<'idle' | 'ok' | 'err'>('idle');
+  const [addResult, setAddResult] = useState<'idle' | 'accepted' | 'pending' | 'err'>('idle');
 
   const [monitoredApps, setMonitoredApps] = useState<string[]>([]);
   const [duelTarget, setDuelTarget] = useState<Entry | null>(null);
@@ -169,10 +169,10 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
   const handleAdd = async () => {
     if (!inputCode.trim()) return;
     setAdding(true);
-    const ok = await addByCode(inputCode.trim());
+    const outcome = await addByCode(inputCode.trim());
     setAdding(false);
-    setAddResult(ok ? 'ok' : 'err');
-    if (ok) setInputCode('');
+    setAddResult(outcome === 'error' ? 'err' : outcome);
+    if (outcome !== 'error') setInputCode('');
     setTimeout(() => setAddResult('idle'), 3000);
   };
 
@@ -296,7 +296,10 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
             {adding ? <ActivityIndicator color={palette.accentContrast} size="small" /> : <Text style={styles.addBtnText}>ADD</Text>}
           </TouchableOpacity>
         </View>
-        {addResult === 'ok' && <Text style={styles.addOk}>Friend added ✓</Text>}
+        {addResult === 'accepted' && <Text style={styles.addOk}>Friend added ✓</Text>}
+        {addResult === 'pending' && (
+          <Text style={styles.addOk}>Request sent — waiting for them to accept</Text>
+        )}
         {addResult === 'err' && <Text style={styles.addErr}>{error || 'Could not add friend'}</Text>}
       </View>
 
