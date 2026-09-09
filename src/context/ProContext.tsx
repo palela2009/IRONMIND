@@ -15,6 +15,10 @@ export interface Entitlement {
   welcomeOffer: boolean;
   coins: number;
   unlockedThemes: string[];
+  ownedFrames: string[];
+  ownedNameEffects: string[];
+  equippedFrame: string | null;
+  equippedNameEffect: string | null;
   onTrial: boolean;
   trialEndsAt: string | null;
   trialAvailable: boolean;
@@ -24,7 +28,7 @@ export interface Entitlement {
   themeId: string;
 }
 
-const FREE: Entitlement = { isPro: false, isOwner: false, welcomeOffer: false, coins: 0, unlockedThemes: [], onTrial: false, trialEndsAt: null, trialAvailable: false, plan: null, expiresAt: null, streakFreezes: 0, themeId: 'default' };
+const FREE: Entitlement = { isPro: false, isOwner: false, welcomeOffer: false, coins: 0, unlockedThemes: [], ownedFrames: [], ownedNameEffects: [], equippedFrame: null, equippedNameEffect: null, onTrial: false, trialEndsAt: null, trialAvailable: false, plan: null, expiresAt: null, streakFreezes: 0, themeId: 'default' };
 
 interface ProContextValue extends Entitlement {
   loading: boolean;
@@ -37,7 +41,11 @@ interface ProContextValue extends Entitlement {
   closeWelcomeOffer: () => Promise<void>;
   startTrial: () => Promise<boolean>;
   awardCoins: (reason: 'challenge_win' | 'perfect_day' | 'rewarded_ad') => Promise<void>;
-  buyItem: (item: 'freeze' | 'theme', themeId?: string) => Promise<{ ok: boolean; message?: string }>;
+  buyItem: (
+    item: 'freeze' | 'theme' | 'frame' | 'nameEffect' | 'proWeek',
+    opts?: { themeId?: string; cosmeticId?: string }
+  ) => Promise<{ ok: boolean; message?: string }>;
+  equipCosmetic: (slot: 'frame' | 'nameEffect', cosmeticId: string | null) => Promise<void>;
 }
 
 const ProContext = createContext<ProContextValue | undefined>(undefined);
@@ -140,25 +148,50 @@ export const ProProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {}
   };
 
-  const buyItem = async (item: 'freeze' | 'theme', themeId?: string) => {
+  const buyItem = async (
+    item: 'freeze' | 'theme' | 'frame' | 'nameEffect' | 'proWeek',
+    opts: { themeId?: string; cosmeticId?: string } = {}
+  ) => {
     try {
       const res = await authedFetch(`${COINS_URL}/buy`, {
         method: 'POST',
-        body: JSON.stringify({ item, themeId }),
+        body: JSON.stringify({ item, ...opts }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) return { ok: false, message: body.message ?? 'Purchase failed' };
 
       await persist({
         ...entitlementRef.current,
-        coins: body.coins,
+        coins: body.coins ?? entitlementRef.current.coins,
         streakFreezes: body.streakFreezes ?? entitlementRef.current.streakFreezes,
         unlockedThemes: body.unlockedThemes ?? entitlementRef.current.unlockedThemes,
+        ownedFrames: body.ownedFrames ?? entitlementRef.current.ownedFrames,
+        ownedNameEffects: body.ownedNameEffects ?? entitlementRef.current.ownedNameEffects,
+        equippedFrame: body.equippedFrame ?? entitlementRef.current.equippedFrame,
+        equippedNameEffect: body.equippedNameEffect ?? entitlementRef.current.equippedNameEffect,
       });
+
+      // Buying Pro with coins changes entitlement itself, so the whole thing is re-read
+      // rather than patched from the purchase response.
+      if (item === 'proWeek') await refresh();
       return { ok: true };
     } catch {
       return { ok: false, message: 'Network error — try again' };
     }
+  };
+
+  const equipCosmetic = async (slot: 'frame' | 'nameEffect', cosmeticId: string | null) => {
+    // Applied locally first so the change is instant; the server only records it.
+    await persist({
+      ...entitlementRef.current,
+      ...(slot === 'frame' ? { equippedFrame: cosmeticId } : { equippedNameEffect: cosmeticId }),
+    });
+    try {
+      await authedFetch(`${COINS_URL}/equip`, {
+        method: 'POST',
+        body: JSON.stringify({ slot, cosmeticId }),
+      });
+    } catch {}
   };
 
   const startTrial = async (): Promise<boolean> => {
@@ -192,7 +225,7 @@ export const ProProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   return (
     <ProContext.Provider
-      value={{ ...entitlement, loading, refresh, activate, cancel, useFreeze, grantFreeze, setTheme, closeWelcomeOffer, startTrial, awardCoins, buyItem }}
+      value={{ ...entitlement, loading, refresh, activate, cancel, useFreeze, grantFreeze, setTheme, closeWelcomeOffer, startTrial, awardCoins, buyItem, equipCosmetic }}
     >
       {children}
     </ProContext.Provider>

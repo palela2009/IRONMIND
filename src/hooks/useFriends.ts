@@ -18,6 +18,8 @@ export interface Friend {
   currentXP: number;
   isPro: boolean;
   isOwner: boolean;
+  frame: string | null;
+  nameEffect: string | null;
 }
 
 export interface FriendRequestItem {

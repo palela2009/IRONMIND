@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { useThemedStyles, useTheme } from '../context/ThemeContext';
 import { Palette, PALETTES, radius, spacing, cardShadow } from '../theme';
 import { usePro } from '../context/ProContext';
+import { FRAMES, NAME_EFFECTS, PRO_WEEK_PRICE, glowStyle } from '../constants/cosmetics';
 
 interface Props {
   visible: boolean;
@@ -14,18 +15,19 @@ export const PRICES = { freeze: 200, theme: 750 };
 export const ShopScreen: React.FC<Props> = ({ visible, onClose }) => {
   const styles = useThemedStyles(makeStyles);
   const palette = useTheme();
-  const { coins, streakFreezes, isPro, unlockedThemes, themeId, buyItem, setTheme } = usePro();
+  const { coins, streakFreezes, isPro, unlockedThemes, themeId, buyItem, setTheme,
+    ownedFrames, ownedNameEffects, equippedFrame, equippedNameEffect, equipCosmetic } = usePro();
   const [busy, setBusy] = useState<string | null>(null);
 
-  const buy = async (item: 'freeze' | 'theme', id?: string) => {
+  const buy = async (item: 'freeze' | 'theme' | 'frame' | 'nameEffect' | 'proWeek', id?: string) => {
     setBusy(id ?? item);
-    const result = await buyItem(item, id);
+    const result = await buyItem(item, item === 'theme' ? { themeId: id } : { cosmeticId: id });
     setBusy(null);
     if (!result.ok) Alert.alert('Could not buy', result.message ?? 'Try again.');
     else if (item === 'theme' && id) setTheme(id);
   };
 
-  const confirmBuy = (label: string, price: number, item: 'freeze' | 'theme', id?: string) => {
+  const confirmBuy = (label: string, price: number, item: 'freeze' | 'theme' | 'frame' | 'nameEffect' | 'proWeek', id?: string) => {
     if (coins < price) {
       Alert.alert('Not enough coins', `${label} costs ${price} coins. You have ${coins}.`);
       return;
@@ -109,6 +111,95 @@ export const ShopScreen: React.FC<Props> = ({ visible, onClose }) => {
             );
           })}
 
+          <Text style={styles.section}>PROFILE FRAMES</Text>
+          <Text style={styles.sectionSub}>A ring around your avatar, visible to friends.</Text>
+          {FRAMES.map((f) => {
+            const owned = ownedFrames.includes(f.id);
+            const active = equippedFrame === f.id;
+            return (
+              <TouchableOpacity
+                key={f.id}
+                style={[styles.itemCard, active && { borderColor: f.ring }]}
+                onPress={() =>
+                  owned ? equipCosmetic('frame', active ? null : f.id) : confirmBuy(`the ${f.name} frame`, f.price, 'frame', f.id)
+                }
+                activeOpacity={0.85}
+                disabled={busy !== null}
+              >
+                <View style={[styles.framePreview, { borderColor: f.ring }, f.glow ? { shadowColor: f.glow, shadowOpacity: 0.9, shadowRadius: 8, elevation: 6 } : null]} />
+                <View style={styles.itemBody}>
+                  <Text style={styles.itemName}>{f.name}</Text>
+                  <Text style={styles.itemDesc}>{f.desc}</Text>
+                </View>
+                {busy === f.id ? (
+                  <ActivityIndicator color={palette.accent} size="small" />
+                ) : active ? (
+                  <Text style={[styles.itemOwned, { color: f.ring }]}>WORN</Text>
+                ) : owned ? (
+                  <Text style={styles.itemOwned}>WEAR</Text>
+                ) : (
+                  <Text style={styles.itemPrice}>◉ {f.price}</Text>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+
+          <Text style={styles.section}>NAME EFFECTS</Text>
+          <Text style={styles.sectionSub}>Colours your name wherever it appears.</Text>
+          {NAME_EFFECTS.map((n) => {
+            const owned = ownedNameEffects.includes(n.id);
+            const active = equippedNameEffect === n.id;
+            return (
+              <TouchableOpacity
+                key={n.id}
+                style={[styles.itemCard, active && { borderColor: n.color }]}
+                onPress={() =>
+                  owned ? equipCosmetic('nameEffect', active ? null : n.id) : confirmBuy(`the ${n.name} name`, n.price, 'nameEffect', n.id)
+                }
+                activeOpacity={0.85}
+                disabled={busy !== null}
+              >
+                <Text style={[styles.namePreview, { color: n.color }, glowStyle(n.glow)]}>Aa</Text>
+                <View style={styles.itemBody}>
+                  <Text style={styles.itemName}>{n.name}</Text>
+                  <Text style={styles.itemDesc}>{n.desc}</Text>
+                </View>
+                {busy === n.id ? (
+                  <ActivityIndicator color={palette.accent} size="small" />
+                ) : active ? (
+                  <Text style={[styles.itemOwned, { color: n.color }]}>WORN</Text>
+                ) : owned ? (
+                  <Text style={styles.itemOwned}>WEAR</Text>
+                ) : (
+                  <Text style={styles.itemPrice}>◉ {n.price}</Text>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+
+          {!isPro && (
+            <>
+              <Text style={styles.section}>MEMBERSHIP</Text>
+              <TouchableOpacity
+                style={styles.itemCard}
+                onPress={() => confirmBuy('7 days of IronMind Pro', PRO_WEEK_PRICE, 'proWeek')}
+                activeOpacity={0.85}
+                disabled={busy !== null}
+              >
+                <Text style={styles.itemGlyph}>★</Text>
+                <View style={styles.itemBody}>
+                  <Text style={styles.itemName}>PRO — 7 DAYS</Text>
+                  <Text style={styles.itemDesc}>Every Pro feature for a week. Once a month.</Text>
+                </View>
+                {busy === 'proWeek' ? (
+                  <ActivityIndicator color={palette.accent} size="small" />
+                ) : (
+                  <Text style={styles.itemPrice}>◉ {PRO_WEEK_PRICE}</Text>
+                )}
+              </TouchableOpacity>
+            </>
+          )}
+
           <Text style={styles.footnote}>
             Coins are earned by winning challenges and duels. Duels are staked in coins — the
             winner takes the whole pot.
@@ -160,6 +251,10 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   itemDesc: { color: c.textTertiary, fontSize: 11, marginTop: 3, lineHeight: 15 },
   itemPrice: { color: c.accent, fontSize: 14, fontWeight: '900' },
   itemOwned: { color: c.textSecondary, fontSize: 10, fontWeight: '900', letterSpacing: 0.6 },
+
+  sectionSub: { color: c.textFaint, fontSize: 11, marginTop: -8, marginBottom: 12, lineHeight: 15 },
+  framePreview: { width: 34, height: 34, borderRadius: 17, borderWidth: 3 },
+  namePreview: { width: 34, fontSize: 18, fontWeight: '900', textAlign: 'center' },
 
   swatches: { flexDirection: 'row', gap: 3, width: 34 },
   swatch: { width: 8, height: 22, borderRadius: 3 },

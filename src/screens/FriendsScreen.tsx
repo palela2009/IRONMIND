@@ -9,6 +9,7 @@ import { useAuth } from '../context/AuthContext';
 import { TrainingState, UserStats } from '../types/training';
 import { rankForLevel, PODIUM } from '../constants/ranks';
 import { Badge, topBadgeFor } from '../constants/badges';
+import { frameById, nameEffectById, glowStyle } from '../constants/cosmetics';
 import { usePro } from '../context/ProContext';
 
 const DUEL_STAKE = 50;
@@ -31,6 +32,8 @@ interface Entry {
   level: number;
   isMe: boolean;
   badge: Badge | null;
+  frame: string | null;
+  nameEffect: string | null;
 }
 
 const abbrFor = (name: string): string => {
@@ -46,18 +49,29 @@ const colorFor = (uid: string): string => {
   return PALETTE[hash % PALETTE.length];
 };
 
-const Avatar: React.FC<{ entry: { uid: string; displayName: string; photoURL: string | null }; size: number; ring?: string }> = ({
+const Avatar: React.FC<{ entry: { uid: string; displayName: string; photoURL: string | null; frame?: string | null }; size: number; ring?: string }> = ({
   entry,
   size,
   ring,
 }) => {  const styles = useThemedStyles(makeStyles);
 
   const [failed, setFailed] = useState(false);
+  // An equipped frame outranks the podium metal ring: the metal says where you placed
+  // today, the frame is something the user chose and paid for.
+  const frame = frameById(entry.frame);
   const boxStyle = {
     width: size,
     height: size,
     borderRadius: size / 3.2,
-    ...(ring ? { borderWidth: 2, borderColor: ring } : {}),
+    ...(frame
+      ? {
+          borderWidth: 3,
+          borderColor: frame.ring,
+          ...(frame.glow ? { shadowColor: frame.glow, shadowOpacity: 0.9, shadowRadius: 8, elevation: 6 } : {}),
+        }
+      : ring
+      ? { borderWidth: 2, borderColor: ring }
+      : {}),
   };
 
   if (entry.photoURL && !failed) {
@@ -91,7 +105,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
   const palette = useTheme();
 
   const { fbUser } = useAuth();
-  const { isPro, isOwner, coins } = usePro();
+  const { isPro, isOwner, coins, equippedFrame, equippedNameEffect } = usePro();
   const { code, friends, requests, loading, error, addByCode, acceptRequest, rejectRequest, removeFriend, refresh: refreshFriends } = useFriends();
   const { duels, challenge, respond, cancel: cancelDuel, error: duelError, refresh: refreshDuels } = useDuels();
   const [refreshing, setRefreshing] = useState(false);
@@ -124,6 +138,8 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
       level: stats.level,
       isMe: true,
       badge: topBadgeFor(stats, isPro, isOwner),
+      frame: equippedFrame,
+      nameEffect: equippedNameEffect,
     };
 
     const others: Entry[] = friends.map((f) => ({
@@ -147,6 +163,8 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
         f.isPro,
         f.isOwner
       ),
+      frame: f.frame,
+      nameEffect: f.nameEffect,
     }));
 
     return [me, ...others].sort(
@@ -155,7 +173,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
         b.level - a.level ||
         b.totalChallenges - a.totalChallenges
     );
-  }, [fbUser?.uid, fbUser?.displayName, fbUser?.email, fbUser?.photoURL, stats, friends, isPro, isOwner]);
+  }, [fbUser?.uid, fbUser?.displayName, fbUser?.email, fbUser?.photoURL, stats, friends, isPro, isOwner, equippedFrame, equippedNameEffect]);
 
   const handleShare = async () => {
     if (!code) return;
@@ -486,9 +504,21 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
                     {entry.badge && (
                       <Text style={[styles.eliteGlyph, { color: entry.badge.color }]}>{entry.badge.glyph}</Text>
                     )}
-                    <Text style={[styles.podiumName, entry.isMe && styles.podiumNameMe]} numberOfLines={1}>
-                      {entry.isMe ? 'YOU' : entry.displayName}
-                    </Text>
+                    {(() => {
+                      const fx = nameEffectById(entry.nameEffect);
+                      return (
+                        <Text
+                          style={[
+                            styles.podiumName,
+                            entry.isMe && styles.podiumNameMe,
+                            fx ? [{ color: fx.color }, glowStyle(fx.glow)] : null,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {entry.isMe ? 'YOU' : entry.displayName}
+                        </Text>
+                      );
+                    })()}
                   </View>
                   <RankBadge level={entry.level} />
                   <View style={[styles.podiumBlock, { backgroundColor: metal.color, height: first ? 64 : 44 }]}>
@@ -515,9 +545,17 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
                   {entry.badge && (
                     <Text style={[styles.eliteGlyph, { color: entry.badge.color }]}>{entry.badge.glyph}</Text>
                   )}
-                  <Text style={styles.friendName} numberOfLines={1}>
-                    {entry.isMe ? 'YOU' : entry.displayName}
-                  </Text>
+                  {(() => {
+                    const fx = nameEffectById(entry.nameEffect);
+                    return (
+                      <Text
+                        style={[styles.friendName, fx ? [{ color: fx.color }, glowStyle(fx.glow)] : null]}
+                        numberOfLines={1}
+                      >
+                        {entry.isMe ? 'YOU' : entry.displayName}
+                      </Text>
+                    );
+                  })()}
                 </View>
                 <View style={styles.friendMeta}>
                   <RankBadge level={entry.level} />
