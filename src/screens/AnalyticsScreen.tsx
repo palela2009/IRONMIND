@@ -71,6 +71,31 @@ export const AnalyticsScreen: React.FC<Props> = ({ visible, onClose, history, st
     };
   }, [history, days]);
 
+  // Daily averages rather than raw challenges: one unusually fast escape should not read as
+  // improvement, and grouping by day makes the comparison like-for-like against the
+  // screen-time chart above.
+  const reaction = useMemo(() => {
+    const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+    const wins = history.filter((h) => h.wasSuccessful && h.elapsedTime > 0 && h.timestamp >= cutoff);
+
+    const byDay = new Map<string, number[]>();
+    for (const h of wins) {
+      const key = new Date(h.timestamp).toISOString().slice(0, 10);
+      byDay.set(key, [...(byDay.get(key) ?? []), h.elapsedTime]);
+    }
+
+    const daily = [...byDay.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, times]) => ({ date, avg: times.reduce((x, y) => x + y, 0) / times.length }));
+
+    const values = daily.map((d) => d.avg);
+    const best = wins.length > 0 ? Math.min(...wins.map((h) => h.elapsedTime)) : 0;
+    const firstAvg = values.length > 0 ? values[0] : 0;
+    const lastAvg = values.length > 0 ? values[values.length - 1] : 0;
+
+    return { daily, best, count: wins.length, firstAvg, lastAvg, trend: trendFor(values) };
+  }, [history, days]);
+
   const maxDay = Math.max(...window.map((d) => d.total), 1);
   const maxApp = topApps.length > 0 ? topApps[0].minutes : 1;
 
@@ -198,6 +223,84 @@ export const AnalyticsScreen: React.FC<Props> = ({ visible, onClose, history, st
                       <Text style={styles.appMins}>{formatMinutes(a.minutes)}</Text>
                     </View>
                   ))
+                )}
+              </View>
+
+              <Text style={styles.section}>REACTION TREND</Text>
+              <View style={styles.card}>
+                {reaction.count < 2 ? (
+                  <Text style={styles.cardSub}>
+                    Win a few challenges and your escape times will show up here.
+                  </Text>
+                ) : (
+                  <>
+                    <View style={styles.heroRow}>
+                      <Text style={styles.hero}>{reaction.lastAvg.toFixed(2)}s</Text>
+                      {reaction.trend.hasData && (
+                        <View
+                          style={[
+                            styles.trendPill,
+                            { backgroundColor: reaction.trend.change <= 0 ? palette.accentMuted : palette.dangerMuted },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.trendText,
+                              { color: reaction.trend.change <= 0 ? palette.accent : palette.danger },
+                            ]}
+                          >
+                            {reaction.trend.change <= 0 ? '▼' : '▲'} {Math.abs(Math.round(reaction.trend.change))}%
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={styles.cardSub}>
+                      {reaction.trend.hasData
+                        ? reaction.trend.change <= 0
+                          ? `You are ${Math.abs(reaction.firstAvg - reaction.lastAvg).toFixed(2)}s faster than at the start of this period.`
+                          : `You are ${Math.abs(reaction.lastAvg - reaction.firstAvg).toFixed(2)}s slower than at the start of this period.`
+                        : 'A few more days of challenges and a trend will appear.'}
+                    </Text>
+
+                    <View style={styles.chart}>
+                      {reaction.daily.map((d) => {
+                        const worst = Math.max(...reaction.daily.map((x) => x.avg), 0.01);
+                        return (
+                          <View key={d.date} style={styles.chartCol}>
+                            <View style={styles.chartBarTrack}>
+                              <View
+                                style={[
+                                  styles.chartBar,
+                                  {
+                                    height: `${Math.max((d.avg / worst) * 100, 3)}%`,
+                                    backgroundColor: d.avg <= reaction.firstAvg ? palette.accent : palette.danger,
+                                  },
+                                ]}
+                              />
+                            </View>
+                            <Text style={styles.chartLabel}>{dayLabel(d.date)}</Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+
+                    <View style={styles.statRow}>
+                      <View style={styles.statCell}>
+                        <Text style={[styles.statVal, styles.accentVal]}>{reaction.best.toFixed(2)}s</Text>
+                        <Text style={styles.statLabel}>FASTEST</Text>
+                      </View>
+                      <View style={styles.statDivider} />
+                      <View style={styles.statCell}>
+                        <Text style={styles.statVal}>{reaction.firstAvg.toFixed(2)}s</Text>
+                        <Text style={styles.statLabel}>WHERE YOU STARTED</Text>
+                      </View>
+                      <View style={styles.statDivider} />
+                      <View style={styles.statCell}>
+                        <Text style={styles.statVal}>{reaction.count}</Text>
+                        <Text style={styles.statLabel}>ESCAPES</Text>
+                      </View>
+                    </View>
+                  </>
                 )}
               </View>
 
