@@ -12,14 +12,24 @@ const { width } = Dimensions.get('window');
 
 // Nearly the full width of the screen. At thumbnail size a face is decoration; at this size
 // the photo is the subject of the card and the text sits underneath it.
+//
+// The frame is portrait and the images are contained rather than cropped. Both photos are
+// tall (ratios of about 2.1 and 1.65) and they differ from each other, so any single crop
+// that filled a frame would cut one of the two faces off - which is exactly what a square
+// cover crop did. Containing them wastes a little space at the edges and guarantees the
+// whole photo survives, whatever a future photo's shape turns out to be.
+// Each photo gets a frame shaped like itself, so containing it leaves almost no empty
+// border. A single shared height would either crop the taller photo or strand it inside
+// wide bars, since the two differ a lot in proportion.
 const PHOTO_W = width - spacing.xl * 2;
-const PHOTO_H = Math.round(PHOTO_W * 0.92);
+const frameHeight = (ratio: number) => Math.round(PHOTO_W * ratio);
 
 const CREATORS = [
   {
     name: 'Alexander Palelashvili',
     role: 'WEB & MOBILE DEVELOPER',
     photo: require('../../assets/alexander.jpg'),
+    ratio: 1.9,
     lines: [
       'Built IRONMIND end to end — the app you are holding, the Android service that notices the moment you open a distraction, and the backend behind streaks, duels and friends.',
       'Works across web and mobile.',
@@ -29,6 +39,7 @@ const CREATORS = [
     name: 'Luka Berikelashvili',
     role: 'MARKETING & STRATEGY',
     photo: require('../../assets/luka.jpg'),
+    ratio: 1.65,
     lines: [
       'Shapes how IRONMIND reaches people and what it says when it gets there — the positioning, the words, and the reason someone gives it a try at all.',
       'A national AI olympiad competitor, and the more confident half of the pair.',
@@ -80,7 +91,11 @@ export const HistoryScreen: React.FC<Props> = ({ visible, onClose }) => {
           {CREATORS.map((creator, i) => (
             <View key={creator.name} style={styles.person}>
               <View style={styles.photoWrap}>
-                <Image source={creator.photo} style={styles.photo} resizeMode="cover" />
+                <Image
+                  source={creator.photo}
+                  style={[styles.photo, { height: frameHeight(creator.ratio) }]}
+                  resizeMode="contain"
+                />
                 <View style={styles.photoBadge}>
                   <Text style={styles.photoBadgeText}>0{i + 1}</Text>
                 </View>
@@ -189,7 +204,6 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   photoWrap: { marginBottom: spacing.lg },
   photo: {
     width: PHOTO_W,
-    height: PHOTO_H,
     borderRadius: radius.lg,
     backgroundColor: c.surfaceRaised,
     borderWidth: 2,
