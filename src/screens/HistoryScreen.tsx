@@ -18,18 +18,21 @@ const { width } = Dimensions.get('window');
 // that filled a frame would cut one of the two faces off - which is exactly what a square
 // cover crop did. Containing them wastes a little space at the edges and guarantees the
 // whole photo survives, whatever a future photo's shape turns out to be.
-// Each photo gets a frame shaped like itself, so containing it leaves almost no empty
-// border. A single shared height would either crop the taller photo or strand it inside
-// wide bars, since the two differ a lot in proportion.
+// Each photo is rendered at its true aspect ratio and full width, then masked from the top
+// by whatever fraction of it is dead space. That crops rather than scales, so nothing is
+// squashed and no empty bars appear at the sides - the alternative, forcing a shared frame
+// height, either distorted a photo or stranded the taller one inside wide margins.
 const PHOTO_W = width - spacing.xl * 2;
-const frameHeight = (ratio: number) => Math.round(PHOTO_W * ratio);
+const fullHeight = (ratio: number) => Math.round(PHOTO_W * ratio);
+const visibleHeight = (ratio: number, cropTop: number) => Math.round(fullHeight(ratio) * (1 - cropTop));
 
 const CREATORS = [
   {
     name: 'Alexander Palelashvili',
     role: 'WEB & MOBILE DEVELOPER',
     photo: require('../../assets/alexander.jpg'),
-    ratio: 1.65,
+    ratio: 2.09,
+    cropTop: 0.3,
     lines: [
       'Built IRONMIND end to end — the app you are holding, the Android service that notices the moment you open a distraction, and the backend behind streaks, duels and friends.',
       'Works across web and mobile.',
@@ -40,6 +43,7 @@ const CREATORS = [
     role: 'MARKETING & STRATEGY',
     photo: require('../../assets/luka.jpg'),
     ratio: 1.65,
+    cropTop: 0,
     lines: [
       'Shapes how IRONMIND reaches people and what it says when it gets there — the positioning, the words, and the reason someone gives it a try at all.',
       'A national AI olympiad competitor, and the more confident half of the pair.',
@@ -90,11 +94,19 @@ export const HistoryScreen: React.FC<Props> = ({ visible, onClose }) => {
 
           {CREATORS.map((creator, i) => (
             <View key={creator.name} style={styles.person}>
-              <View style={styles.photoWrap}>
+              <View
+                style={[styles.photoWrap, { height: visibleHeight(creator.ratio, creator.cropTop) }]}
+              >
                 <Image
                   source={creator.photo}
-                  style={[styles.photo, { height: frameHeight(creator.ratio) }]}
-                  resizeMode="contain"
+                  style={[
+                    styles.photo,
+                    {
+                      height: fullHeight(creator.ratio),
+                      marginTop: -Math.round(fullHeight(creator.ratio) * creator.cropTop),
+                    },
+                  ]}
+                  resizeMode="cover"
                 />
                 <View style={styles.photoBadge}>
                   <Text style={styles.photoBadgeText}>0{i + 1}</Text>
@@ -201,14 +213,15 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   dividerText: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 1.6 },
 
   person: { marginBottom: spacing.xxl },
-  photoWrap: { marginBottom: spacing.lg },
-  photo: {
-    width: PHOTO_W,
+  photoWrap: {
+    marginBottom: spacing.lg,
     borderRadius: radius.lg,
-    backgroundColor: c.surfaceRaised,
+    overflow: 'hidden',
     borderWidth: 2,
     borderColor: c.border,
+    backgroundColor: c.surfaceRaised,
   },
+  photo: { width: PHOTO_W },
   photoBadge: {
     position: 'absolute',
     left: spacing.md,
