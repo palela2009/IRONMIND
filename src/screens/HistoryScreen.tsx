@@ -29,7 +29,7 @@ const CREATORS = [
     name: 'Alexander Palelashvili',
     role: 'WEB & MOBILE DEVELOPER',
     photo: require('../../assets/alexander.jpg'),
-    ratio: 1.9,
+    ratio: 1.65,
     lines: [
       'Built IRONMIND end to end — the app you are holding, the Android service that notices the moment you open a distraction, and the backend behind streaks, duels and friends.',
       'Works across web and mobile.',
