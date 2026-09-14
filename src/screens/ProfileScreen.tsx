@@ -596,12 +596,12 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
         )}
       </TouchableOpacity>
 
-      <ProScreen visible={showPro} onClose={() => setShowPro(false)} />
-
-      <TouchableOpacity style={styles.historyRow} onPress={() => setShowHistory(true)} activeOpacity={0.85}>
-        <Text style={styles.historyText}>THE STORY OF IRONMIND</Text>
-        <Text style={styles.historyArrow}>→</Text>
+      <TouchableOpacity style={styles.settingRow} onPress={() => setShowHistory(true)} activeOpacity={0.8}>
+        <Text style={styles.settingLabel}>THE STORY OF IRONMIND</Text>
+        <Text style={styles.settingValue}>›</Text>
       </TouchableOpacity>
+
+      <ProScreen visible={showPro} onClose={() => setShowPro(false)} />
 
       <HistoryScreen visible={showHistory} onClose={() => setShowHistory(false)} />
 
@@ -616,16 +616,6 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
 };
 
 const makeStyles = (c: Palette) => StyleSheet.create({
-  historyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    paddingVertical: spacing.xl,
-    marginTop: spacing.lg,
-  },
-  historyText: { color: c.textFaint, fontSize: 11, fontWeight: '900', letterSpacing: 1 },
-  historyArrow: { color: c.textFaint, fontSize: 12, fontWeight: '900' },
 
   analyticsRow: {
     flexDirection: 'row',
