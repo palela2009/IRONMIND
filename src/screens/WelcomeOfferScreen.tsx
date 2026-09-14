@@ -167,6 +167,24 @@ export const WelcomeOfferScreen: React.FC = () => {
             );
           })}
 
+          {/* Given real weight on the page. Someone about to decline is the person most
+              likely to assume the free app is a crippled demo, and a user who leaves
+              believing that does not come back. */}
+          {stage === 'discount' && (
+            <View style={styles.reassureCard}>
+              <Text style={styles.reassureTitle}>FREE IS A REAL APP</Text>
+              <Text style={styles.reassureBody}>
+                Challenges, streaks, daily limits, friends, duels and your stats all work
+                without Pro. You can break the habit on the free tier — and most people will.
+              </Text>
+              <Text style={styles.reassureBody}>
+                Pro is for going further: streak freezes so one slip does not erase weeks,
+                deeper analytics, exclusive themes and badges.{' '}
+                <Text style={styles.reassureEmphasis}>Better results, not the only results.</Text>
+              </Text>
+            </View>
+          )}
+
           {stage === 'discount' && (
             <TouchableOpacity style={styles.declineBtn} onPress={decline} activeOpacity={0.8}>
               <Text style={styles.declineText}>NO THANKS, CONTINUE FREE</Text>
@@ -300,6 +318,19 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     ...cardShadow,
   },
   trialBtnText: { color: c.accentContrast, fontSize: 14, fontWeight: '900', letterSpacing: 0.8 },
+
+  reassureCard: {
+    backgroundColor: c.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: c.border,
+    padding: spacing.lg,
+    marginTop: spacing.lg,
+    gap: spacing.md,
+  },
+  reassureTitle: { color: c.accent, fontSize: 11, fontWeight: '900', letterSpacing: 1.2 },
+  reassureBody: { color: c.textSecondary, fontSize: 13, lineHeight: 20 },
+  reassureEmphasis: { color: c.textPrimary, fontWeight: '800' },
 
   declineBtn: { alignItems: 'center', paddingVertical: spacing.lg, marginTop: spacing.sm },
   declineText: { color: c.textTertiary, fontSize: 12, fontWeight: '900', letterSpacing: 0.5 },

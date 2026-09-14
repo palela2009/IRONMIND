@@ -5,6 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { UserStats, ChallengeItem } from '../types/training';
 import { AnalyticsScreen } from './AnalyticsScreen';
+import { HistoryScreen } from './HistoryScreen';
 import { useAuth } from '../context/AuthContext';
 import { usePro } from '../context/ProContext';
 import { ProScreen } from './ProScreen';
@@ -66,6 +67,7 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
   const { isPro, isOwner, streakFreezes } = usePro();
   const [showPro, setShowPro] = useState<boolean>(false);
   const [showAnalytics, setShowAnalytics] = useState<boolean>(false);
+  const [showHistory, setShowHistory] = useState<boolean>(false);
   const [monitoredApps, setMonitoredApps] = useState<string[]>([]);
 
   const [difficulty, setDifficulty] = useState<DifficultyLevel>(DEFAULT_DIFFICULTY);
@@ -596,6 +598,13 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
 
       <ProScreen visible={showPro} onClose={() => setShowPro(false)} />
 
+      <TouchableOpacity style={styles.historyRow} onPress={() => setShowHistory(true)} activeOpacity={0.85}>
+        <Text style={styles.historyText}>THE STORY OF IRONMIND</Text>
+        <Text style={styles.historyArrow}>→</Text>
+      </TouchableOpacity>
+
+      <HistoryScreen visible={showHistory} onClose={() => setShowHistory(false)} />
+
       <AnalyticsScreen
         visible={showAnalytics}
         onClose={() => setShowAnalytics(false)}
@@ -607,6 +616,17 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
 };
 
 const makeStyles = (c: Palette) => StyleSheet.create({
+  historyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.xl,
+    marginTop: spacing.lg,
+  },
+  historyText: { color: c.textFaint, fontSize: 11, fontWeight: '900', letterSpacing: 1 },
+  historyArrow: { color: c.textFaint, fontSize: 12, fontWeight: '900' },
+
   analyticsRow: {
     flexDirection: 'row',
     alignItems: 'center',
