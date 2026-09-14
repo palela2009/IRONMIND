@@ -5,6 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { ProProvider, usePro } from './src/context/ProContext';
+import { initCrashReporting, setCrashUser } from './src/config/sentry';
 import { StreakReclaimModal } from './src/components/StreakReclaimModal';
 import { StreakSavedOverlay } from './src/components/StreakSavedOverlay';
 import { reportActiveDuels } from './src/hooks/useDuels';
@@ -17,6 +18,8 @@ import { radius, spacing, cardShadow, Palette } from './src/theme';
 import { ThemeProvider, useThemedStyles, useTheme } from './src/context/ThemeContext';
 import { authedFetch } from './src/utils/authFetch';
 import { API_BASE_URL } from './src/config/api';
+
+initCrashReporting();
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -103,6 +106,10 @@ function RootNavigator() {
         photoURL: fbUser.photoURL,
       }),
     }).catch(() => {});
+  }, [fbUser?.uid]);
+
+  useEffect(() => {
+    setCrashUser(fbUser?.uid ?? null);
   }, [fbUser?.uid]);
 
   useEffect(() => {

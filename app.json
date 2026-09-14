@@ -44,12 +44,14 @@
           "androidAppId": "ca-app-pub-3940256099942544~3347511713",
           "iosAppId": "ca-app-pub-3940256099942544~1458002511"
         }
-      ]
+      ],
+      "@sentry/react-native"
     ],
     "extra": {
       "eas": {
         "projectId": "e715ee5c-e8ac-4b88-aa3e-46f1bcf549f7"
-      }
+      },
+      "sentryDsn": ""
     },
     "owner": "palela"
   }
