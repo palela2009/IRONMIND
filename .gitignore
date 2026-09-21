@@ -46,3 +46,8 @@ android/app/build/
 android/.gradle/
 android/local.properties
 android/app/.cxx/
+
+# Never commit environment files
+.env
+.env.*
+!.env.example
