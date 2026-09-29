@@ -93,6 +93,21 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
     // thing that decides whether another one can. JS was inferring "challenges today" from
     // its own history of *resolved* results instead, so a user who had exhausted the cap saw
     // a screen claiming they had plenty left and no explanation for the silence.
+    // 0 clears the pause. Stored natively so the service honours it even when the JS side is
+    // not running, which is most of the time.
+    @ReactMethod
+    fun setPausedUntil(untilMs: Double) {
+        reactContext.getSharedPreferences(UsageMonitorService.PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putLong("pausedUntil", untilMs.toLong()).apply()
+    }
+
+    @ReactMethod
+    fun getPausedUntil(promise: Promise) {
+        val v = reactContext.getSharedPreferences(UsageMonitorService.PREFS_NAME, Context.MODE_PRIVATE)
+            .getLong("pausedUntil", 0L)
+        promise.resolve(v.toDouble())
+    }
+
     @ReactMethod
     fun getChallengeCountToday(promise: Promise) {
         try {

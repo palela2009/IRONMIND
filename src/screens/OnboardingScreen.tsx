@@ -281,6 +281,16 @@ export const OnboardingScreen: React.FC<OnboardingProps> = ({ onComplete }) => {
                 </TouchableOpacity>
               );
             })}
+
+            <View style={styles.pauseNote}>
+              <Text style={styles.pauseNoteTitle}>NEED A BREAK? YOU CAN PAUSE</Text>
+              <Text style={styles.pauseNoteBody}>
+                Exam, work, or something important coming up? Go to{' '}
+                <Text style={styles.pauseNoteStrong}>Profile → Pause monitoring</Text> and choose 1 hour,
+                4 hours or until tomorrow. It turns back on by itself, or tap Resume monitoring to
+                bring it back early.
+              </Text>
+            </View>
           </>
         )}
 
@@ -409,6 +419,20 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   radio: { width: 20, height: 20, borderRadius: 10, borderWidth: 1.5, borderColor: c.border, justifyContent: 'center', alignItems: 'center' },
   radioOn: { borderColor: c.accent },
   radioDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: c.accent },
+
+  pauseNote: {
+    marginTop: spacing.lg,
+    padding: spacing.lg,
+    borderRadius: radius.md,
+    backgroundColor: c.surface,
+    borderWidth: 1,
+    borderColor: c.border,
+    borderLeftWidth: 3,
+    borderLeftColor: c.accent,
+  },
+  pauseNoteTitle: { color: c.accent, fontSize: 10, fontWeight: '900', letterSpacing: 1, marginBottom: spacing.sm },
+  pauseNoteBody: { color: c.textSecondary, fontSize: 12, lineHeight: 18 },
+  pauseNoteStrong: { color: c.textPrimary, fontWeight: '800' },
 
   impactCard: {
     backgroundColor: c.surface,

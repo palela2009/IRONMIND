@@ -162,6 +162,15 @@ class UsageMonitorService : Service() {
     }
 
     private fun checkForegroundApp() {
+        // Paused: the service keeps running and simply fires nothing. Stopping it instead would
+        // rely on it being restarted later, which some OEMs refuse, and resuming would need a
+        // timer. Checking a timestamp every poll makes auto-resume free and restart-proof.
+        val pausedUntil = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getLong("pausedUntil", 0L)
+        if (System.currentTimeMillis() < pausedUntil) {
+            activeChallenge = null
+            return
+        }
+
         val foreground = getForegroundPackage() ?: return
         lastKnownForeground = foreground
         val now = System.currentTimeMillis()

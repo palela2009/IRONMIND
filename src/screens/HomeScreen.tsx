@@ -5,6 +5,7 @@ import { UserStats, ChallengeItem, TrainingState } from '../types/training';
 import { useAuth } from '../context/AuthContext';
 import { usePro } from '../context/ProContext';
 import { ShopScreen } from './ShopScreen';
+import { usePause, resumeMonitoring } from '../hooks/usePause';
 import { XP_PER_LEVEL } from '../constants/leveling';
 import { spacing, radius, type, cardShadow, glowFor, Palette } from '../theme';
 
@@ -90,6 +91,7 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallenge
   const { coins } = usePro();
   const [showShop, setShowShop] = useState<boolean>(false);
   const firedRemaining = useFiredRemaining();
+  const { paused, remaining } = usePause();
 
   const { fbUser } = useAuth();
 
@@ -165,6 +167,16 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallenge
               <Text style={styles.xpNext}>NEXT · LV {stats.level + 1}</Text>
             </View>
           </View>
+
+          {paused && (
+            <TouchableOpacity style={styles.pausedBanner} onPress={resumeMonitoring} activeOpacity={0.85}>
+              <View style={styles.pausedBody}>
+                <Text style={styles.pausedTitle}>MONITORING PAUSED</Text>
+                <Text style={styles.pausedSub}>No challenges will fire · resumes in {remaining}</Text>
+              </View>
+              <Text style={styles.pausedAction}>RESUME</Text>
+            </TouchableOpacity>
+          )}
 
           <View style={styles.todayCard}>
             <View style={styles.todayLeft}>
@@ -353,6 +365,23 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   quickLabel: { color: c.textTertiary, fontSize: 9, fontWeight: '800', letterSpacing: 0.5, marginTop: spacing.xs },
   accentVal: { color: c.accent },
   todayCapped: { color: c.danger },
+
+  pausedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.lg,
+    padding: spacing.lg,
+    borderRadius: radius.md,
+    backgroundColor: c.dangerMuted,
+    borderWidth: 1,
+    borderColor: c.danger,
+  },
+  pausedBody: { flex: 1 },
+  pausedTitle: { color: c.danger, fontSize: 12, fontWeight: '900', letterSpacing: 0.8 },
+  pausedSub: { color: c.textSecondary, fontSize: 11, marginTop: 3 },
+  pausedAction: { color: c.danger, fontSize: 11, fontWeight: '900', letterSpacing: 0.6 },
 
   shopCell: {
     flex: 1,

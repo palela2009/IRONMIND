@@ -6,6 +6,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { UserStats, ChallengeItem } from '../types/training';
 import { AnalyticsScreen } from './AnalyticsScreen';
 import { HistoryScreen } from './HistoryScreen';
+import { usePause, pauseMonitoring, resumeMonitoring, PAUSE_OPTIONS } from '../hooks/usePause';
 import { useAuth } from '../context/AuthContext';
 import { usePro } from '../context/ProContext';
 import { ProScreen } from './ProScreen';
@@ -68,6 +69,8 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
   const [showPro, setShowPro] = useState<boolean>(false);
   const [showAnalytics, setShowAnalytics] = useState<boolean>(false);
   const [showHistory, setShowHistory] = useState<boolean>(false);
+  const { paused, remaining } = usePause();
+  const [choosingPause, setChoosingPause] = useState<boolean>(false);
   const [monitoredApps, setMonitoredApps] = useState<string[]>([]);
 
   const [difficulty, setDifficulty] = useState<DifficultyLevel>(DEFAULT_DIFFICULTY);
@@ -469,6 +472,46 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
 
       <Text style={styles.settingsSection}>SETTINGS</Text>
 
+      {paused ? (
+        <TouchableOpacity style={[styles.settingRow, styles.pauseRowActive]} onPress={resumeMonitoring} activeOpacity={0.8}>
+          <View>
+            <Text style={styles.pauseActiveLabel}>RESUME MONITORING</Text>
+            <Text style={styles.pauseSub}>Paused · resumes on its own in {remaining}</Text>
+          </View>
+          <Text style={styles.pauseActiveLabel}>▶</Text>
+        </TouchableOpacity>
+      ) : (
+        <TouchableOpacity
+          style={styles.settingRow}
+          onPress={() => setChoosingPause((v) => !v)}
+          activeOpacity={0.8}
+        >
+          <View>
+            <Text style={styles.settingLabel}>PAUSE MONITORING</Text>
+            <Text style={styles.pauseSub}>For an exam, work, or anything important</Text>
+          </View>
+          <Text style={styles.settingValue}>{choosingPause ? '×' : '❚❚'}</Text>
+        </TouchableOpacity>
+      )}
+
+      {!paused && choosingPause && (
+        <View style={styles.pauseChoices}>
+          {PAUSE_OPTIONS.map((o) => (
+            <TouchableOpacity
+              key={o.id}
+              style={styles.pauseChip}
+              onPress={async () => {
+                await pauseMonitoring(o.id);
+                setChoosingPause(false);
+              }}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.pauseChipText}>{o.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
       <TouchableOpacity style={styles.settingRow} onPress={openDifficultyEditor} activeOpacity={0.7}>
         <Text style={styles.settingLabel}>CHALLENGE WINDOW</Text>
         <Text style={styles.settingValue}>
@@ -616,6 +659,21 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
 };
 
 const makeStyles = (c: Palette) => StyleSheet.create({
+  pauseRowActive: { backgroundColor: c.accentMuted, borderWidth: 1, borderColor: c.accent },
+  pauseActiveLabel: { color: c.accent, fontSize: 13, fontWeight: '900' },
+  pauseSub: { color: c.textTertiary, fontSize: 11, marginTop: 3 },
+  pauseChoices: { flexDirection: 'row', gap: spacing.sm, marginHorizontal: spacing.lg, marginBottom: spacing.md },
+  pauseChip: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    borderRadius: radius.sm,
+    backgroundColor: c.surfaceRaised,
+    borderWidth: 1,
+    borderColor: c.border,
+  },
+  pauseChipText: { color: c.textPrimary, fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
+
 
   analyticsRow: {
     flexDirection: 'row',
