@@ -181,8 +181,15 @@ class UsageMonitorService : Service() {
                 // Only resolve once they actually leave — whether that's within the window
                 // (success) or well after it expired (still a fail, but showing the real
                 // time it took them to close it instead of a meaningless placeholder).
-                val success = elapsedMs < challengeWindowMs
-                emitChallengeResult(challenge.appName, elapsedMs / 1000.0, success)
+                //
+                // The exit is timed from Android's own event timestamp, not from when this poll
+                // happened to notice. Polling every two seconds added up to two seconds to every
+                // recorded time, which made sub-second achievements depend on luck and could fail
+                // an exit that was genuinely inside the window.
+                val leftAt = leaveTimeAfter(challenge.pkg, challenge.startTime) ?: now
+                val exactMs = (leftAt - challenge.startTime).coerceAtLeast(0L)
+                val success = exactMs < challengeWindowMs
+                emitChallengeResult(challenge.appName, exactMs / 1000.0, success)
                 activeChallenge = null
                 return
             }
@@ -217,6 +224,9 @@ class UsageMonitorService : Service() {
                 if (allowed) {
                     lastChallengedApp = appName
                     lastChallengeTime = now
+                    // Starts when the notification fires, not when they entered the app: nobody can
+                    // react before they are told, and someone already inside the app when a cooldown
+                    // expires would otherwise start the challenge having already run out of time.
                     activeChallenge = ActiveChallenge(appName, pkg, now)
                     fireChallengeNotification(appName, overBudget)
                     if (!overBudget) incrementFiredCountToday()
@@ -287,6 +297,26 @@ class UsageMonitorService : Service() {
     // Reads the raw event stream rather than queryUsageStats. The aggregate query returns
     // day-length buckets whose lastTimeUsed is only loosely current, so a short window over it
     // frequently came back empty or stale and a genuine app switch went unnoticed.
+    // When the user left: the first resume of any other package after the challenge started.
+    // That is the moment something else took the screen, whatever the user did next.
+    private fun leaveTimeAfter(pkg: String, since: Long): Long? {
+        val usm = getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager ?: return null
+        val now = System.currentTimeMillis()
+        val events = usm.queryEvents(since, now) ?: return null
+        val event = android.app.usage.UsageEvents.Event()
+        while (events.hasNextEvent()) {
+            events.getNextEvent(event)
+            if (isResumeEvent(event.eventType) && event.packageName != pkg && event.timeStamp >= since) {
+                return event.timeStamp
+            }
+        }
+        return null
+    }
+
+    private fun isResumeEvent(type: Int): Boolean =
+        type == android.app.usage.UsageEvents.Event.MOVE_TO_FOREGROUND ||
+            type == android.app.usage.UsageEvents.Event.ACTIVITY_RESUMED
+
     private fun getForegroundPackage(): String? {
         val usm = getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager ?: return null
         val now = System.currentTimeMillis()

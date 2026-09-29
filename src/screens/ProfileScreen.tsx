@@ -50,14 +50,33 @@ const dailyLimitLevelFor = (limit: number): DailyLimitLevel => {
   return match ? match[0] : DEFAULT_DAILY_LIMIT;
 };
 
-const getAchievements = (s: UserStats) => [
+// A day counts as perfect when every challenge that day was won and the day's full
+// allowance was reached. Reaching the allowance matters: without it, a day with a single
+// won challenge would qualify, which is not what "perfect" promises.
+const hadPerfectDay = (history: ChallengeItem[], dailyLimit: number): boolean => {
+  const byDay = new Map<string, { total: number; won: number }>();
+  for (const h of history) {
+    const d = new Date(h.timestamp);
+    const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    const e = byDay.get(key) ?? { total: 0, won: 0 };
+    e.total += 1;
+    if (h.wasSuccessful) e.won += 1;
+    byDay.set(key, e);
+  }
+  for (const e of byDay.values()) {
+    if (e.total >= dailyLimit && e.won === e.total) return true;
+  }
+  return false;
+};
+
+const getAchievements = (s: UserStats, history: ChallengeItem[], dailyLimit: number) => [
   { id: '01', title: 'FIRST STEP', desc: 'Completed your first challenge', done: s.totalChallenges >= 1 },
   { id: '02', title: 'SPEED DEMON', desc: 'Exit in under 3 seconds', done: s.bestReactionTime > 0 && s.bestReactionTime < 3.0 },
   { id: '03', title: 'REFLEXES OF STEEL', desc: 'Exit in under 1 second', done: s.bestReactionTime > 0 && s.bestReactionTime < 1.0 },
   { id: '04', title: 'ON A ROLL', desc: '7 challenges won in a row', done: s.longestStreak >= 7 },
   { id: '05', title: 'IRON DISCIPLINE', desc: '30 challenges won in a row', done: s.longestStreak >= 30 },
   { id: '06', title: 'CENTURY', desc: '100 challenges completed', done: s.totalChallenges >= 100 },
-  { id: '07', title: 'PERFECT DAY', desc: 'All 5 daily challenges won', done: false },
+  { id: '07', title: 'PERFECT DAY', desc: `All ${dailyLimit} daily challenges won`, done: hadPerfectDay(history, dailyLimit) },
   { id: '08', title: 'MARATHON', desc: '500 challenges completed', done: s.totalChallenges >= 500 },
 ];
 
@@ -163,7 +182,7 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
     setEditingDailyLimit(false);
   };
 
-  const achievements = getAchievements(stats);
+  const achievements = getAchievements(stats, history, dailyLimit);
   const doneCount = achievements.filter((a) => a.done).length;
   const earnedElite = earnedBadges(stats, isOwner);
   const rankPct = Math.min(((stats.currentXP % XP_PER_LEVEL) / XP_PER_LEVEL) * 100, 100);
