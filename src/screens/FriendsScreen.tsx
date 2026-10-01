@@ -4,7 +4,7 @@ import { useThemedStyles, useTheme } from '../context/ThemeContext';
 import { Palette, radius } from '../theme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFriends } from '../hooks/useFriends';
-import { useDuels, formatTimeLeft, formatAgo } from '../hooks/useDuels';
+import { useDuels, formatTimeLeft, formatAgo, DUEL_REACTIONS, reactionText } from '../hooks/useDuels';
 import { useAuth } from '../context/AuthContext';
 import { TrainingState, UserStats } from '../types/training';
 import { rankForLevel, PODIUM } from '../constants/ranks';
@@ -17,6 +17,11 @@ const FREE_STAKE = 0;
 
 const hoursSince = (iso: string | null): number =>
   iso ? (Date.now() - new Date(iso).getTime()) / 3_600_000 : 0;
+
+// Mirrors the backend's one-minute cooldown, so the buttons are hidden while a tap would only
+// be refused. The duel list refreshes every minute, which brings them back on its own.
+const recentlyReacted = (iso: string | null): boolean =>
+  !!iso && Date.now() - new Date(iso).getTime() < 60_000;
 
 interface FriendsProps {
   stats: UserStats;
@@ -107,7 +112,8 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
   const { fbUser } = useAuth();
   const { isPro, isOwner, coins, equippedFrame, equippedNameEffect } = usePro();
   const { code, friends, requests, loading, error, addByCode, acceptRequest, rejectRequest, removeFriend, refresh: refreshFriends } = useFriends();
-  const { duels, challenge, respond, cancel: cancelDuel, error: duelError, refresh: refreshDuels } = useDuels();
+  const { duels, challenge, respond, cancel: cancelDuel, react, error: duelError, refresh: refreshDuels } = useDuels();
+  const [reactingId, setReactingId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [inputCode, setInputCode] = useState('');
   const [adding, setAdding] = useState(false);
@@ -248,6 +254,13 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
         },
       },
     ]);
+  };
+
+  const handleReact = async (duelId: string, reaction: string) => {
+    setReactingId(duelId);
+    const err = await react(duelId, reaction);
+    setReactingId(null);
+    if (err) Alert.alert('Not sent', err);
   };
 
   const handleDuelResponse = async (id: string, action: 'accept' | 'decline') => {
@@ -414,6 +427,29 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
                       ? "They haven't synced yet — a duel with no data from one side is voided."
                       : 'Waiting for their first sync. Scores update when each of you opens IRONMIND.'}
                   </Text>
+                )}
+                {reactionText(d.theirReaction) && (
+                  <Text style={styles.reactLast}>
+                    {d.opponentName}: {reactionText(d.theirReaction)}
+                    <Text style={styles.reactAgo}>  {formatAgo(d.theirReactedAt)}</Text>
+                  </Text>
+                )}
+                {recentlyReacted(d.myReactedAt) ? (
+                  <Text style={styles.reactSent}>SENT ✓ — NEXT ONE IN A MINUTE</Text>
+                ) : (
+                  <View style={styles.reactRow}>
+                    {DUEL_REACTIONS.map((r) => (
+                      <TouchableOpacity
+                        key={r.id}
+                        style={styles.reactChip}
+                        onPress={() => handleReact(d.id, r.id)}
+                        activeOpacity={0.8}
+                        disabled={reactingId === d.id}
+                      >
+                        <Text style={styles.reactChipText}>{r.text}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 )}
                 <TouchableOpacity
                   style={styles.cancelDuelBtn}
@@ -776,6 +812,19 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   duelSub: { color: c.textTertiary, fontSize: 11, marginBottom: 10 },
   duelActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 10 },
   duelWarn: { color: '#8A6A20', fontSize: 10, marginTop: 8, lineHeight: 14 },
+  reactLast: { color: c.textPrimary, fontSize: 12, fontWeight: '800', textAlign: 'center', marginTop: 12 },
+  reactAgo: { color: c.textFaint, fontSize: 10, fontWeight: '700' },
+  reactRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 6, marginTop: 12 },
+  reactChip: {
+    backgroundColor: c.surfaceRaised,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: c.border,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+  },
+  reactChipText: { color: c.textSecondary, fontSize: 11, fontWeight: '800' },
+  reactSent: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 0.6, textAlign: 'center', marginTop: 12 },
   cancelDuelBtn: { alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 16, marginTop: 6 },
   cancelDuelText: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 0.6 },
 

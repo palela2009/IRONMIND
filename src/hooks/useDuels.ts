@@ -23,9 +23,24 @@ export interface Duel {
   myMinutes: number | null;
   theirMinutes: number | null;
   theirReportedAt: string | null;
+  myReactedAt: string | null;
+  theirReaction: string | null;
+  theirReactedAt: string | null;
   iWon: boolean | null;
   incoming: boolean;
 }
+
+// Same ids as the backend. Only the id travels over the network; each side renders its own
+// copy of the text, which is also why there is nothing here for anyone to type.
+export const DUEL_REACTIONS: { id: string; text: string }[] = [
+  { id: 'fire', text: '🔥 Nice streak' },
+  { id: 'comeon', text: '💪 Come on' },
+  { id: 'winning', text: "😈 I'm winning this duel" },
+  { id: 'gg', text: '👏 GG' },
+];
+
+export const reactionText = (id: string | null): string | null =>
+  DUEL_REACTIONS.find((r) => r.id === id)?.text ?? null;
 
 const measureWindow = async (app: string, startAt: string, endAt: string): Promise<number | null> => {
   if (Platform.OS !== 'android' || !UsageMonitor?.getUsageForRange) return null;
@@ -183,7 +198,26 @@ export const useDuels = () => {
     }
   };
 
-  return { duels, loading, error, challenge, respond, cancel, refresh: load };
+  // Returns the error message rather than setting shared state, so the caller can show the
+  // cooldown message for this tap instead of whatever error happened to be stored last.
+  const react = async (id: string, reaction: string): Promise<string | null> => {
+    try {
+      const res = await authedFetch(`${API_URL}/${id}/react`, {
+        method: 'POST',
+        body: JSON.stringify({ reaction }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        return body.message ?? 'Could not send';
+      }
+      setDuels(await fetchDuels());
+      return null;
+    } catch {
+      return 'Network error — try again';
+    }
+  };
+
+  return { duels, loading, error, challenge, respond, cancel, react, refresh: load };
 };
 
 export const formatAgo = (iso: string | null): string => {
