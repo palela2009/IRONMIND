@@ -17,7 +17,7 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.IRONMIND",
+      "package": "com.palelastudio.ironmind",
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.PACKAGE_USAGE_STATS",

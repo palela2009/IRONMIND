@@ -41,6 +41,35 @@
           ]
         }
       }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1094826576454:android:17c3e2829e080c8d795847",
+        "android_client_info": {
+          "package_name": "com.palelastudio.ironmind"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1094826576454-rus44gke6b6f1o6ujunucs8dk0kfurub.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDkgyXjB30uNgQ_I_xIbmsoEALEEPSdaPM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1094826576454-rus44gke6b6f1o6ujunucs8dk0kfurub.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
     }
   ],
   "configuration_version": "1"

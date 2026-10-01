@@ -89,7 +89,7 @@ android {
 
     namespace 'com.anonymous.IRONMIND'
     defaultConfig {
-        applicationId 'com.anonymous.IRONMIND'
+        applicationId 'com.palelastudio.ironmind'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
