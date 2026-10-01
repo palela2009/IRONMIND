@@ -56,7 +56,9 @@ export const StreakReclaimModal: React.FC<Props> = ({ lostStreak, onReclaim, onD
             <>
               <Text style={styles.body}>
                 {isPro && streakFreezes === 0
-                  ? 'You are out of streak freezes. Reclaim this streak to keep it alive.'
+                  ? ADS_AVAILABLE
+                    ? 'You are out of streak freezes. Reclaim this streak to keep it alive.'
+                    : 'You are out of streak freezes. They refill at the start of next month.'
                   : 'IronMind Pro gives you streak freezes that absorb a failed challenge automatically.'}
               </Text>
 
@@ -66,11 +68,13 @@ export const StreakReclaimModal: React.FC<Props> = ({ lostStreak, onReclaim, onD
                 </TouchableOpacity>
               )}
 
-              <TouchableOpacity style={styles.secondaryBtn} onPress={() => setStep('ad')} activeOpacity={0.85}>
-                <Text style={styles.secondaryText}>
-                  {isPro ? 'WATCH AN AD TO RECLAIM' : 'SKIP'}
-                </Text>
-              </TouchableOpacity>
+              {ADS_AVAILABLE && (
+                <TouchableOpacity style={styles.secondaryBtn} onPress={() => setStep('ad')} activeOpacity={0.85}>
+                  <Text style={styles.secondaryText}>
+                    {isPro ? 'WATCH AN AD TO RECLAIM' : 'SKIP'}
+                  </Text>
+                </TouchableOpacity>
+              )}
 
               <TouchableOpacity style={styles.ghostBtn} onPress={onDismiss} activeOpacity={0.8}>
                 <Text style={styles.ghostText}>LET IT GO</Text>

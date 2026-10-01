@@ -25,7 +25,12 @@ export const AD_UNITS = __DEV__
   ? { streakReclaim: TestIds.REWARDED, trialExtension: TestIds.REWARDED, coinReward: TestIds.REWARDED }
   : LIVE_UNITS;
 
-export const ADS_AVAILABLE = Platform.OS === 'android';
+// Off for launch: the store listing declares no ads, and there are no live AdMob units yet.
+// Turning ads on means setting this to true, filling in LIVE_UNITS, removing the AD_ID
+// permission removal from AndroidManifest.xml, and changing the Ads declaration in Play Console.
+const ADS_ENABLED = false;
+
+export const ADS_AVAILABLE = ADS_ENABLED && Platform.OS === 'android';
 
 export const useRewardedAd = () => {
   const [showing, setShowing] = useState(false);
