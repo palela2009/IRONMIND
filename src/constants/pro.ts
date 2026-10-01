@@ -50,9 +50,6 @@ export const PRO_PLANS: ProPlan[] = [
   },
 ];
 
-// Shown once, to a brand new account only. These are separate Play Console products from
-// the standard plans rather than a discount applied at runtime, because a client cannot be
-// trusted to decide what a user pays.
 export const discountPercent = (planId: ProPlanId): number => {
   const full = PRO_PLANS.find((p) => p.id === planId);
   const sale = WELCOME_PLANS.find((p) => p.id === planId);

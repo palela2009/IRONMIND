@@ -48,10 +48,6 @@ interface ProContextValue extends Entitlement {
   equipCosmetic: (slot: 'frame' | 'nameEffect', cosmeticId: string | null) => Promise<void>;
 }
 
-// Every entitlement is merged over the free defaults before it is used, whether it came from
-// the network or the cache. A payload written before a field existed - an older cached
-// entitlement, or a server that has not deployed yet - would otherwise leave array fields
-// undefined and crash the first screen that called .includes() on one.
 const normalize = (raw: Partial<Entitlement> | null | undefined): Entitlement => ({
   ...FREE,
   ...(raw ?? {}),
@@ -184,8 +180,6 @@ export const ProProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         equippedNameEffect: body.equippedNameEffect ?? entitlementRef.current.equippedNameEffect,
       });
 
-      // Buying Pro with coins changes entitlement itself, so the whole thing is re-read
-      // rather than patched from the purchase response.
       if (item === 'proWeek') await refresh();
       return { ok: true };
     } catch {
@@ -194,7 +188,6 @@ export const ProProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const equipCosmetic = async (slot: 'frame' | 'nameEffect', cosmeticId: string | null) => {
-    // Applied locally first so the change is instant; the server only records it.
     await persist({
       ...entitlementRef.current,
       ...(slot === 'frame' ? { equippedFrame: cosmeticId } : { equippedNameEffect: cosmeticId }),

@@ -11,9 +11,6 @@ export const PAUSE_OPTIONS: { id: PauseOption; label: string }[] = [
   { id: 'tomorrow', label: 'UNTIL TOMORROW' },
 ];
 
-// Module-level rather than per-component, so the Profile control and the Home banner are
-// always reading the same value. Two independent copies would drift the moment one of them
-// paused or resumed.
 let pausedUntil = 0;
 const listeners = new Set<(v: number) => void>();
 
@@ -26,8 +23,6 @@ const untilFor = (option: PauseOption): number => {
   const now = Date.now();
   if (option === 'hour') return now + 60 * 60 * 1000;
   if (option === 'fourHours') return now + 4 * 60 * 60 * 1000;
-  // Local midnight rather than now + 24h, so pausing for an evening exam at 21:00 resumes the
-  // next morning instead of silently leaving the whole of the next day unmonitored.
   const midnight = new Date();
   midnight.setHours(24, 0, 0, 0);
   return midnight.getTime();
@@ -74,8 +69,6 @@ export const usePause = () => {
     };
   }, []);
 
-  // Re-renders the countdown, and clears the pause in the UI once it lapses. The service
-  // resumes on its own at the same moment; this only keeps the screen honest about it.
   useEffect(() => {
     if (until <= 0) return;
     const id = setInterval(() => {

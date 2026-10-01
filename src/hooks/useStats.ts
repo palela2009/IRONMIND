@@ -185,8 +185,6 @@ export const useStats = () => {
 
     if (success) {
       await awardCoins('challenge_win');
-      // A perfect day is only knowable once the last challenge of the day resolves, so it is
-      // checked here against the updated history rather than tracked as running state.
       const todayItems = updatedHistory.filter((item) => item.timestamp >= todayStart);
       if (todayItems.length >= dailyChallengeLimit && todayItems.every((item) => item.wasSuccessful)) {
         await awardCoins('perfect_day');

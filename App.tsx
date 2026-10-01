@@ -142,10 +142,6 @@ function RootNavigator() {
   const screenRef = useRef(screen);
   screenRef.current = screen;
 
-  // Screens stay mounted once visited and are hidden rather than unmounted. Swapping a single
-  // component meant every swipe tore the old screen down and rebuilt the new one, re-running
-  // its hooks, refetching everything and losing scroll position. Mounting lazily on first
-  // visit keeps startup cheap while making every later swipe instant.
   const [visited, setVisited] = useState<TrainingState[]>(['HOME']);
   useEffect(() => {
     setVisited((prev) => (prev.includes(screen) ? prev : [...prev, screen]));
@@ -244,8 +240,6 @@ function RootNavigator() {
 
   const handleOnboardingComplete = async () => {
     await AsyncStorage.setItem('@ironmind_onboarded', 'true');
-    // Entitlement was last fetched before onboarding created the account document, so the
-    // welcome offer would still read as unavailable without re-reading it here.
     await refreshEntitlement();
     setIsOnboarded(true);
   };

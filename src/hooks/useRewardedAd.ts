@@ -9,12 +9,6 @@ import {
 
 export type AdResult = 'rewarded' | 'dismissed' | 'unavailable';
 
-// Google's public test units, which serve real video ads without an AdMob account. Replacing
-// these with live ids is the only change needed once AdMob exists; everything else here is
-// already the production path.
-//
-// Serving live ads from a debug build is a policy violation that can get an AdMob account
-// banned, so test ids are forced in development regardless of what is configured.
 const LIVE_UNITS = {
   streakReclaim: TestIds.REWARDED,
   trialExtension: TestIds.REWARDED,
@@ -25,9 +19,6 @@ export const AD_UNITS = __DEV__
   ? { streakReclaim: TestIds.REWARDED, trialExtension: TestIds.REWARDED, coinReward: TestIds.REWARDED }
   : LIVE_UNITS;
 
-// Off for launch: the store listing declares no ads, and there are no live AdMob units yet.
-// Turning ads on means setting this to true, filling in LIVE_UNITS, removing the AD_ID
-// permission removal from AndroidManifest.xml, and changing the Ads declaration in Play Console.
 const ADS_ENABLED = false;
 
 export const ADS_AVAILABLE = ADS_ENABLED && Platform.OS === 'android';
@@ -46,8 +37,6 @@ export const useRewardedAd = () => {
       let earned = false;
       let settled = false;
 
-      // Every path has to release the listeners and settle exactly once, or a dismissed ad
-      // leaves the caller waiting forever behind a spinner.
       const finish = (result: AdResult) => {
         if (settled) return;
         settled = true;
@@ -71,8 +60,6 @@ export const useRewardedAd = () => {
         earned = true;
       });
 
-      // Closing is the only reliable signal that the ad is done. The reward flag decides
-      // whether they actually watched it or skipped out early.
       const unsubClosed = ad.addAdEventListener(AdEventType.CLOSED, () => {
         finish(earned ? 'rewarded' : 'dismissed');
       });

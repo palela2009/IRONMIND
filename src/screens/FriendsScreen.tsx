@@ -18,8 +18,6 @@ const FREE_STAKE = 0;
 const hoursSince = (iso: string | null): number =>
   iso ? (Date.now() - new Date(iso).getTime()) / 3_600_000 : 0;
 
-// Mirrors the backend's one-minute cooldown, so the buttons are hidden while a tap would only
-// be refused. The duel list refreshes every minute, which brings them back on its own.
 const recentlyReacted = (iso: string | null): boolean =>
   !!iso && Date.now() - new Date(iso).getTime() < 60_000;
 
@@ -61,8 +59,6 @@ const Avatar: React.FC<{ entry: { uid: string; displayName: string; photoURL: st
 }) => {  const styles = useThemedStyles(makeStyles);
 
   const [failed, setFailed] = useState(false);
-  // An equipped frame outranks the podium metal ring: the metal says where you placed
-  // today, the frame is something the user chose and paid for.
   const frame = frameById(entry.frame);
   const boxStyle = {
     width: size,
@@ -284,9 +280,6 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
   const incomingDuels = duels.filter((d) => d.status === 'pending' && d.incoming);
   const outgoingDuels = duels.filter((d) => d.status === 'pending' && !d.incoming);
   const activeDuels = duels.filter((d) => d.status === 'active');
-  // Cancelled duels are deliberately excluded. A cancelled duel is one that never took
-  // place, so listing it as history gives a row that reports no result and reads as clutter.
-  // Void duels stay, because those did run and the empty result is the informative part.
   const settledDuels = duels
     .filter((d) => d.status === 'completed' || d.status === 'void')
     .slice(0, 5);

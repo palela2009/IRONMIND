@@ -95,8 +95,6 @@ export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged }) 
 
   const limitFor = (app: string): number => appLimits[app] ?? 0;
 
-  // Suggests a real cut from what they actually do, rounded to something memorable. An
-  // arbitrary round number is easy to dismiss; "you average 84, try 60" is not.
   const suggestFor = (app: string): number => {
     const mins = minutesForApp(app);
     if (mins <= 0) return 30;

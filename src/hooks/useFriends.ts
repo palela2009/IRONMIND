@@ -66,9 +66,6 @@ export const useFriends = () => {
     load();
   }, [load]);
 
-  // Returns which of the two outcomes happened rather than a bare success flag. Adding
-  // someone usually only sends a request; reporting that as "friend added" told people they
-  // had a friend who had not agreed yet, and the leaderboard then showed nobody.
   const addByCode = async (inputCode: string): Promise<AddOutcome> => {
     setError('');
     try {

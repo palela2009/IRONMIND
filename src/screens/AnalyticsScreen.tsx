@@ -71,9 +71,6 @@ export const AnalyticsScreen: React.FC<Props> = ({ visible, onClose, history, st
     };
   }, [history, days]);
 
-  // Daily averages rather than raw challenges: one unusually fast escape should not read as
-  // improvement, and grouping by day makes the comparison like-for-like against the
-  // screen-time chart above.
   const reaction = useMemo(() => {
     const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
     const wins = history.filter((h) => h.wasSuccessful && h.elapsedTime > 0 && h.timestamp >= cutoff);

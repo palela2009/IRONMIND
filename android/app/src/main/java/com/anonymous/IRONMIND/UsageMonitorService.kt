@@ -51,23 +51,12 @@ class UsageMonitorService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // Android enforces a strict ~5s deadline between startForegroundService() and this
-        // service calling startForeground() — miss it and the whole app is killed with
-        // ForegroundServiceDidNotStartInTimeException. Call it before any other work so
-        // nothing (parsing extras, creating channels) can push it past that deadline.
         createChannels()
         startForeground(FOREGROUND_ID, buildForegroundNotification())
 
-        // START_STICKY restarts this service with a NULL intent after the system kills it,
-        // so the config has to survive independently. Reading it only from the intent meant a
-        // restarted service monitored an empty app list and silently never fired again, with
-        // its foreground notification still showing as if everything was fine.
         val apps = intent?.getStringArrayExtra("apps")
         if (apps != null) {
             val uid = intent.getStringExtra("uid") ?: ""
-            // The fired-today counter lives in device storage, so switching accounts would
-            // otherwise hand a new user the previous account's exhausted daily limit and
-            // fire nothing for them at all.
             val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             if (uid.isNotEmpty() && prefs.getString("uid", null) != uid) {
                 prefs.edit().putString("uid", uid).putString("date", null).putInt("count", 0).apply()
@@ -98,9 +87,6 @@ class UsageMonitorService : Service() {
             .apply()
     }
 
-    // Stored as the raw JSON string the bridge delivered. Persisting it alongside the rest of
-    // the config matters for the same reason: a sticky restart arrives with a null intent and
-    // would otherwise come back with no budgets at all.
     private fun saveLimits(json: String) {
         getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putString("appLimits", json).apply()
     }
@@ -145,8 +131,6 @@ class UsageMonitorService : Service() {
                 }
             }
         }
-        // Still open right now: count the session so far, or a budget would only ever update
-        // after the user closed the app.
         if (openedAt > 0L) total += now - openedAt
 
         return (total / 60000L).toInt()
@@ -162,9 +146,6 @@ class UsageMonitorService : Service() {
     }
 
     private fun checkForegroundApp() {
-        // Paused: the service keeps running and simply fires nothing. Stopping it instead would
-        // rely on it being restarted later, which some OEMs refuse, and resuming would need a
-        // timer. Checking a timestamp every poll makes auto-resume free and restart-proof.
         val pausedUntil = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getLong("pausedUntil", 0L)
         if (System.currentTimeMillis() < pausedUntil) {
             activeChallenge = null
@@ -178,14 +159,6 @@ class UsageMonitorService : Service() {
         activeChallenge?.let { challenge ->
             val elapsedMs = now - challenge.startTime
             if (foreground != challenge.pkg) {
-                // Only resolve once they actually leave — whether that's within the window
-                // (success) or well after it expired (still a fail, but showing the real
-                // time it took them to close it instead of a meaningless placeholder).
-                //
-                // The exit is timed from Android's own event timestamp, not from when this poll
-                // happened to notice. Polling every two seconds added up to two seconds to every
-                // recorded time, which made sub-second achievements depend on luck and could fail
-                // an exit that was genuinely inside the window.
                 val leftAt = leaveTimeAfter(challenge.pkg, challenge.startTime) ?: now
                 val exactMs = (leftAt - challenge.startTime).coerceAtLeast(0L)
                 val success = exactMs < challengeWindowMs
@@ -194,10 +167,6 @@ class UsageMonitorService : Service() {
                 return
             }
 
-            // A challenge that can never resolve blocks every future challenge, since nothing
-            // else is evaluated while one is active. If we somehow never observe them leaving
-            // — a missed event, a screen-off, a reboot mid-challenge — give up and record the
-            // fail rather than silently disabling the app forever.
             if (elapsedMs > STUCK_CHALLENGE_MS) {
                 emitChallengeResult(challenge.appName, elapsedMs / 1000.0, false)
                 activeChallenge = null
@@ -215,18 +184,12 @@ class UsageMonitorService : Service() {
                     maybeWarn(appName, limit - used)
                 }
 
-                // Past the budget the usual restraints are lifted: every open is challenged,
-                // ignoring both the per-app cooldown and the daily cap. Those exist to stop
-                // IRONMIND nagging during normal use, and this is by definition not that.
                 val sameAppCooldown = appName == lastChallengedApp && (now - lastChallengeTime) < cooldownMs
                 val allowed = overBudget || (!sameAppCooldown && getFiredCountToday() < maxDailyChallenges)
 
                 if (allowed) {
                     lastChallengedApp = appName
                     lastChallengeTime = now
-                    // Starts when the notification fires, not when they entered the app: nobody can
-                    // react before they are told, and someone already inside the app when a cooldown
-                    // expires would otherwise start the challenge having already run out of time.
                     activeChallenge = ActiveChallenge(appName, pkg, now)
                     fireChallengeNotification(appName, overBudget)
                     if (!overBudget) incrementFiredCountToday()
@@ -236,8 +199,6 @@ class UsageMonitorService : Service() {
         }
     }
 
-    // One warning per app per day. Repeating it every poll would turn the approach to a
-    // budget into exactly the nagging the cooldown exists to prevent.
     private fun maybeWarn(appName: String, minutesLeft: Int) {
         val today = getTodayKey()
         if (warnedDate != today) {
@@ -289,16 +250,9 @@ class UsageMonitorService : Service() {
                 .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
                 .emit("IronmindChallengeResult", params)
         } catch (_: Exception) {
-            // JS context may not be alive (app fully closed) — the local notification already
-            // fired, which is the part the user actually sees; a missed result sync is acceptable.
         }
     }
 
-    // Reads the raw event stream rather than queryUsageStats. The aggregate query returns
-    // day-length buckets whose lastTimeUsed is only loosely current, so a short window over it
-    // frequently came back empty or stale and a genuine app switch went unnoticed.
-    // When the user left: the first resume of any other package after the challenge started.
-    // That is the moment something else took the screen, whatever the user did next.
     private fun leaveTimeAfter(pkg: String, since: Long): Long? {
         val usm = getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager ?: return null
         val now = System.currentTimeMillis()
@@ -330,10 +284,6 @@ class UsageMonitorService : Service() {
             events.getNextEvent(event)
             val isResume = event.eventType == android.app.usage.UsageEvents.Event.MOVE_TO_FOREGROUND ||
                 event.eventType == android.app.usage.UsageEvents.Event.ACTIVITY_RESUMED
-            // IRONMIND itself is deliberately not filtered out. Opening this app is one of the
-            // most natural ways to escape a challenge, and ignoring its own resume events left
-            // the challenge unresolved — which then blocked every later challenge, since none
-            // are evaluated while one is active.
             if (isResume && event.timeStamp >= latestTime) {
                 latestTime = event.timeStamp
                 latestPkg = event.packageName

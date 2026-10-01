@@ -1,5 +1,3 @@
-// Visual definitions only. Prices are decided by the server; these ids must match the
-// server's price tables, and anything the server does not know about simply cannot be bought.
 
 export interface Frame {
   id: string;
@@ -44,9 +42,6 @@ export const frameById = (id: string | null | undefined): Frame | null =>
 export const nameEffectById = (id: string | null | undefined): NameEffect | null =>
   id ? NAME_EFFECTS.find((n) => n.id === id) ?? null : null;
 
-// Glow is expressed through shadow props, which React Native supports on both text and views.
-// A gradient would need a native dependency; a coloured glow gets most of the effect for none
-// of the build cost.
 export const glowStyle = (color: string | null) =>
   color
     ? { textShadowColor: color, textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 8 }

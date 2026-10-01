@@ -50,9 +50,6 @@ const dailyLimitLevelFor = (limit: number): DailyLimitLevel => {
   return match ? match[0] : DEFAULT_DAILY_LIMIT;
 };
 
-// A day counts as perfect when every challenge that day was won and the day's full
-// allowance was reached. Reaching the allowance matters: without it, a day with a single
-// won challenge would qualify, which is not what "perfect" promises.
 const hadPerfectDay = (history: ChallengeItem[], dailyLimit: number): boolean => {
   const byDay = new Map<string, { total: number; won: number }>();
   for (const h of history) {
@@ -692,7 +689,6 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     borderColor: c.border,
   },
   pauseChipText: { color: c.textPrimary, fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
-
 
   analyticsRow: {
     flexDirection: 'row',

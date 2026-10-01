@@ -30,8 +30,6 @@ export interface Duel {
   incoming: boolean;
 }
 
-// Same ids as the backend. Only the id travels over the network; each side renders its own
-// copy of the text, which is also why there is nothing here for anyone to type.
 export const DUEL_REACTIONS: { id: string; text: string }[] = [
   { id: 'fire', text: '🔥 Nice streak' },
   { id: 'comeon', text: '💪 Come on' },
@@ -198,8 +196,6 @@ export const useDuels = () => {
     }
   };
 
-  // Returns the error message rather than setting shared state, so the caller can show the
-  // cooldown message for this tap instead of whatever error happened to be stored last.
   const react = async (id: string, reaction: string): Promise<string | null> => {
     try {
       const res = await authedFetch(`${API_URL}/${id}/react`, {

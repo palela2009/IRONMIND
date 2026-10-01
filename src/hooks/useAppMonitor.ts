@@ -17,9 +17,6 @@ export const useAppMonitor = (uid?: string) => {
   }, [uid]);
 };
 
-// The native daily counter lives in device storage, so it has to be told which account it
-// belongs to. Without this, signing in as someone else inherits the previous account's
-// exhausted daily limit and no challenge fires for the new user at all.
 let currentUid = '';
 
 export const syncAppMonitor = async () => {
@@ -36,8 +33,6 @@ const startMonitoringFromStorage = async () => {
     const difficulty: DifficultyLevel = data.difficultyLevel ?? DEFAULT_DIFFICULTY;
     const windowSeconds = DIFFICULTY_WINDOW_SECONDS[difficulty] ?? DIFFICULTY_WINDOW_SECONDS[DEFAULT_DIFFICULTY];
     const dailyLimit: number = data.dailyChallengeLimit ?? DAILY_LIMIT_VALUES[DEFAULT_DAILY_LIMIT];
-    // Sent as a JSON object keyed by app name, which is what the service stores and reloads
-    // after a sticky restart.
     const limits: Record<string, number> = {};
     for (const entry of data.appLimits ?? []) {
       if (entry?.app && Number(entry.minutes) > 0) limits[entry.app] = Math.round(entry.minutes);

@@ -10,18 +10,6 @@ interface Props {
 
 const { width } = Dimensions.get('window');
 
-// Nearly the full width of the screen. At thumbnail size a face is decoration; at this size
-// the photo is the subject of the card and the text sits underneath it.
-//
-// The frame is portrait and the images are contained rather than cropped. Both photos are
-// tall (ratios of about 2.1 and 1.65) and they differ from each other, so any single crop
-// that filled a frame would cut one of the two faces off - which is exactly what a square
-// cover crop did. Containing them wastes a little space at the edges and guarantees the
-// whole photo survives, whatever a future photo's shape turns out to be.
-// Each photo is rendered at its true aspect ratio and full width, then masked from the top
-// by whatever fraction of it is dead space. That crops rather than scales, so nothing is
-// squashed and no empty bars appear at the sides - the alternative, forcing a shared frame
-// height, either distorted a photo or stranded the taller one inside wide margins.
 const PHOTO_W = width - spacing.xl * 2;
 const fullHeight = (ratio: number) => Math.round(PHOTO_W * ratio);
 const visibleHeight = (ratio: number, cropTop: number) => Math.round(fullHeight(ratio) * (1 - cropTop));

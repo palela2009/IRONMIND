@@ -63,8 +63,6 @@ const timeAgo = (ts: number) => {
   return `${Math.floor(mins / 60)}h ago`;
 };
 
-// Null while unknown (non-Android, or an older build without the native counter), which the
-// caller falls back on rather than showing a confident wrong number.
 const useFiredRemaining = (): number | null => {
   const [remaining, setRemaining] = useState<number | null>(null);
 

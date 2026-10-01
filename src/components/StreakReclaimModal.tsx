@@ -31,8 +31,6 @@ export const StreakReclaimModal: React.FC<Props> = ({ lostStreak, onReclaim, onD
       onReclaim();
       return;
     }
-    // An ad that failed to load is not the user's fault, so the streak is restored anyway
-    // rather than punishing them for a network problem or an unfilled ad slot.
     if (result === 'unavailable') {
       Alert.alert('No ad available', 'We could not load an ad just now, so your streak is safe this time.');
       onReclaim();

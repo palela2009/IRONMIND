@@ -12,9 +12,6 @@ export const WelcomeOfferScreen: React.FC = () => {
   const [busy, setBusy] = useState<ProPlanId | null>(null);
   const [startingTrial, setStartingTrial] = useState(false);
 
-  // Trial first, discount only if they turn it down. Showing both at once makes the reader
-  // choose between two good offers instead of accepting one, and the discount lands far
-  // harder as a response to "no" than as a competing option.
   const [stage, setStage] = useState<'trial' | 'discount'>(trialAvailable ? 'trial' : 'discount');
 
   const beginTrial = async () => {
@@ -167,9 +164,6 @@ export const WelcomeOfferScreen: React.FC = () => {
             );
           })}
 
-          {/* Given real weight on the page. Someone about to decline is the person most
-              likely to assume the free app is a crippled demo, and a user who leaves
-              believing that does not come back. */}
           {stage === 'discount' && (
             <View style={styles.reassureCard}>
               <Text style={styles.reassureTitle}>FREE IS A REAL APP</Text>

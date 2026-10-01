@@ -41,8 +41,6 @@ export const dayLabel = (iso: string): string => {
   return ['S', 'M', 'T', 'W', 'T', 'F', 'S'][d.getDay()];
 };
 
-// Splits a run of days down the middle and compares the halves. A trend needs a
-// like-for-like comparison; yesterday against today would just be noise.
 export const trendFor = (values: number[]): { change: number; hasData: boolean } => {
   if (values.length < 4) return { change: 0, hasData: false };
   const mid = Math.floor(values.length / 2);

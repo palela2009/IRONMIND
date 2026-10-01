@@ -66,11 +66,6 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
         }
     }
 
-    // MIUI (and several other OEM skins) can throttle when they actually dispatch a
-    // foreground service start well beyond Android's own Doze restrictions, which is a
-    // common cause of ForegroundServiceDidNotStartInTimeException on those devices no
-    // matter how fast our own code responds once invoked. This is the standard exemption
-    // request; MIUI's own extra "Autostart" toggle has no public API to launch directly.
     @ReactMethod
     fun requestIgnoreBatteryOptimizations() {
         try {
@@ -89,12 +84,6 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
         }
     }
 
-    // The service caps how many challenges may fire per day, and that counter is the only
-    // thing that decides whether another one can. JS was inferring "challenges today" from
-    // its own history of *resolved* results instead, so a user who had exhausted the cap saw
-    // a screen claiming they had plenty left and no explanation for the silence.
-    // 0 clears the pause. Stored natively so the service honours it even when the JS side is
-    // not running, which is most of the time.
     @ReactMethod
     fun setPausedUntil(untilMs: Double) {
         reactContext.getSharedPreferences(UsageMonitorService.PREFS_NAME, Context.MODE_PRIVATE)
@@ -143,10 +132,6 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
         }
     }
 
-    // Exact per-package foreground time over an arbitrary window, from the raw event stream
-    // rather than UsageStatsManager's daily aggregate buckets — the aggregates snap to day
-    // boundaries, which would make any window that doesn't start at midnight (a duel, for
-    // example) silently wrong.
     private fun foregroundTimesFor(startMs: Long, endMs: Long): Map<String, Long> {
         val usm = reactContext.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
         val eventsQuery = usm?.queryEvents(startMs, endMs) ?: return emptyMap()
@@ -171,9 +156,6 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
             }
         }
 
-        // An app still in the foreground when the window closes has no MOVE_TO_BACKGROUND
-        // event to pair with, so its final session would otherwise be dropped entirely.
-        // Clamped to endMs so a past window can't accrue time up to the present.
         val cutoff = minOf(endMs, System.currentTimeMillis())
         foregroundStart.forEach { (pkg, start) ->
             if (cutoff > start) {
@@ -184,9 +166,6 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
         return foregroundTimes
     }
 
-    // Usage over an explicit window, used to settle duels. Kept separate from getUsageStats
-    // so the duel result is computed over the duel's own rolling 24h rather than today's
-    // calendar day, which would disagree between two players in different timezones.
     @ReactMethod
     fun getUsageForRange(startMs: Double, endMs: Double, promise: Promise) {
         try {
@@ -219,7 +198,6 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
     @ReactMethod
     fun getUsageStats(promise: Promise) {
         try {
-            // Midnight today → now
             val cal = java.util.Calendar.getInstance()
             cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
             cal.set(java.util.Calendar.MINUTE, 0)
@@ -245,8 +223,6 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
             fun isRealUserApp(pkg: String): Boolean {
                 if (pkg == reactContext.packageName) return false
                 if (NON_APP_PACKAGES.contains(pkg)) return false
-                // Digital Wellbeing only attributes time to apps that appear in the launcher —
-                // this is what excludes background system services with no user-facing UI.
                 return pm.getLaunchIntentForPackage(pkg) != null
             }
 
@@ -261,7 +237,6 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
                     try {
                         val appInfo = pm.getApplicationInfo(pkg, 0)
                         val label = pm.getApplicationLabel(appInfo).toString()
-                        // Use friendly name for known apps
                         val friendlyName = APP_PACKAGES.entries.find { it.value == pkg }?.key ?: label
                         val map = Arguments.createMap()
                         map.putString("app", friendlyName)
@@ -276,4 +251,3 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
         }
     }
 }
-
