@@ -63,32 +63,37 @@ const timeAgo = (ts: number) => {
   return `${Math.floor(mins / 60)}h ago`;
 };
 
-const useFiredRemaining = (): number | null => {
-  const [remaining, setRemaining] = useState<number | null>(null);
+const useFiredToday = (refreshKey: number): number | null => {
+  const [fired, setFired] = useState<number | null>(null);
 
   const read = useCallback(async () => {
     if (Platform.OS !== 'android' || !NativeModules.UsageMonitor?.getChallengeCountToday) return;
     try {
-      const { fired, limit } = await NativeModules.UsageMonitor.getChallengeCountToday();
-      setRemaining(Math.max(limit - fired, 0));
+      const result = await NativeModules.UsageMonitor.getChallengeCountToday();
+      setFired(result.fired);
     } catch {}
   }, []);
 
   useEffect(() => {
     read();
+  }, [read, refreshKey]);
+
+  useEffect(() => {
     const sub = AppState.addEventListener('change', (s) => {
       if (s === 'active') read();
     });
     return () => sub.remove();
   }, [read]);
 
-  return remaining;
+  return fired;
 };
+
+const DOTS_PER_COLUMN = 5;
 
 export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallengeLimit, onNavigate }) => {  const styles = useThemedStyles(makeStyles);
   const { coins } = usePro();
   const [showShop, setShowShop] = useState<boolean>(false);
-  const firedRemaining = useFiredRemaining();
+  const firedToday = useFiredToday(history.length + dailyChallengeLimit);
   const { paused, remaining } = usePause();
 
   const { fbUser } = useAuth();
@@ -105,6 +110,10 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallenge
 
   const todayCount = getTodayCount(history);
   const todaySuccess = getTodaySuccess(history);
+  const firedRemaining = Math.max(dailyChallengeLimit - Math.max(firedToday ?? 0, todayCount), 0);
+  const dotColumns = Array.from({ length: Math.ceil(dailyChallengeLimit / DOTS_PER_COLUMN) }, (_, col) =>
+    Array.from({ length: Math.min(DOTS_PER_COLUMN, dailyChallengeLimit - col * DOTS_PER_COLUMN) }, (_, row) => col * DOTS_PER_COLUMN + row)
+  );
   const weekBars = getWeeklyBars(history);
   const maxBar = Math.max(...weekBars, 1);
   const todayBarIdx = getTodayBarIndex();
@@ -180,26 +189,28 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallenge
             <View style={styles.todayLeft}>
               <Text style={styles.todayLabel}>TODAY'S CHALLENGES</Text>
               <Text style={styles.todayCount}>
-                {todaySuccess}<Text style={styles.todayOf}> / {todayCount} done</Text>
+                {todayCount}<Text style={styles.todayOf}> / {dailyChallengeLimit}</Text>
               </Text>
               <Text style={[styles.todayRemain, firedRemaining === 0 && styles.todayCapped]}>
-                {firedRemaining === null
-                  ? `${Math.max(dailyChallengeLimit - todayCount, 0)} more may fire today`
-                  : firedRemaining > 0
-                  ? `${firedRemaining} more may fire today`
-                  : 'Daily limit reached — no more until tomorrow'}
+                {firedRemaining > 0
+                  ? `${todaySuccess} won · ${firedRemaining} more may fire today`
+                  : `${todaySuccess} won · daily limit reached, no more until tomorrow`}
               </Text>
             </View>
             <View style={styles.todayDots}>
-              {Array.from({ length: dailyChallengeLimit }).map((_, i) => (
-                <View
-                  key={i}
-                  style={[
-                    styles.dot,
-                    i < todaySuccess && styles.dotSuccess,
-                    i >= todaySuccess && i < todayCount && styles.dotFail,
-                  ]}
-                />
+              {dotColumns.map((column, c) => (
+                <View key={c} style={styles.dotColumn}>
+                  {column.map((i) => (
+                    <View
+                      key={i}
+                      style={[
+                        styles.dot,
+                        i < todaySuccess && styles.dotSuccess,
+                        i >= todaySuccess && i < todayCount && styles.dotFail,
+                      ]}
+                    />
+                  ))}
+                </View>
               ))}
             </View>
           </View>
@@ -341,7 +352,8 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   todayCount: { color: c.textPrimary, fontSize: 34, fontWeight: '900', letterSpacing: -1, lineHeight: 36 },
   todayOf: { fontSize: 15, color: c.textTertiary, fontWeight: '600' },
   todayRemain: { color: c.textSecondary, fontSize: 11, marginTop: spacing.xs },
-  todayDots: { gap: 7 },
+  todayDots: { flexDirection: 'row', gap: 7 },
+  dotColumn: { gap: 7 },
   dot: { width: 10, height: 10, borderRadius: radius.pill, backgroundColor: c.borderSubtle, borderWidth: 1, borderColor: c.border },
   dotSuccess: { backgroundColor: c.accent, borderColor: c.accent },
   dotFail: { backgroundColor: c.danger, borderColor: c.danger },

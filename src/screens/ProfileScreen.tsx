@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, NativeModules, Platform, ActivityIndicator, Alert, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert, TextInput } from 'react-native';
 import { useThemedStyles, useTheme } from '../context/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
@@ -7,6 +7,7 @@ import { UserStats, ChallengeItem } from '../types/training';
 import { AnalyticsScreen } from './AnalyticsScreen';
 import { HistoryScreen } from './HistoryScreen';
 import { usePause, pauseMonitoring, resumeMonitoring, PAUSE_OPTIONS } from '../hooks/usePause';
+import { syncAppMonitor } from '../hooks/useAppMonitor';
 import { useAuth } from '../context/AuthContext';
 import { usePro } from '../context/ProContext';
 import { ProScreen } from './ProScreen';
@@ -110,14 +111,6 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
     }).catch(() => {});
   }, []);
 
-  const restartMonitor = (apps: string[], difficultyLevel: DifficultyLevel, dailyChallengeLimit: number) => {
-    if (Platform.OS !== 'android' || !NativeModules.UsageMonitor) return;
-    NativeModules.UsageMonitor.stopMonitoring();
-    if (apps.length > 0) {
-      NativeModules.UsageMonitor.startMonitoring(apps, DIFFICULTY_WINDOW_SECONDS[difficultyLevel], dailyChallengeLimit);
-    }
-  };
-
   const syncOnboarding = (fields: { targetApps: string[]; difficultyLevel: DifficultyLevel; dailyChallengeLimit: number; goals: string[] }) => {
     authedFetch(ONBOARDING_URL, {
       method: 'POST',
@@ -146,7 +139,7 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
       setDifficulty(pendingDifficulty);
       const effectiveApps = data.targetApps ?? monitoredApps;
       const effectiveDailyLimit = data.dailyChallengeLimit ?? dailyLimit;
-      restartMonitor(effectiveApps, pendingDifficulty, effectiveDailyLimit);
+      await syncAppMonitor();
       syncOnboarding({ targetApps: effectiveApps, difficultyLevel: pendingDifficulty, dailyChallengeLimit: effectiveDailyLimit, goals: data.goals ?? [] });
       onSettingsChanged?.();
     } catch {}
@@ -171,7 +164,7 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
       setDailyLimit(resolvedLimit);
       const effectiveApps = data.targetApps ?? monitoredApps;
       const effectiveDifficulty = data.difficultyLevel ?? difficulty;
-      restartMonitor(effectiveApps, effectiveDifficulty, resolvedLimit);
+      await syncAppMonitor();
       syncOnboarding({ targetApps: effectiveApps, difficultyLevel: effectiveDifficulty, dailyChallengeLimit: resolvedLimit, goals: data.goals ?? [] });
       onSettingsChanged?.();
     } catch {}

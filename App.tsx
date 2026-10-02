@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaView, StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, DeviceEventEmitter, PanResponder, Animated, Dimensions, AppState } from 'react-native';
+import { SafeAreaView, StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, DeviceEventEmitter, PanResponder, Animated, Dimensions, AppState, Easing } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
@@ -142,33 +142,28 @@ function RootNavigator() {
   const screenRef = useRef(screen);
   screenRef.current = screen;
 
-  const [visited, setVisited] = useState<TrainingState[]>(['HOME']);
-  useEffect(() => {
-    setVisited((prev) => (prev.includes(screen) ? prev : [...prev, screen]));
-  }, [screen]);
+  const position = useRef(new Animated.Value(0)).current;
+  const pageOffsets = useRef(
+    SCREEN_ORDER.map((_, i) => Animated.add(position, i * SCREEN_WIDTH))
+  ).current;
 
-  const dragX = useRef(new Animated.Value(0)).current;
-
-  const slideTo = (nextIndex: number, direction: number) => {
-    Animated.timing(dragX, {
-      toValue: -direction * SCREEN_WIDTH,
-      duration: 160,
+  const slideTo = (nextIndex: number) => {
+    setScreen(SCREEN_ORDER[nextIndex]);
+    Animated.timing(position, {
+      toValue: -nextIndex * SCREEN_WIDTH,
+      duration: 240,
+      easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
-    }).start(() => {
-      setScreen(SCREEN_ORDER[nextIndex]);
-      dragX.setValue(direction * SCREEN_WIDTH);
-      Animated.timing(dragX, { toValue: 0, duration: 200, useNativeDriver: true }).start();
-    });
+    }).start();
   };
 
   const slideToRef = useRef(slideTo);
   slideToRef.current = slideTo;
 
   const goToTab = (id: TrainingState) => {
-    const from = SCREEN_ORDER.indexOf(screenRef.current);
     const to = SCREEN_ORDER.indexOf(id);
-    if (to === from) return;
-    slideTo(to, to > from ? 1 : -1);
+    if (to === SCREEN_ORDER.indexOf(screenRef.current)) return;
+    slideTo(to);
   };
 
   const panResponder = useRef(
@@ -179,20 +174,22 @@ function RootNavigator() {
         const index = SCREEN_ORDER.indexOf(screenRef.current);
         const atStart = index === 0 && gesture.dx > 0;
         const atEnd = index === SCREEN_ORDER.length - 1 && gesture.dx < 0;
-        dragX.setValue(atStart || atEnd ? gesture.dx * 0.25 : gesture.dx);
+        position.setValue(-index * SCREEN_WIDTH + (atStart || atEnd ? gesture.dx * 0.25 : gesture.dx));
       },
       onPanResponderRelease: (_, gesture) => {
         const index = SCREEN_ORDER.indexOf(screenRef.current);
-        if (gesture.dx < -50 && index < SCREEN_ORDER.length - 1) {
-          slideToRef.current(index + 1, 1);
-        } else if (gesture.dx > 50 && index > 0) {
-          slideToRef.current(index - 1, -1);
+        const flung = Math.abs(gesture.vx) > 0.5;
+        const far = Math.abs(gesture.dx) > SCREEN_WIDTH / 3;
+        if ((flung || far) && gesture.dx < 0 && index < SCREEN_ORDER.length - 1) {
+          slideToRef.current(index + 1);
+        } else if ((flung || far) && gesture.dx > 0 && index > 0) {
+          slideToRef.current(index - 1);
         } else {
-          Animated.spring(dragX, { toValue: 0, useNativeDriver: true, bounciness: 0 }).start();
+          slideToRef.current(index);
         }
       },
       onPanResponderTerminate: () => {
-        Animated.spring(dragX, { toValue: 0, useNativeDriver: true, bounciness: 0 }).start();
+        slideToRef.current(SCREEN_ORDER.indexOf(screenRef.current));
       },
     })
   ).current;
@@ -271,20 +268,17 @@ function RootNavigator() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="light" />
-      <Animated.View
-        style={[styles.mainContent, { transform: [{ translateX: dragX }] }]}
-        {...panResponder.panHandlers}
-      >
-        {visited.map((id) => (
-          <View
+      <View style={styles.mainContent} {...panResponder.panHandlers}>
+        {SCREEN_ORDER.map((id, i) => (
+          <Animated.View
             key={id}
-            style={[StyleSheet.absoluteFill, id !== screen && styles.screenHidden]}
+            style={[StyleSheet.absoluteFill, { transform: [{ translateX: pageOffsets[i] }] }]}
             pointerEvents={id === screen ? 'auto' : 'none'}
           >
             {screenFor(id)}
-          </View>
+          </Animated.View>
         ))}
-      </Animated.View>
+      </View>
 
       <View style={nav.container}>
         <View style={nav.bar}>
@@ -349,8 +343,7 @@ export default function App() {
 
 const makeStyles = (c: Palette) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.bg },
-  mainContent: { flex: 1 },
-  screenHidden: { display: 'none' },
+  mainContent: { flex: 1, overflow: 'hidden' },
   loadingContainer: { flex: 1, backgroundColor: c.bg, justifyContent: 'center', alignItems: 'center' },
 });
 
