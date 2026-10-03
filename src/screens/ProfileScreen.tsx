@@ -69,13 +69,13 @@ const hadPerfectDay = (history: ChallengeItem[], dailyLimit: number): boolean =>
 
 const getAchievements = (s: UserStats, history: ChallengeItem[], dailyLimit: number) => [
   { id: '01', title: 'FIRST STEP', desc: 'Completed your first challenge', done: s.totalChallenges >= 1 },
-  { id: '02', title: 'SPEED DEMON', desc: 'Exit in under 3 seconds', done: s.bestReactionTime > 0 && s.bestReactionTime < 3.0 },
-  { id: '03', title: 'REFLEXES OF STEEL', desc: 'Exit in under 1 second', done: s.bestReactionTime > 0 && s.bestReactionTime < 1.0 },
-  { id: '04', title: 'ON A ROLL', desc: '7 challenges won in a row', done: s.longestStreak >= 7 },
-  { id: '05', title: 'IRON DISCIPLINE', desc: '30 challenges won in a row', done: s.longestStreak >= 30 },
-  { id: '06', title: 'CENTURY', desc: '100 challenges completed', done: s.totalChallenges >= 100 },
+  { id: '02', title: 'SPEED DEMON', desc: 'Exit in under 5 seconds', done: s.bestReactionTime > 0 && s.bestReactionTime < 5.0 },
+  { id: '03', title: 'REFLEXES OF STEEL', desc: 'Exit in under 3 seconds', done: s.bestReactionTime > 0 && s.bestReactionTime < 3.0 },
+  { id: '04', title: 'ON A ROLL', desc: '5 challenges won in a row', done: s.longestStreak >= 5 },
+  { id: '05', title: 'IRON DISCIPLINE', desc: '15 challenges won in a row', done: s.longestStreak >= 15 },
+  { id: '06', title: 'DEDICATED', desc: '50 challenges completed', done: s.totalChallenges >= 50 },
   { id: '07', title: 'PERFECT DAY', desc: `All ${dailyLimit} daily challenges won`, done: hadPerfectDay(history, dailyLimit) },
-  { id: '08', title: 'MARATHON', desc: '500 challenges completed', done: s.totalChallenges >= 500 },
+  { id: '08', title: 'CENTURY', desc: '100 challenges completed', done: s.totalChallenges >= 100 },
 ];
 
 export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettingsChanged }) => {  const styles = useThemedStyles(makeStyles);
