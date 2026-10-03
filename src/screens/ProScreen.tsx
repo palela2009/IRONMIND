@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Modal, Linking } from 'react-native';
 import { useThemedStyles, useTheme } from '../context/ThemeContext';
 import { Palette, PALETTES } from '../theme';
 import { usePro } from '../context/ProContext';
-import { PRO_PLANS, PRO_FEATURES, ProPlanId } from '../constants/pro';
+import { PRO_PLANS, PRO_FEATURES, ProPlan, ProPlanId } from '../constants/pro';
+import { useStoreProducts } from '../hooks/useStoreProducts';
+import { MANAGE_SUBSCRIPTIONS_URL } from '../config/purchases';
 
 interface ProScreenProps {
   visible: boolean;
@@ -13,8 +15,9 @@ interface ProScreenProps {
 export const ProScreen: React.FC<ProScreenProps> = ({ visible, onClose }) => {
   const styles = useThemedStyles(makeStyles);
   const palette = useTheme();
-  const { isPro, plan, expiresAt, streakFreezes, themeId, setTheme, activate, cancel } = usePro();
-  const [busy, setBusy] = useState<ProPlanId | null>(null);
+  const { isPro, plan, source, expiresAt, streakFreezes, themeId, setTheme, purchase, restore } = usePro();
+  const [busy, setBusy] = useState<ProPlanId | 'restore' | null>(null);
+  const { priceFor, productFor } = useStoreProducts(PRO_PLANS, visible && !isPro);
 
   const chooseTheme = (id: string, requiresPro: boolean) => {
     if (requiresPro && !isPro) {
@@ -24,31 +27,30 @@ export const ProScreen: React.FC<ProScreenProps> = ({ visible, onClose }) => {
     setTheme(id);
   };
 
-  const handleSelect = async (planId: ProPlanId) => {
-    setBusy(planId);
-    const ok = await activate(planId);
+  const handleSelect = async (p: ProPlan) => {
+    const product = productFor(p);
+    if (!product) {
+      Alert.alert('Not available yet', 'Purchases are not available right now. Try again later.');
+      return;
+    }
+    setBusy(p.id);
+    const outcome = await purchase(product);
     setBusy(null);
-
-    if (!ok) {
-      Alert.alert(
-        'Not available yet',
-        'In-app purchases are not live yet. They will switch on once IronMind is published to Google Play.'
-      );
+    if (outcome === 'purchased') {
+      Alert.alert('Welcome to Pro', 'Every Pro feature is now unlocked.');
+    } else if (outcome === 'failed') {
+      Alert.alert('Purchase did not go through', 'You have not been charged. Try again in a moment.');
     }
   };
 
-  const handleCancel = () => {
-    Alert.alert('Cancel Pro?', 'This drops you back to the free tier.', [
-      { text: 'Keep Pro', style: 'cancel' },
-      {
-        text: 'Cancel Pro',
-        style: 'destructive',
-        onPress: async () => {
-          const ok = await cancel();
-          if (!ok) Alert.alert('Could not cancel', 'Try again.');
-        },
-      },
-    ]);
+  const handleRestore = async () => {
+    setBusy('restore');
+    const ok = await restore();
+    setBusy(null);
+    Alert.alert(
+      ok ? 'Purchases restored' : 'Nothing to restore',
+      ok ? 'Any Pro purchase on this Google account has been applied.' : 'No Pro purchase was found for this Google account.'
+    );
   };
 
   return (
@@ -69,7 +71,9 @@ export const ProScreen: React.FC<ProScreenProps> = ({ visible, onClose }) => {
                 {plan === 'lifetime'
                   ? 'Lifetime access — never expires.'
                   : expiresAt
-                  ? `${plan?.toUpperCase()} · renews ${new Date(expiresAt).toLocaleDateString()}`
+                  ? source === 'store'
+                    ? `${plan?.toUpperCase()} · renews ${new Date(expiresAt).toLocaleDateString()}`
+                    : `Pro until ${new Date(expiresAt).toLocaleDateString()}`
                   : plan?.toUpperCase()}
               </Text>
               <Text style={styles.activeFreezes}>{streakFreezes} streak freezes remaining</Text>
@@ -136,7 +140,7 @@ export const ProScreen: React.FC<ProScreenProps> = ({ visible, onClose }) => {
                 <TouchableOpacity
                   key={p.id}
                   style={[styles.planCard, p.id === 'annual' && styles.planCardFeatured]}
-                  onPress={() => handleSelect(p.id)}
+                  onPress={() => handleSelect(p)}
                   activeOpacity={0.85}
                   disabled={busy !== null}
                 >
@@ -151,7 +155,7 @@ export const ProScreen: React.FC<ProScreenProps> = ({ visible, onClose }) => {
                     {busy === p.id ? (
                       <ActivityIndicator color={palette.accent} size="small" />
                     ) : (
-                      <Text style={styles.planPrice}>{p.price}</Text>
+                      <Text style={styles.planPrice}>{priceFor(p)}</Text>
                     )}
                     {p.note && <Text style={styles.planNote}>{p.note}</Text>}
                   </View>
@@ -162,12 +166,20 @@ export const ProScreen: React.FC<ProScreenProps> = ({ visible, onClose }) => {
                 Subscriptions renew automatically until cancelled. Manage or cancel any time in
                 Google Play. Lifetime is a single payment with no renewal.
               </Text>
+
+              <TouchableOpacity style={styles.cancelBtn} onPress={handleRestore} activeOpacity={0.8} disabled={busy !== null}>
+                {busy === 'restore' ? (
+                  <ActivityIndicator color={palette.textTertiary} size="small" />
+                ) : (
+                  <Text style={styles.cancelText}>RESTORE PURCHASES</Text>
+                )}
+              </TouchableOpacity>
             </>
           )}
 
-          {isPro && (
-            <TouchableOpacity style={styles.cancelBtn} onPress={handleCancel} activeOpacity={0.8}>
-              <Text style={styles.cancelText}>CANCEL PRO</Text>
+          {isPro && source === 'store' && plan !== 'lifetime' && (
+            <TouchableOpacity style={styles.cancelBtn} onPress={() => Linking.openURL(MANAGE_SUBSCRIPTIONS_URL)} activeOpacity={0.8}>
+              <Text style={styles.cancelText}>MANAGE SUBSCRIPTION</Text>
             </TouchableOpacity>
           )}
         </ScrollView>

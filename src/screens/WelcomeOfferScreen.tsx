@@ -3,16 +3,21 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { useThemedStyles, useTheme } from '../context/ThemeContext';
 import { Palette, radius, spacing, cardShadow, glowFor } from '../theme';
 import { usePro } from '../context/ProContext';
-import { WELCOME_PLANS, PRO_PLANS, PRO_FEATURES, ProPlanId, discountPercent, MAX_WELCOME_DISCOUNT } from '../constants/pro';
+import { WELCOME_PLANS, PRO_PLANS, PRO_FEATURES, ProPlan, ProPlanId, discountPercent, MAX_WELCOME_DISCOUNT } from '../constants/pro';
+import { useStoreProducts } from '../hooks/useStoreProducts';
+import { WELCOME_OFFER_TAG } from '../config/purchases';
 
 export const WelcomeOfferScreen: React.FC = () => {
   const styles = useThemedStyles(makeStyles);
   const palette = useTheme();
-  const { welcomeOffer, trialAvailable, activate, startTrial, closeWelcomeOffer } = usePro();
+  const { welcomeOffer, trialAvailable, purchase, startTrial, closeWelcomeOffer } = usePro();
   const [busy, setBusy] = useState<ProPlanId | null>(null);
   const [startingTrial, setStartingTrial] = useState(false);
 
   const [stage, setStage] = useState<'trial' | 'discount'>(trialAvailable ? 'trial' : 'discount');
+  const showingPrices = welcomeOffer && stage === 'discount';
+  const welcome = useStoreProducts(WELCOME_PLANS, showingPrices, WELCOME_OFFER_TAG);
+  const standard = useStoreProducts(PRO_PLANS, showingPrices);
 
   const beginTrial = async () => {
     setStartingTrial(true);
@@ -25,20 +30,21 @@ export const WelcomeOfferScreen: React.FC = () => {
     await closeWelcomeOffer();
   };
 
-  const handleSelect = async (planId: ProPlanId) => {
-    setBusy(planId);
-    const ok = await activate(planId);
-    setBusy(null);
-
-    if (ok) {
-      await closeWelcomeOffer();
+  const handleSelect = async (p: ProPlan) => {
+    const product = welcome.productFor(p);
+    if (!product) {
+      Alert.alert('Not available yet', 'Purchases are not available right now. Try again later.');
       return;
     }
+    setBusy(p.id);
+    const outcome = await purchase(product, WELCOME_OFFER_TAG);
+    setBusy(null);
 
-    Alert.alert(
-      'Not available yet',
-      'In-app purchases are not live yet. They will switch on once IronMind is published to Google Play.'
-    );
+    if (outcome === 'purchased') {
+      await closeWelcomeOffer();
+    } else if (outcome === 'failed') {
+      Alert.alert('Purchase did not go through', 'You have not been charged. Try again in a moment.');
+    }
   };
 
   const decline = () => {
@@ -123,7 +129,7 @@ export const WelcomeOfferScreen: React.FC = () => {
               <TouchableOpacity
                 key={p.id}
                 style={[styles.planCard, featured && styles.planCardFeatured]}
-                onPress={() => handleSelect(p.id)}
+                onPress={() => handleSelect(p)}
                 activeOpacity={0.88}
                 disabled={busy !== null}
               >
@@ -147,8 +153,8 @@ export const WelcomeOfferScreen: React.FC = () => {
                       <ActivityIndicator color={palette.accent} size="small" />
                     ) : (
                       <View style={styles.priceRow}>
-                        <Text style={styles.oldPrice}>{full?.price}</Text>
-                        <Text style={styles.newPrice}>{p.price}</Text>
+                        <Text style={styles.oldPrice}>{full ? standard.priceFor(full) : ''}</Text>
+                        <Text style={styles.newPrice}>{welcome.priceFor(p)}</Text>
                       </View>
                     )}
                   </View>

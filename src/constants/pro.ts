@@ -63,7 +63,7 @@ export const MAX_WELCOME_DISCOUNT = (): number =>
 export const WELCOME_PLANS: ProPlan[] = [
   {
     id: 'monthly',
-    productId: 'ironmind_pro_monthly_welcome',
+    productId: 'ironmind_pro_monthly',
     title: 'MONTHLY',
     price: '$1.99',
     priceValue: 1.99,
@@ -73,7 +73,7 @@ export const WELCOME_PLANS: ProPlan[] = [
   },
   {
     id: 'annual',
-    productId: 'ironmind_pro_annual_welcome',
+    productId: 'ironmind_pro_annual',
     title: 'ANNUAL',
     price: '$14.99',
     priceValue: 14.99,

@@ -4,6 +4,8 @@ import { useAuth } from './AuthContext';
 import { API_BASE_URL } from '../config/api';
 import { authedFetch } from '../utils/authFetch';
 import { ProPlanId } from '../constants/pro';
+import { PurchasesStoreProduct } from 'react-native-purchases';
+import { identifyPurchaser, buyProduct, restorePurchases, PurchaseOutcome } from '../config/purchases';
 
 const API_URL = `${API_BASE_URL}/api/pro`;
 const COINS_URL = `${API_BASE_URL}/api/coins`;
@@ -23,18 +25,19 @@ export interface Entitlement {
   trialEndsAt: string | null;
   trialAvailable: boolean;
   plan: ProPlanId | null;
+  source: 'store' | 'coins' | 'owner' | null;
   expiresAt: string | null;
   streakFreezes: number;
   themeId: string;
 }
 
-const FREE: Entitlement = { isPro: false, isOwner: false, welcomeOffer: false, coins: 0, unlockedThemes: [], ownedFrames: [], ownedNameEffects: [], equippedFrame: null, equippedNameEffect: null, onTrial: false, trialEndsAt: null, trialAvailable: false, plan: null, expiresAt: null, streakFreezes: 0, themeId: 'default' };
+const FREE: Entitlement = { isPro: false, isOwner: false, welcomeOffer: false, coins: 0, unlockedThemes: [], ownedFrames: [], ownedNameEffects: [], equippedFrame: null, equippedNameEffect: null, onTrial: false, trialEndsAt: null, trialAvailable: false, plan: null, source: null, expiresAt: null, streakFreezes: 0, themeId: 'default' };
 
 interface ProContextValue extends Entitlement {
   loading: boolean;
   refresh: () => Promise<void>;
-  activate: (plan: ProPlanId) => Promise<boolean>;
-  cancel: () => Promise<boolean>;
+  purchase: (product: PurchasesStoreProduct, offerTag?: string) => Promise<PurchaseOutcome>;
+  restore: () => Promise<boolean>;
   useFreeze: () => Promise<boolean>;
   grantFreeze: () => Promise<void>;
   setTheme: (themeId: string) => Promise<void>;
@@ -95,15 +98,13 @@ export const ProProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [fbUser?.uid]);
 
   useEffect(() => {
+    identifyPurchaser(fbUser?.uid ?? null);
     refresh();
   }, [refresh]);
 
-  const activate = async (plan: ProPlanId): Promise<boolean> => {
+  const syncStore = async (): Promise<boolean> => {
     try {
-      const res = await authedFetch(`${API_URL}/activate`, {
-        method: 'POST',
-        body: JSON.stringify({ plan }),
-      });
+      const res = await authedFetch(`${API_URL}/sync`, { method: 'POST' });
       if (!res.ok) return false;
       await persist(await res.json());
       return true;
@@ -112,15 +113,15 @@ export const ProProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const cancel = async (): Promise<boolean> => {
-    try {
-      const res = await authedFetch(`${API_URL}/cancel`, { method: 'POST' });
-      if (!res.ok) return false;
-      await persist(await res.json());
-      return true;
-    } catch {
-      return false;
-    }
+  const purchase = async (product: PurchasesStoreProduct, offerTag?: string): Promise<PurchaseOutcome> => {
+    const outcome = await buyProduct(product, offerTag);
+    if (outcome === 'purchased') await syncStore();
+    return outcome;
+  };
+
+  const restore = async (): Promise<boolean> => {
+    if (!(await restorePurchases())) return false;
+    return syncStore();
   };
 
   const useFreeze = async (): Promise<boolean> => {
@@ -231,7 +232,7 @@ export const ProProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   return (
     <ProContext.Provider
-      value={{ ...entitlement, loading, refresh, activate, cancel, useFreeze, grantFreeze, setTheme, closeWelcomeOffer, startTrial, awardCoins, buyItem, equipCosmetic }}
+      value={{ ...entitlement, loading, refresh, purchase, restore, useFreeze, grantFreeze, setTheme, closeWelcomeOffer, startTrial, awardCoins, buyItem, equipCosmetic }}
     >
       {children}
     </ProContext.Provider>
