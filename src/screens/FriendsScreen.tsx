@@ -5,6 +5,7 @@ import { Palette, radius } from '../theme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFriends } from '../hooks/useFriends';
 import { useDuels, formatTimeLeft, formatAgo, DUEL_REACTIONS, reactionText } from '../hooks/useDuels';
+import { useInvites, daysLabel, INVITE_RULES } from '../hooks/useInvites';
 import { useAuth } from '../context/AuthContext';
 import { TrainingState, UserStats } from '../types/training';
 import { rankForLevel, PODIUM } from '../constants/ranks';
@@ -110,6 +111,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
   const { code, friends, requests, loading, error, addByCode, acceptRequest, rejectRequest, removeFriend, refresh: refreshFriends } = useFriends();
   const { duels, challenge, respond, cancel: cancelDuel, react, error: duelError, refresh: refreshDuels } = useDuels();
   const [reactingId, setReactingId] = useState<string | null>(null);
+  const { progress: invites, refresh: refreshInvites } = useInvites();
   const [refreshing, setRefreshing] = useState(false);
   const [inputCode, setInputCode] = useState('');
   const [adding, setAdding] = useState(false);
@@ -181,7 +183,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
     if (!code) return;
     try {
       await Share.share({
-        message: `Compete with me on IRONMIND to break phone addiction! Use my code: ${code}`,
+        message: `Compete with me on IRONMIND and take back your screen time. After you install it, add my code ${code} in the Friends tab: https://play.google.com/store/apps/details?id=com.palelastudio.ironmind`,
       });
     } catch {}
   };
@@ -234,7 +236,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([refreshFriends(), refreshDuels()]);
+    await Promise.all([refreshFriends(), refreshDuels(), refreshInvites()]);
     setRefreshing(false);
   };
 
@@ -302,6 +304,43 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
           <Text style={styles.shareBtnText}>SHARE CODE →</Text>
         </TouchableOpacity>
       </View>
+
+      {invites && (
+        <View style={styles.inviteCard}>
+          <Text style={styles.addLabel}>INVITE FRIENDS · EARN PRO</Text>
+          {invites.next ? (
+            <>
+              <View style={styles.inviteHead}>
+                <Text style={styles.inviteCount}>
+                  {Math.min(invites.active, invites.next.at)}
+                  <Text style={styles.inviteOf}> / {invites.next.at} friends</Text>
+                </Text>
+                <Text style={styles.inviteReward}>{daysLabel(invites.next.days)} PRO</Text>
+              </View>
+              <View style={styles.inviteBarBg}>
+                <View style={[styles.inviteBarFill, { width: `${Math.min(invites.active / invites.next.at, 1) * 100}%` }]} />
+              </View>
+            </>
+          ) : (
+            <Text style={styles.inviteCount}>All rewards earned</Text>
+          )}
+          <View style={styles.inviteSteps}>
+            {invites.milestones.map((m) => (
+              <View key={m.at} style={[styles.inviteStep, invites.rewarded.includes(m.at) && styles.inviteStepDone]}>
+                <Text style={[styles.inviteStepText, invites.rewarded.includes(m.at) && styles.inviteStepTextDone]}>
+                  {invites.rewarded.includes(m.at) ? '✓ ' : ''}{m.at} → {daysLabel(m.days)}
+                </Text>
+              </View>
+            ))}
+          </View>
+          {invites.joined > invites.active && (
+            <Text style={styles.invitePending}>
+              {invites.joined - invites.active} joined, waiting to become active
+            </Text>
+          )}
+          <Text style={styles.inviteRules}>{INVITE_RULES}</Text>
+        </View>
+      )}
 
       <View style={styles.addCard}>
         <Text style={styles.addLabel}>ADD A FRIEND</Text>
@@ -690,6 +729,20 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   shareBtn: { backgroundColor: c.accent, borderRadius: 10, paddingVertical: 12, paddingHorizontal: 24 },
   shareBtnText: { color: c.accentContrast, fontSize: 12, fontWeight: '900', letterSpacing: 0.3 },
 
+  inviteCard: { backgroundColor: c.surface, borderRadius: 14, marginHorizontal: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: c.border },
+  inviteHead: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 10 },
+  inviteCount: { color: c.textPrimary, fontSize: 26, fontWeight: '900' },
+  inviteOf: { color: c.textTertiary, fontSize: 13, fontWeight: '700' },
+  inviteReward: { color: c.accent, fontSize: 12, fontWeight: '900', letterSpacing: 0.5, marginBottom: 4 },
+  inviteBarBg: { height: 8, borderRadius: 4, backgroundColor: c.surfaceRaised, overflow: 'hidden' },
+  inviteBarFill: { height: 8, borderRadius: 4, backgroundColor: c.accent },
+  inviteSteps: { flexDirection: 'row', gap: 6, marginTop: 12, flexWrap: 'wrap' },
+  inviteStep: { borderRadius: 8, borderWidth: 1, borderColor: c.border, paddingVertical: 5, paddingHorizontal: 8 },
+  inviteStepDone: { borderColor: c.accentDim, backgroundColor: c.accentMuted },
+  inviteStepText: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 0.3 },
+  inviteStepTextDone: { color: c.accent },
+  invitePending: { color: c.textSecondary, fontSize: 11, marginTop: 10 },
+  inviteRules: { color: c.textFaint, fontSize: 10, lineHeight: 14, marginTop: 10 },
   addCard: { backgroundColor: c.surface, borderRadius: 14, marginHorizontal: 16, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: c.border },
   addLabel: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 1, marginBottom: 10 },
   addRow: { flexDirection: 'row', gap: 10 },

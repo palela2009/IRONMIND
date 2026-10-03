@@ -23,15 +23,14 @@ export interface Entitlement {
   equippedNameEffect: string | null;
   onTrial: boolean;
   trialEndsAt: string | null;
-  trialAvailable: boolean;
   plan: ProPlanId | null;
-  source: 'store' | 'coins' | 'owner' | null;
+  source: 'store' | 'coins' | 'owner' | 'invites' | null;
   expiresAt: string | null;
   streakFreezes: number;
   themeId: string;
 }
 
-const FREE: Entitlement = { isPro: false, isOwner: false, welcomeOffer: false, coins: 0, unlockedThemes: [], ownedFrames: [], ownedNameEffects: [], equippedFrame: null, equippedNameEffect: null, onTrial: false, trialEndsAt: null, trialAvailable: false, plan: null, source: null, expiresAt: null, streakFreezes: 0, themeId: 'default' };
+const FREE: Entitlement = { isPro: false, isOwner: false, welcomeOffer: false, coins: 0, unlockedThemes: [], ownedFrames: [], ownedNameEffects: [], equippedFrame: null, equippedNameEffect: null, onTrial: false, trialEndsAt: null, plan: null, source: null, expiresAt: null, streakFreezes: 0, themeId: 'default' };
 
 interface ProContextValue extends Entitlement {
   loading: boolean;
@@ -42,7 +41,6 @@ interface ProContextValue extends Entitlement {
   grantFreeze: () => Promise<void>;
   setTheme: (themeId: string) => Promise<void>;
   closeWelcomeOffer: () => Promise<void>;
-  startTrial: () => Promise<boolean>;
   awardCoins: (reason: 'challenge_win' | 'perfect_day' | 'rewarded_ad') => Promise<void>;
   buyItem: (
     item: 'freeze' | 'theme' | 'frame' | 'nameEffect' | 'proWeek',
@@ -201,17 +199,6 @@ export const ProProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {}
   };
 
-  const startTrial = async (): Promise<boolean> => {
-    try {
-      const res = await authedFetch(`${API_URL}/trial/start`, { method: 'POST' });
-      if (!res.ok) return false;
-      await persist(await res.json());
-      return true;
-    } catch {
-      return false;
-    }
-  };
-
   const closeWelcomeOffer = async () => {
     await persist({ ...entitlementRef.current, welcomeOffer: false });
     try {
@@ -232,7 +219,7 @@ export const ProProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   return (
     <ProContext.Provider
-      value={{ ...entitlement, loading, refresh, purchase, restore, useFreeze, grantFreeze, setTheme, closeWelcomeOffer, startTrial, awardCoins, buyItem, equipCosmetic }}
+      value={{ ...entitlement, loading, refresh, purchase, restore, useFreeze, grantFreeze, setTheme, closeWelcomeOffer, awardCoins, buyItem, equipCosmetic }}
     >
       {children}
     </ProContext.Provider>

@@ -5,7 +5,11 @@ import { Palette, PALETTES } from '../theme';
 import { usePro } from '../context/ProContext';
 import { PRO_PLANS, PRO_FEATURES, ProPlan, ProPlanId } from '../constants/pro';
 import { useStoreProducts } from '../hooks/useStoreProducts';
-import { MANAGE_SUBSCRIPTIONS_URL } from '../config/purchases';
+import { MANAGE_SUBSCRIPTIONS_URL, purchasesAvailable } from '../config/purchases';
+import { PRO_WEEK_PRICE } from '../constants/cosmetics';
+import { INVITE_RULES } from '../hooks/useInvites';
+
+const REFERRAL_STEPS = '3 friends → 7 days · 10 → 1 month · 25 → 3 months';
 
 interface ProScreenProps {
   visible: boolean;
@@ -133,7 +137,30 @@ export const ProScreen: React.FC<ProScreenProps> = ({ visible, onClose }) => {
             })}
           </View>
 
-          {!isPro && (
+          {!isPro && !purchasesAvailable() && (
+            <>
+              <Text style={styles.sectionLabel}>HOW TO GET PRO</Text>
+              <View style={styles.planCard}>
+                <View style={styles.planLeft}>
+                  <Text style={styles.planTitle}>INVITE FRIENDS</Text>
+                  <Text style={styles.planCadence}>
+                    {REFERRAL_STEPS} · Friends tab
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.planCard}>
+                <View style={styles.planLeft}>
+                  <Text style={styles.planTitle}>SPEND COINS</Text>
+                  <Text style={styles.planCadence}>
+                    ◉ {PRO_WEEK_PRICE.toLocaleString()} → 7 days, once a month · Shop on Home
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.legal}>{INVITE_RULES} Coins come from winning challenges.</Text>
+            </>
+          )}
+
+          {!isPro && purchasesAvailable() && (
             <>
               <Text style={styles.sectionLabel}>CHOOSE YOUR PLAN</Text>
               {PRO_PLANS.map((p) => (

@@ -5,30 +5,17 @@ import { Palette, radius, spacing, cardShadow, glowFor } from '../theme';
 import { usePro } from '../context/ProContext';
 import { WELCOME_PLANS, PRO_PLANS, PRO_FEATURES, ProPlan, ProPlanId, discountPercent, MAX_WELCOME_DISCOUNT } from '../constants/pro';
 import { useStoreProducts } from '../hooks/useStoreProducts';
-import { WELCOME_OFFER_TAG } from '../config/purchases';
+import { WELCOME_OFFER_TAG, purchasesAvailable } from '../config/purchases';
 
 export const WelcomeOfferScreen: React.FC = () => {
   const styles = useThemedStyles(makeStyles);
   const palette = useTheme();
-  const { welcomeOffer, trialAvailable, purchase, startTrial, closeWelcomeOffer } = usePro();
+  const { welcomeOffer, purchase, closeWelcomeOffer } = usePro();
   const [busy, setBusy] = useState<ProPlanId | null>(null);
-  const [startingTrial, setStartingTrial] = useState(false);
 
-  const [stage, setStage] = useState<'trial' | 'discount'>(trialAvailable ? 'trial' : 'discount');
-  const showingPrices = welcomeOffer && stage === 'discount';
-  const welcome = useStoreProducts(WELCOME_PLANS, showingPrices, WELCOME_OFFER_TAG);
-  const standard = useStoreProducts(PRO_PLANS, showingPrices);
-
-  const beginTrial = async () => {
-    setStartingTrial(true);
-    const ok = await startTrial();
-    setStartingTrial(false);
-    if (!ok) {
-      Alert.alert('Could not start trial', 'Try again in a moment.');
-      return;
-    }
-    await closeWelcomeOffer();
-  };
+  const visible = welcomeOffer && purchasesAvailable();
+  const welcome = useStoreProducts(WELCOME_PLANS, visible, WELCOME_OFFER_TAG);
+  const standard = useStoreProducts(PRO_PLANS, visible);
 
   const handleSelect = async (p: ProPlan) => {
     const product = welcome.productFor(p);
@@ -59,25 +46,17 @@ export const WelcomeOfferScreen: React.FC = () => {
   };
 
   return (
-    <Modal visible={welcomeOffer} animationType="slide" onRequestClose={decline}>
+    <Modal visible={visible} animationType="slide" onRequestClose={decline}>
       <View style={styles.root}>
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
             <View style={styles.tag}>
-              <Text style={styles.tagText}>
-                {stage === 'trial' ? 'FREE FOR YOUR FIRST WEEK' : 'ONE-TIME WELCOME OFFER'}
-              </Text>
+              <Text style={styles.tagText}>ONE-TIME WELCOME OFFER</Text>
             </View>
 
-            <Text style={styles.saveNum}>{stage === 'trial' ? '7' : `${MAX_WELCOME_DISCOUNT()}%`}</Text>
-            <Text style={styles.saveWord}>
-              {stage === 'trial' ? 'DAYS OF PRO, FREE' : 'OFF IRONMIND PRO'}
-            </Text>
-            <Text style={styles.sub}>
-              {stage === 'trial'
-                ? 'Everything below, unlocked for seven days. No card, no charge — it simply ends unless you choose to continue.'
-                : 'No problem. Here is the lowest price IronMind Pro will ever be, shown once.'}
-            </Text>
+            <Text style={styles.saveNum}>{`${MAX_WELCOME_DISCOUNT()}%`}</Text>
+            <Text style={styles.saveWord}>OFF IRONMIND PRO</Text>
+            <Text style={styles.sub}>The lowest price IronMind Pro will ever be, shown once.</Text>
           </View>
 
           <View style={styles.featureCard}>
@@ -90,38 +69,7 @@ export const WelcomeOfferScreen: React.FC = () => {
             ))}
           </View>
 
-          {stage === 'trial' && (
-            <>
-              <TouchableOpacity
-                style={styles.trialBtn}
-                onPress={beginTrial}
-                activeOpacity={0.88}
-                disabled={startingTrial}
-              >
-                {startingTrial ? (
-                  <ActivityIndicator color={palette.accentContrast} />
-                ) : (
-                  <Text style={styles.trialBtnText}>START MY 7 FREE DAYS</Text>
-                )}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.declineBtn}
-                onPress={() => setStage('discount')}
-                activeOpacity={0.8}
-                disabled={startingTrial}
-              >
-                <Text style={styles.declineText}>NOT NOW</Text>
-              </TouchableOpacity>
-
-              <Text style={styles.legal}>
-                The trial unlocks every Pro feature for seven days and then simply stops. No
-                payment details are taken and nothing renews.
-              </Text>
-            </>
-          )}
-
-          {stage === 'discount' && WELCOME_PLANS.map((p) => {
+          {WELCOME_PLANS.map((p) => {
             const full = PRO_PLANS.find((s) => s.id === p.id);
             const featured = p.id === 'annual';
             const off = discountPercent(p.id);
@@ -170,31 +118,27 @@ export const WelcomeOfferScreen: React.FC = () => {
             );
           })}
 
-          {stage === 'discount' && (
-            <View style={styles.reassureCard}>
-              <Text style={styles.reassureTitle}>FREE IS A REAL APP</Text>
-              <Text style={styles.reassureBody}>
-                Challenges, streaks, daily limits, friends, duels and your stats all work
-                without Pro. You can break the habit on the free tier — and most people will.
-              </Text>
-              <Text style={styles.reassureBody}>
-                Pro is for going further: streak freezes so one slip does not erase weeks,
-                deeper analytics, exclusive themes and badges.{' '}
-                <Text style={styles.reassureEmphasis}>Better results, not the only results.</Text>
-              </Text>
-            </View>
-          )}
+          <View style={styles.reassureCard}>
+            <Text style={styles.reassureTitle}>FREE IS A REAL APP</Text>
+            <Text style={styles.reassureBody}>
+              Challenges, streaks, daily limits, friends, duels and your stats all work
+              without Pro. You can break the habit on the free tier — and most people will.
+            </Text>
+            <Text style={styles.reassureBody}>
+              Pro is for going further: streak freezes so one slip does not erase weeks,
+              deeper analytics, exclusive themes and badges.{' '}
+              <Text style={styles.reassureEmphasis}>Better results, not the only results.</Text>
+            </Text>
+          </View>
 
-          {stage === 'discount' && (
-            <TouchableOpacity style={styles.declineBtn} onPress={decline} activeOpacity={0.8}>
-              <Text style={styles.declineText}>NO THANKS, CONTINUE FREE</Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity style={styles.declineBtn} onPress={decline} activeOpacity={0.8}>
+            <Text style={styles.declineText}>NO THANKS, CONTINUE FREE</Text>
+          </TouchableOpacity>
 
           <Text style={styles.legal}>
-            {stage === 'trial' ? '' : `Subscriptions renew automatically at the standard price after the first term unless
+            Subscriptions renew automatically at the standard price after the first term unless
             cancelled. Manage or cancel any time in Google Play. Lifetime is a single payment with
-            no renewal.`}
+            no renewal.
           </Text>
         </ScrollView>
       </View>
@@ -310,14 +254,6 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   offText: { color: c.accent, fontSize: 9, fontWeight: '900', letterSpacing: 0.8 },
   planGo: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 0.6 },
 
-  trialBtn: {
-    backgroundColor: c.accent,
-    borderRadius: radius.md,
-    paddingVertical: 18,
-    alignItems: 'center',
-    ...cardShadow,
-  },
-  trialBtnText: { color: c.accentContrast, fontSize: 14, fontWeight: '900', letterSpacing: 0.8 },
 
   reassureCard: {
     backgroundColor: c.surface,
