@@ -10,7 +10,7 @@ interface Props {
   onClose: () => void;
 }
 
-export const PRICES = { freeze: 200, theme: 750 };
+export const PRICES = { freeze: 100, theme: 300 };
 
 export const ShopScreen: React.FC<Props> = ({ visible, onClose }) => {
   const styles = useThemedStyles(makeStyles);
