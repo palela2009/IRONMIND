@@ -6,7 +6,8 @@ import { ChallengeItem } from '../types/training';
 import { useAuth } from '../context/AuthContext';
 import { useScreenTime, formatMinutes } from '../hooks/useScreenTime';
 import { syncAppMonitor } from '../hooks/useAppMonitor';
-import { APPS_LIST, colorForApp, abbrForApp } from '../constants/apps';
+import { APPS_LIST, colorForApp } from '../constants/apps';
+import { AppIcon } from '../components/AppIcon';
 import { API_BASE_URL } from '../config/api';
 import { authedFetch } from '../utils/authFetch';
 import { radius, spacing, cardShadow, Palette } from '../theme';
@@ -180,9 +181,7 @@ export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged }) 
                 onPress={() => togglePending(app)}
                 activeOpacity={0.75}
               >
-                <View style={[styles.editIcon, { backgroundColor: colorForApp(app) }]}>
-                  <Text style={styles.editIconText}>{abbrForApp(app)}</Text>
-                </View>
+                <AppIcon app={app} style={styles.editIcon} textStyle={styles.editIconText} />
                 <Text style={[styles.editLabel, on && styles.editLabelOn]}>{app}</Text>
                 <View style={[styles.check, on && styles.checkOn]}>
                   {on && <Text style={styles.checkGlyph}>✓</Text>}
@@ -218,9 +217,7 @@ export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged }) 
           return (
             <View key={app} style={styles.appCard}>
               <View style={styles.appTop}>
-                <View style={[styles.appIcon, { backgroundColor: colorForApp(app) }]}>
-                  <Text style={styles.appIconText}>{abbrForApp(app)}</Text>
-                </View>
+                <AppIcon app={app} style={styles.appIcon} textStyle={styles.appIconText} />
                 <View style={styles.appBody}>
                   <Text style={styles.appName}>{app}</Text>
                   <Text style={styles.appSub}>
@@ -321,9 +318,7 @@ export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged }) 
           <View style={styles.allCard}>
             {screenTime.slice(0, 10).map((item) => (
               <View key={item.app} style={styles.stRow}>
-                <View style={[styles.stIcon, { backgroundColor: colorForApp(item.app) }]}>
-                  <Text style={styles.stIconText}>{abbrForApp(item.app)}</Text>
-                </View>
+                <AppIcon app={item.app} style={styles.stIcon} textStyle={styles.stIconText} />
                 <Text style={styles.stApp} numberOfLines={1}>{item.app}</Text>
                 <View style={styles.stBarWrap}>
                   <View style={[styles.stBar, { width: `${Math.max((item.minutes / maxMins) * 100, 3)}%` }]} />

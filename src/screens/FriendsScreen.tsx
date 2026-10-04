@@ -5,7 +5,7 @@ import { Palette, radius } from '../theme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFriends } from '../hooks/useFriends';
 import { useDuels, formatTimeLeft, formatAgo, DUEL_REACTIONS, reactionText } from '../hooks/useDuels';
-import { useInvites, daysLabel, INVITE_RULES } from '../hooks/useInvites';
+import { useInvites, daysLabel, INVITE_RULES, inviteMessage } from '../hooks/useInvites';
 import { useAuth } from '../context/AuthContext';
 import { TrainingState, UserStats } from '../types/training';
 import { rankForLevel, PODIUM } from '../constants/ranks';
@@ -183,7 +183,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
     if (!code) return;
     try {
       await Share.share({
-        message: `Compete with me on IRONMIND and take back your screen time. After you install it, add my code ${code} in the Friends tab: https://play.google.com/store/apps/details?id=com.palelastudio.ironmind`,
+        message: inviteMessage(code),
       });
     } catch {}
   };

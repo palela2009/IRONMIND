@@ -8,7 +8,8 @@ import { API_BASE_URL } from '../config/api';
 import { authedFetch } from '../utils/authFetch';
 import { DifficultyLevel, DIFFICULTY_WINDOW_SECONDS } from '../constants/difficulty';
 import { DAILY_LIMIT_VALUES, DailyLimitLevel } from '../constants/dailyLimit';
-import { APPS_LIST, colorForApp, abbrForApp } from '../constants/apps';
+import { APPS_LIST } from '../constants/apps';
+import { AppIcon } from '../components/AppIcon';
 import { useAuth } from '../context/AuthContext';
 import { syncAppMonitor } from '../hooks/useAppMonitor';
 
@@ -183,9 +184,7 @@ export const OnboardingScreen: React.FC<OnboardingProps> = ({ onComplete }) => {
                   onPress={() => toggleApp(app)}
                   activeOpacity={0.8}
                 >
-                  <View style={[styles.appIcon, { backgroundColor: colorForApp(app) }]}>
-                    <Text style={styles.appIconText}>{abbrForApp(app)}</Text>
-                  </View>
+                  <AppIcon app={app} style={styles.appIcon} textStyle={styles.appIconText} />
                   <Text style={[styles.optionLabel, on && styles.optionLabelOn]}>{app}</Text>
                   <View style={[styles.check, on && styles.checkOn]}>
                     {on && <Text style={styles.checkGlyph}>✓</Text>}

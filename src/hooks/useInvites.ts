@@ -16,7 +16,7 @@ export interface InviteProgress {
 }
 
 export const INVITE_RULES =
-  'A friend counts once they add your code within their first week and complete 3 challenges on 2 different days.';
+  'A friend counts as soon as they add your code within their first week. Each phone counts once, and never your own.';
 
 export const useInvites = () => {
   const [progress, setProgress] = useState<InviteProgress | null>(null);
@@ -33,6 +33,20 @@ export const useInvites = () => {
   }, [refresh]);
 
   return { progress, refresh };
+};
+
+export const inviteMessage = (code: string): string =>
+  `Compete with me on IRONMIND and take back your screen time. After you install it, add my code ${code} in the Friends tab: https://play.google.com/store/apps/details?id=com.palelastudio.ironmind`;
+
+export const fetchInviteCode = async (): Promise<string | null> => {
+  try {
+    const res = await authedFetch(`${API_BASE_URL}/api/friends/code`);
+    if (!res.ok) return null;
+    const body = await res.json();
+    return body.code ?? null;
+  } catch {
+    return null;
+  }
 };
 
 export const daysLabel = (days: number): string =>

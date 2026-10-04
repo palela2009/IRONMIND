@@ -11,6 +11,7 @@ import { StreakSavedOverlay } from './src/components/StreakSavedOverlay';
 import { reportActiveDuels } from './src/hooks/useDuels';
 import { ProScreen } from './src/screens/ProScreen';
 import { WelcomeOfferScreen } from './src/screens/WelcomeOfferScreen';
+import { ProIntroScreen } from './src/screens/ProIntroScreen';
 import { useStats } from './src/hooks/useStats';
 import { useNotifications } from './src/hooks/useNotifications';
 import { useAppMonitor, syncAppMonitor } from './src/hooks/useAppMonitor';
@@ -296,7 +297,8 @@ function RootNavigator() {
                 onPress={() => goToTab(tab.id)}
                 activeOpacity={0.7}
               >
-                <View style={[nav.iconWrap, active && nav.iconWrapActive]}>
+                <View style={nav.iconWrap}>
+                  <View style={[nav.pill, { opacity: active ? 1 : 0 }]} />
                   <tab.Icon active={active} />
                 </View>
                 <Text style={[nav.label, active && nav.labelActive]}>{tab.label}</Text>
@@ -317,6 +319,7 @@ function RootNavigator() {
       />
 
       <WelcomeOfferScreen />
+      <ProIntroScreen />
 
       <StreakSavedOverlay
         streak={savedStreak?.streak ?? 0}
@@ -359,13 +362,13 @@ const makeNav = (c: Palette) => StyleSheet.create({
   },
   item: { flex: 1, alignItems: 'center', gap: 5 },
   iconWrap: {
-    width: 48,
-    height: 30,
-    borderRadius: radius.pill,
+    width: 56,
+    height: 32,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  iconWrapActive: { backgroundColor: c.accent },
+  pill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: c.accent, borderRadius: 16 },
   label: { fontSize: 9, fontWeight: '800', letterSpacing: 0.8, color: c.textFaint },
   labelActive: { color: c.accent },
 });

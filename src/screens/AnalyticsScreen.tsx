@@ -4,7 +4,8 @@ import { useThemedStyles, useTheme } from '../context/ThemeContext';
 import { Palette, radius, spacing, cardShadow } from '../theme';
 import { useAnalytics, dayLabel, trendFor } from '../hooks/useAnalytics';
 import { formatMinutes } from '../hooks/useScreenTime';
-import { colorForApp, abbrForApp } from '../constants/apps';
+import { colorForApp } from '../constants/apps';
+import { AppIcon } from '../components/AppIcon';
 import { ChallengeItem, UserStats } from '../types/training';
 
 interface Props {
@@ -205,9 +206,7 @@ export const AnalyticsScreen: React.FC<Props> = ({ visible, onClose, history, st
                 ) : (
                   topApps.map((a) => (
                     <View key={a.app} style={styles.appRow}>
-                      <View style={[styles.appIcon, { backgroundColor: colorForApp(a.app) }]}>
-                        <Text style={styles.appIconText}>{abbrForApp(a.app)}</Text>
-                      </View>
+                      <AppIcon app={a.app} style={styles.appIcon} textStyle={styles.appIconText} />
                       <Text style={styles.appName} numberOfLines={1}>{a.app}</Text>
                       <View style={styles.appBarTrack}>
                         <View
