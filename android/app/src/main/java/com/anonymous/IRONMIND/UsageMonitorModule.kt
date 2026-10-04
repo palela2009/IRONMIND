@@ -118,6 +118,39 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
     }
 
     @ReactMethod
+    fun getAppIcons(names: ReadableArray, promise: Promise) {
+        try {
+            val pm = reactContext.packageManager
+            val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+            val byLabel by lazy {
+                pm.queryIntentActivities(launcherIntent, 0).associate {
+                    it.loadLabel(pm).toString() to it.activityInfo.packageName
+                }
+            }
+            val size = 96
+            val result = Arguments.createMap()
+            for (i in 0 until names.size()) {
+                val name = names.getString(i) ?: continue
+                val pkg = APP_PACKAGES[name] ?: byLabel[name] ?: continue
+                try {
+                    val drawable = pm.getApplicationIcon(pkg)
+                    val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
+                    val canvas = android.graphics.Canvas(bitmap)
+                    drawable.setBounds(0, 0, size, size)
+                    drawable.draw(canvas)
+                    val out = java.io.ByteArrayOutputStream()
+                    bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+                    val encoded = android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.NO_WRAP)
+                    result.putString(name, "data:image/png;base64,$encoded")
+                } catch (_: Exception) {}
+            }
+            promise.resolve(result)
+        } catch (e: Exception) {
+            promise.reject("ICON_ERROR", e.message)
+        }
+    }
+
+    @ReactMethod
     fun hasUsageAccess(promise: Promise) {
         try {
             val appOps = reactContext.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
