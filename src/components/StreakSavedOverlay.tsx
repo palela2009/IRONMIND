@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Modal, Animated, Easing } from 'react-native';
+import { View, Text, StyleSheet, Modal, Animated, Easing, Pressable } from 'react-native';
 import { useThemedStyles } from '../context/ThemeContext';
 import { usePro } from '../context/ProContext';
 import { Palette, radius, spacing } from '../theme';
@@ -10,7 +10,7 @@ interface Props {
   onDone: () => void;
 }
 
-const HOLD_MS = 2200;
+const HOLD_MS = 5000;
 
 export const StreakSavedOverlay: React.FC<Props> = ({ streak, source, onDone }) => {
   const styles = useThemedStyles(makeStyles);
@@ -65,6 +65,7 @@ export const StreakSavedOverlay: React.FC<Props> = ({ streak, source, onDone }) 
 
   return (
     <Modal visible transparent animationType="none" onRequestClose={onDone}>
+      <Pressable style={styles.fill} onPress={onDone}>
       <Animated.View style={[styles.backdrop, { opacity: fade }]}>
         <View style={styles.center}>
           <View style={styles.badgeWrap}>
@@ -101,14 +102,18 @@ export const StreakSavedOverlay: React.FC<Props> = ({ streak, source, onDone }) 
                 </Text>
               </View>
             )}
+            <Text style={styles.skip}>TAP TO CONTINUE</Text>
           </Animated.View>
         </View>
       </Animated.View>
+      </Pressable>
     </Modal>
   );
 };
 
 const makeStyles = (c: Palette) => StyleSheet.create({
+  fill: { flex: 1 },
+  skip: { color: c.textFaint, fontSize: 10, fontWeight: '900', letterSpacing: 1.2, textAlign: 'center', marginTop: spacing.xxl },
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.9)',
