@@ -43,7 +43,7 @@ interface ProContextValue extends Entitlement {
   closeWelcomeOffer: () => Promise<void>;
   awardCoins: (reason: 'challenge_win' | 'perfect_day' | 'rewarded_ad') => Promise<void>;
   buyItem: (
-    item: 'freeze' | 'theme' | 'frame' | 'nameEffect' | 'proWeek',
+    item: 'freeze' | 'reclaim' | 'theme' | 'frame' | 'nameEffect' | 'proWeek',
     opts?: { themeId?: string; cosmeticId?: string }
   ) => Promise<{ ok: boolean; message?: string }>;
   equipCosmetic: (slot: 'frame' | 'nameEffect', cosmeticId: string | null) => Promise<void>;
@@ -157,7 +157,7 @@ export const ProProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const buyItem = async (
-    item: 'freeze' | 'theme' | 'frame' | 'nameEffect' | 'proWeek',
+    item: 'freeze' | 'reclaim' | 'theme' | 'frame' | 'nameEffect' | 'proWeek',
     opts: { themeId?: string; cosmeticId?: string } = {}
   ) => {
     try {

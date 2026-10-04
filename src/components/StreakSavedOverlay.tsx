@@ -1,19 +1,20 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Modal, Animated, Easing } from 'react-native';
-import { useThemedStyles, useTheme } from '../context/ThemeContext';
+import { useThemedStyles } from '../context/ThemeContext';
+import { usePro } from '../context/ProContext';
 import { Palette, radius, spacing } from '../theme';
 
 interface Props {
   streak: number;
-  source: 'freeze' | 'ad' | null;
+  source: 'freeze' | 'ad' | 'coins' | null;
   onDone: () => void;
 }
 
-const HOLD_MS = 1500;
+const HOLD_MS = 2200;
 
 export const StreakSavedOverlay: React.FC<Props> = ({ streak, source, onDone }) => {
   const styles = useThemedStyles(makeStyles);
-  const palette = useTheme();
+  const { streakFreezes } = usePro();
 
   const visible = source !== null && streak > 0;
 
@@ -77,7 +78,7 @@ export const StreakSavedOverlay: React.FC<Props> = ({ streak, source, onDone }) 
               ]}
             />
             <Animated.View style={[styles.badge, { transform: [{ scale: pop }] }]}>
-              <Text style={styles.glyph}>{source === 'ad' ? '▶' : '❄'}</Text>
+              <Text style={styles.glyph}>{source === 'ad' ? '▶' : source === 'coins' ? '◉' : '❄'}</Text>
             </Animated.View>
           </View>
 
@@ -87,8 +88,19 @@ export const StreakSavedOverlay: React.FC<Props> = ({ streak, source, onDone }) 
             <Text style={styles.sub}>
               {source === 'ad'
                 ? 'Reclaimed by watching an ad. Your run continues.'
+                : source === 'coins'
+                ? 'Bought back with coins. Your run continues.'
                 : 'A streak freeze absorbed that failure. Your run continues.'}
             </Text>
+            {source === 'freeze' && (
+              <View style={[styles.freezePill, streakFreezes === 0 && styles.freezePillEmpty]}>
+                <Text style={[styles.freezeText, streakFreezes === 0 && styles.freezeTextEmpty]}>
+                  {streakFreezes === 0
+                    ? 'That was your last freeze · get more in the Shop'
+                    : `❄ ${streakFreezes} ${streakFreezes === 1 ? 'freeze' : 'freezes'} left`}
+                </Text>
+              </View>
+            )}
           </Animated.View>
         </View>
       </Animated.View>
@@ -141,6 +153,19 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     textAlign: 'center',
     marginTop: spacing.xs,
   },
+  freezePill: {
+    alignSelf: 'center',
+    marginTop: spacing.lg,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: c.accentDim,
+    backgroundColor: c.accentMuted,
+  },
+  freezePillEmpty: { borderColor: c.danger, backgroundColor: 'transparent' },
+  freezeText: { color: c.accent, fontSize: 12, fontWeight: '900', letterSpacing: 0.4 },
+  freezeTextEmpty: { color: c.danger },
   sub: {
     color: c.textSecondary,
     fontSize: 13,

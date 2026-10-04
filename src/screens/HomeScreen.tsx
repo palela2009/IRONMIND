@@ -91,7 +91,7 @@ const useFiredToday = (refreshKey: number): number | null => {
 const DOTS_PER_COLUMN = 5;
 
 export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallengeLimit, onNavigate }) => {  const styles = useThemedStyles(makeStyles);
-  const { coins } = usePro();
+  const { coins, streakFreezes } = usePro();
   const [showShop, setShowShop] = useState<boolean>(false);
   const firedToday = useFiredToday(history.length + dailyChallengeLimit);
   const { paused, remaining } = usePause();
@@ -143,6 +143,9 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallenge
               <Text style={styles.brandName}>IRONMIND</Text>
             </View>
             <View style={styles.headerRight}>
+              <TouchableOpacity style={styles.freezeChip} onPress={() => setShowShop(true)} activeOpacity={0.8}>
+                <Text style={styles.freezeChipText}>❄ {streakFreezes}</Text>
+              </TouchableOpacity>
               <Text style={styles.dateText}>{dateStr}</Text>
               <TouchableOpacity style={styles.avatarBtn} onPress={() => onNavigate('PROFILE')} activeOpacity={0.8}>
                 {fbUser?.photoURL ? (
@@ -299,6 +302,15 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   brandName: { color: c.textPrimary, fontSize: 15, fontWeight: '900', letterSpacing: 1.5 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   dateText: { color: c.textTertiary, fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
+  freezeChip: {
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    backgroundColor: c.surface,
+    borderWidth: 1,
+    borderColor: c.border,
+  },
+  freezeChipText: { color: '#9FD8FF', fontSize: 12, fontWeight: '900' },
   avatarBtn: { width: 34, height: 34, borderRadius: radius.pill, backgroundColor: c.accent, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
   avatarImg: { width: '100%', height: '100%' },
   avatarBtnText: { color: c.accentContrast, fontSize: 11, fontWeight: '900' },

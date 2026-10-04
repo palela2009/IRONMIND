@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { usePro } from '../context/ProContext';
 import { useRewardedAd, AD_UNITS, ADS_AVAILABLE } from '../hooks/useRewardedAd';
+import { PRICES } from '../screens/ShopScreen';
 import { radius, spacing, Palette } from '../theme';
 import { useThemedStyles, useTheme } from '../context/ThemeContext';
 
 interface Props {
   lostStreak: number;
-  onReclaim: () => void;
+  onReclaim: (source: 'ad' | 'coins') => void;
   onDismiss: () => void;
   onOpenPro: () => void;
 }
@@ -15,25 +16,42 @@ interface Props {
 export const StreakReclaimModal: React.FC<Props> = ({ lostStreak, onReclaim, onDismiss, onOpenPro }) => {
   const styles = useThemedStyles(makeStyles);
   const palette = useTheme();
-  const { isPro, streakFreezes } = usePro();
+  const { isPro, coins, buyItem } = usePro();
   const { show, showing } = useRewardedAd();
   const [step, setStep] = useState<'offer' | 'ad'>('offer');
+  const [buying, setBuying] = useState(false);
 
   const visible = lostStreak > 0;
+  const canAfford = coins >= PRICES.reclaim;
 
   useEffect(() => {
     if (visible) setStep('offer');
   }, [visible]);
 
+  const saveWithCoins = async () => {
+    if (!canAfford) {
+      Alert.alert('Not enough coins', `Saving this streak costs ◉ ${PRICES.reclaim}. You have ◉ ${coins}. Win challenges to earn more.`);
+      return;
+    }
+    setBuying(true);
+    const result = await buyItem('reclaim');
+    setBuying(false);
+    if (result.ok) {
+      onReclaim('coins');
+    } else {
+      Alert.alert('Could not save your streak', result.message ?? 'Try again.');
+    }
+  };
+
   const watchAd = async () => {
     const result = await show(AD_UNITS.streakReclaim);
     if (result === 'rewarded') {
-      onReclaim();
+      onReclaim('ad');
       return;
     }
     if (result === 'unavailable') {
       Alert.alert('No ad available', 'We could not load an ad just now, so your streak is safe this time.');
-      onReclaim();
+      onReclaim('ad');
       return;
     }
     onDismiss();
@@ -53,16 +71,26 @@ export const StreakReclaimModal: React.FC<Props> = ({ lostStreak, onReclaim, onD
           {step === 'offer' ? (
             <>
               <Text style={styles.body}>
-                {isPro && streakFreezes === 0
-                  ? ADS_AVAILABLE
-                    ? 'You are out of streak freezes. Reclaim this streak to keep it alive.'
-                    : 'You are out of streak freezes. They refill at the start of next month.'
-                  : 'IronMind Pro gives you streak freezes that absorb a failed challenge automatically.'}
+                You had no streak freeze to absorb that one. Save your run now for double the price of a freeze.
               </Text>
 
+              <TouchableOpacity
+                style={[styles.primaryBtn, !canAfford && styles.primaryBtnDim]}
+                onPress={saveWithCoins}
+                activeOpacity={0.85}
+                disabled={buying}
+              >
+                {buying ? (
+                  <ActivityIndicator color={palette.accentContrast} size="small" />
+                ) : (
+                  <Text style={styles.primaryText}>SAVE MY STREAK · ◉ {PRICES.reclaim}</Text>
+                )}
+              </TouchableOpacity>
+              <Text style={styles.balance}>You have ◉ {coins}</Text>
+
               {!isPro && (
-                <TouchableOpacity style={styles.primaryBtn} onPress={onOpenPro} activeOpacity={0.85}>
-                  <Text style={styles.primaryText}>GET PRO — RECLAIM YOUR STREAK</Text>
+                <TouchableOpacity style={styles.secondaryBtn} onPress={onOpenPro} activeOpacity={0.85}>
+                  <Text style={styles.secondaryText}>GET PRO · 20 FREEZES A MONTH</Text>
                 </TouchableOpacity>
               )}
 
@@ -146,6 +174,8 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     marginBottom: spacing.sm,
   },
   primaryText: { color: c.accentContrast, fontSize: 12, fontWeight: '900', letterSpacing: 0.3 },
+  primaryBtnDim: { opacity: 0.55 },
+  balance: { color: c.textTertiary, fontSize: 11, fontWeight: '700', marginTop: -2, marginBottom: spacing.md },
   secondaryBtn: {
     backgroundColor: c.surfaceRaised,
     borderRadius: radius.sm,
