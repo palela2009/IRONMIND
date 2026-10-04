@@ -12,6 +12,7 @@ import { reportActiveDuels } from './src/hooks/useDuels';
 import { ProScreen } from './src/screens/ProScreen';
 import { WelcomeOfferScreen } from './src/screens/WelcomeOfferScreen';
 import { ProIntroScreen } from './src/screens/ProIntroScreen';
+import { InviteRewardOverlay } from './src/components/InviteRewardOverlay';
 import { useStats } from './src/hooks/useStats';
 import { useNotifications } from './src/hooks/useNotifications';
 import { useAppMonitor, syncAppMonitor } from './src/hooks/useAppMonitor';
@@ -117,7 +118,10 @@ function RootNavigator() {
     if (!fbUser?.uid) return;
     reportActiveDuels();
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') reportActiveDuels();
+      if (state === 'active') {
+        reportActiveDuels();
+        refreshEntitlement();
+      }
     });
     return () => sub.remove();
   }, [fbUser?.uid]);
@@ -320,6 +324,7 @@ function RootNavigator() {
 
       <WelcomeOfferScreen />
       <ProIntroScreen />
+      <InviteRewardOverlay />
 
       <StreakSavedOverlay
         streak={savedStreak?.streak ?? 0}

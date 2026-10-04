@@ -25,12 +25,13 @@ export interface Entitlement {
   trialEndsAt: string | null;
   plan: ProPlanId | null;
   source: 'store' | 'coins' | 'owner' | 'invites' | null;
+  referralRewards: number[];
   expiresAt: string | null;
   streakFreezes: number;
   themeId: string;
 }
 
-const FREE: Entitlement = { isPro: false, isOwner: false, welcomeOffer: false, coins: 0, unlockedThemes: [], ownedFrames: [], ownedNameEffects: [], equippedFrame: null, equippedNameEffect: null, onTrial: false, trialEndsAt: null, plan: null, source: null, expiresAt: null, streakFreezes: 0, themeId: 'default' };
+const FREE: Entitlement = { isPro: false, isOwner: false, welcomeOffer: false, coins: 0, unlockedThemes: [], ownedFrames: [], ownedNameEffects: [], equippedFrame: null, equippedNameEffect: null, onTrial: false, trialEndsAt: null, plan: null, source: null, referralRewards: [], expiresAt: null, streakFreezes: 0, themeId: 'default' };
 
 interface ProContextValue extends Entitlement {
   loading: boolean;
@@ -55,6 +56,7 @@ const normalize = (raw: Partial<Entitlement> | null | undefined): Entitlement =>
   unlockedThemes: raw?.unlockedThemes ?? [],
   ownedFrames: raw?.ownedFrames ?? [],
   ownedNameEffects: raw?.ownedNameEffects ?? [],
+  referralRewards: raw?.referralRewards ?? [],
 });
 
 const ProContext = createContext<ProContextValue | undefined>(undefined);

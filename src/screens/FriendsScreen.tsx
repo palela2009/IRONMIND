@@ -6,6 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFriends } from '../hooks/useFriends';
 import { useDuels, formatTimeLeft, formatAgo, DUEL_REACTIONS, reactionText } from '../hooks/useDuels';
 import { useInvites, daysLabel, INVITE_RULES, inviteMessage } from '../hooks/useInvites';
+import * as Clipboard from 'expo-clipboard';
 import { useAuth } from '../context/AuthContext';
 import { TrainingState, UserStats } from '../types/training';
 import { rankForLevel, PODIUM } from '../constants/ranks';
@@ -111,6 +112,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
   const { code, friends, requests, loading, error, addByCode, acceptRequest, rejectRequest, removeFriend, refresh: refreshFriends } = useFriends();
   const { duels, challenge, respond, cancel: cancelDuel, react, error: duelError, refresh: refreshDuels } = useDuels();
   const [reactingId, setReactingId] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const { progress: invites, refresh: refreshInvites } = useInvites();
   const [refreshing, setRefreshing] = useState(false);
   const [inputCode, setInputCode] = useState('');
@@ -178,6 +180,13 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
         b.totalChallenges - a.totalChallenges
     );
   }, [fbUser?.uid, fbUser?.displayName, fbUser?.email, fbUser?.photoURL, stats, friends, isPro, isOwner, equippedFrame, equippedNameEffect]);
+
+  const handleCopy = async () => {
+    if (!code) return;
+    await Clipboard.setStringAsync(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1800);
+  };
 
   const handleShare = async () => {
     if (!code) return;
@@ -300,9 +309,14 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
       <View style={styles.codeCard}>
         <Text style={styles.codeLabel}>YOUR INVITE CODE</Text>
         <Text style={styles.codeValue}>{code || '——————'}</Text>
-        <TouchableOpacity style={styles.shareBtn} onPress={handleShare} activeOpacity={0.85} disabled={!code}>
-          <Text style={styles.shareBtnText}>SHARE CODE →</Text>
-        </TouchableOpacity>
+        <View style={styles.codeActions}>
+          <TouchableOpacity style={styles.copyBtn} onPress={handleCopy} activeOpacity={0.85} disabled={!code}>
+            <Text style={styles.copyBtnText}>{copied ? 'COPIED ✓' : 'COPY'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.shareBtn} onPress={handleShare} activeOpacity={0.85} disabled={!code}>
+            <Text style={styles.shareBtnText}>SHARE CODE →</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {invites && (
@@ -726,6 +740,9 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   },
   codeLabel: { color: c.accentDim, fontSize: 10, fontWeight: '900', letterSpacing: 1, marginBottom: 10 },
   codeValue: { color: c.accent, fontSize: 32, fontWeight: '900', letterSpacing: 6, marginBottom: 16 },
+  codeActions: { flexDirection: 'row', gap: 10 },
+  copyBtn: { borderRadius: 10, paddingVertical: 12, paddingHorizontal: 20, borderWidth: 1, borderColor: c.accentDim },
+  copyBtnText: { color: c.accent, fontSize: 12, fontWeight: '900', letterSpacing: 0.3 },
   shareBtn: { backgroundColor: c.accent, borderRadius: 10, paddingVertical: 12, paddingHorizontal: 24 },
   shareBtnText: { color: c.accentContrast, fontSize: 12, fontWeight: '900', letterSpacing: 0.3 },
 

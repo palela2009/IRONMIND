@@ -89,10 +89,12 @@ const useFiredToday = (refreshKey: number): number | null => {
 };
 
 const DOTS_PER_COLUMN = 5;
+const RECENT_PAGE = 5;
 
 export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallengeLimit, onNavigate }) => {  const styles = useThemedStyles(makeStyles);
   const { coins, streakFreezes } = usePro();
   const [showShop, setShowShop] = useState<boolean>(false);
+  const [visibleCount, setVisibleCount] = useState<number>(RECENT_PAGE);
   const firedToday = useFiredToday(history.length + dailyChallengeLimit);
   const { paused, remaining } = usePause();
 
@@ -133,7 +135,7 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallenge
       style={styles.root}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
-      data={history}
+      data={history.slice(0, visibleCount)}
       keyExtractor={(item) => item.id}
       ListHeaderComponent={() => (
         <>
@@ -281,7 +283,20 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallenge
         </View>
       )}
       ItemSeparatorComponent={() => <View style={styles.repDivider} />}
-      ListFooterComponent={() => <ShopScreen visible={showShop} onClose={() => setShowShop(false)} />}
+      ListFooterComponent={() => (
+        <>
+          {history.length > visibleCount ? (
+            <TouchableOpacity style={styles.moreBtn} onPress={() => setVisibleCount((n) => n + 10)} activeOpacity={0.8}>
+              <Text style={styles.moreText}>SHOW MORE · {history.length - visibleCount}</Text>
+            </TouchableOpacity>
+          ) : visibleCount > RECENT_PAGE ? (
+            <TouchableOpacity style={styles.moreBtn} onPress={() => setVisibleCount(RECENT_PAGE)} activeOpacity={0.8}>
+              <Text style={styles.moreText}>SHOW LESS</Text>
+            </TouchableOpacity>
+          ) : null}
+          <ShopScreen visible={showShop} onClose={() => setShowShop(false)} />
+        </>
+      )}
     />
   );
 };
@@ -302,6 +317,18 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   brandName: { color: c.textPrimary, fontSize: 15, fontWeight: '900', letterSpacing: 1.5 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   dateText: { color: c.textTertiary, fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
+  moreBtn: {
+    alignSelf: 'center',
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
+    paddingVertical: 10,
+    paddingHorizontal: 22,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: c.border,
+    backgroundColor: c.surface,
+  },
+  moreText: { color: c.textSecondary, fontSize: 11, fontWeight: '900', letterSpacing: 0.8 },
   freezeChip: {
     paddingVertical: 5,
     paddingHorizontal: 10,
