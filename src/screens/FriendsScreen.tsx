@@ -575,34 +575,6 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats, onNavigate }) => 
         </>
       )}
 
-      {settledDuels.length > 0 && (
-        <>
-          <Text style={styles.sectionLabel}>DUEL HISTORY</Text>
-          {settledDuels.map((d) => (
-            <View key={d.id} style={styles.resultRow}>
-              <Text
-                style={[
-                  styles.resultTag,
-                  d.status === 'completed'
-                    ? d.iWon
-                      ? styles.resultWin
-                      : styles.resultLoss
-                    : styles.resultVoid,
-                ]}
-              >
-                {d.status === 'void' ? 'VOID' : d.iWon ? 'WON' : 'LOST'}
-              </Text>
-              <Text style={styles.resultName} numberOfLines={1}>{d.opponentName}</Text>
-              <Text style={styles.resultDetail}>
-                {d.status === 'void'
-                  ? 'no data'
-                  : `${Math.round(d.myMinutes ?? 0)}–${Math.round(d.theirMinutes ?? 0)}m`}
-              </Text>
-            </View>
-          ))}
-        </>
-      )}
-
       <Text style={styles.sectionLabel}>INVITE & ADD FRIENDS</Text>
       <View style={styles.codeCard}>
         <Text style={styles.codeLabel}>YOUR INVITE CODE</Text>
@@ -671,6 +643,34 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats, onNavigate }) => 
         )}
         {addResult === 'err' && <Text style={styles.addErr}>{error || 'Could not add friend'}</Text>}
       </View>
+
+      {settledDuels.length > 0 && (
+        <>
+          <Text style={styles.sectionLabel}>DUEL HISTORY</Text>
+          {settledDuels.map((d) => (
+            <View key={d.id} style={styles.resultRow}>
+              <Text
+                style={[
+                  styles.resultTag,
+                  d.status === 'completed'
+                    ? d.iWon
+                      ? styles.resultWin
+                      : styles.resultLoss
+                    : styles.resultVoid,
+                ]}
+              >
+                {d.status === 'void' ? 'VOID' : d.iWon ? 'WON' : 'LOST'}
+              </Text>
+              <Text style={styles.resultName} numberOfLines={1}>{d.opponentName}</Text>
+              <Text style={styles.resultDetail}>
+                {d.status === 'void'
+                  ? 'no data'
+                  : `${Math.round(d.myMinutes ?? 0)}–${Math.round(d.theirMinutes ?? 0)}m`}
+              </Text>
+            </View>
+          ))}
+        </>
+      )}
 
       <Modal
         visible={duelTarget !== null}
