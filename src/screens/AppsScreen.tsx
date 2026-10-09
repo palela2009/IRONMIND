@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useTabScrollReset } from '../hooks/useTabScrollReset';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, AppState, ActivityIndicator } from 'react-native';
 import { useThemedStyles, useTheme } from '../context/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -21,10 +22,12 @@ interface AppsProps {
 const ONBOARDING_URL = `${API_BASE_URL}/api/user/onboarding`;
 
 export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged }) => {  const styles = useThemedStyles(makeStyles);
+  const scrollRef = useRef<any>(null);
+  useTabScrollReset('APPS', scrollRef);
   const palette = useTheme();
 
   const { fbUser } = useAuth();
-  const { screenTime, loading: stLoading } = useScreenTime(fbUser?.uid);
+  const { screenTime, loading: stLoading, trackedToday } = useScreenTime();
   const [monitoredApps, setMonitoredApps] = useState<string[]>([]);
   const [editing, setEditing] = useState(false);
   const [pending, setPending] = useState<string[]>([]);
@@ -146,11 +149,11 @@ export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged }) 
 
   const minutesForApp = (app: string) => screenTime.find((s) => s.app === app)?.minutes ?? 0;
 
-  const totalMinutes = screenTime.reduce((sum, item) => sum + item.minutes, 0);
+  const totalMinutes = trackedToday;
   const maxMins = screenTime.length > 0 ? screenTime[0].minutes || 1 : 1;
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <ScrollView ref={scrollRef} style={styles.root} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>APPS</Text>
         <Text style={styles.headerSub}>

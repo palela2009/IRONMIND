@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useTabScrollReset } from '../hooks/useTabScrollReset';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert, TextInput } from 'react-native';
 import { useThemedStyles, useTheme } from '../context/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -79,6 +80,8 @@ const getAchievements = (s: UserStats, history: ChallengeItem[], dailyLimit: num
 ];
 
 export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettingsChanged }) => {  const styles = useThemedStyles(makeStyles);
+  const scrollRef = useRef<any>(null);
+  useTabScrollReset('PROFILE', scrollRef);
   const palette = useTheme();
 
   const { fbUser, refreshUser } = useAuth();
@@ -306,7 +309,7 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
   };
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <ScrollView ref={scrollRef} style={styles.root} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>PROFILE</Text>
       </View>

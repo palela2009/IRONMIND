@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { API_BASE_URL } from '../config/api';
 import { authedFetch } from '../utils/authFetch';
 import { AppUsage } from './useScreenTime';
+import { useLiveRefresh } from './useLiveRefresh';
 
 const { UsageMonitor } = NativeModules;
 const API_URL = `${API_BASE_URL}/api/duels`;
@@ -13,6 +14,7 @@ export type DuelStatus = 'pending' | 'active' | 'completed' | 'declined' | 'void
 export interface Duel {
   id: string;
   app: string;
+  apps: string[];
   stake: number;
   status: DuelStatus;
   startAt: string | null;
@@ -40,7 +42,9 @@ export const DUEL_REACTIONS: { id: string; text: string }[] = [
 export const reactionText = (id: string | null): string | null =>
   DUEL_REACTIONS.find((r) => r.id === id)?.text ?? null;
 
-const measureWindow = async (app: string, startAt: string, endAt: string): Promise<number | null> => {
+export const appsOf = (d: Duel): string[] => (d.apps?.length ? d.apps : [d.app]);
+
+const measureWindow = async (apps: string[], startAt: string, endAt: string): Promise<number | null> => {
   if (Platform.OS !== 'android' || !UsageMonitor?.getUsageForRange) return null;
   try {
     const start = new Date(startAt).getTime();
@@ -49,7 +53,7 @@ const measureWindow = async (app: string, startAt: string, endAt: string): Promi
     if (!(end > start)) return 0;
 
     const usage: AppUsage[] = await UsageMonitor.getUsageForRange(start, end);
-    return usage.find((u) => u.app === app)?.minutes ?? 0;
+    return usage.filter((u) => apps.includes(u.app)).reduce((sum, u) => sum + u.minutes, 0);
   } catch {
     return null;
   }
@@ -64,7 +68,7 @@ export const reportActiveDuels = async (): Promise<void> => {
     const active = list.filter((d) => d.status === 'active' && d.startAt && d.endAt);
     await Promise.all(
       active.map(async (d) => {
-        const minutes = await measureWindow(d.app, d.startAt!, d.endAt!);
+        const minutes = await measureWindow(appsOf(d), d.startAt!, d.endAt!);
         if (minutes === null) return;
         await authedFetch(`${API_URL}/${d.id}/report`, {
           method: 'POST',
@@ -101,7 +105,7 @@ export const useDuels = () => {
       if (active.length > 0) {
         const reports = await Promise.all(
           active.map(async (d) => {
-            const minutes = await measureWindow(d.app, d.startAt!, d.endAt!);
+            const minutes = await measureWindow(appsOf(d), d.startAt!, d.endAt!);
             if (minutes === null) return false;
             try {
               await authedFetch(`${API_URL}/${d.id}/report`, {
@@ -128,35 +132,21 @@ export const useDuels = () => {
     load();
   }, [load]);
 
-  const hasActiveDuel = duels.some((d) => d.status === 'active');
+  useLiveRefresh(load, !!fbUser?.uid);
 
-  useEffect(() => {
-    if (!hasActiveDuel || !fbUser?.uid) return;
-
-    const id = setInterval(() => {
-      if (AppState.currentState === 'active') load();
-    }, 60_000);
-
-    return () => clearInterval(id);
-  }, [hasActiveDuel, fbUser?.uid, load]);
-
-  const challenge = async (toUid: string, app: string, stake = 100): Promise<boolean> => {
+  const challenge = async (toUid: string, apps: string[], stake = 100): Promise<string | null> => {
     setError('');
     try {
       const res = await authedFetch(API_URL, {
         method: 'POST',
-        body: JSON.stringify({ toUid, app, stake }),
+        body: JSON.stringify({ toUid, apps, stake }),
       });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError(body.message ?? 'Could not send challenge');
-        return false;
-      }
+      if (!res.ok) return body.message ?? 'Could not send challenge';
       await load();
-      return true;
+      return null;
     } catch {
-      setError('Network error — try again');
-      return false;
+      return 'Network error — try again';
     }
   };
 

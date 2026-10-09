@@ -1,11 +1,14 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
+import { useTabScrollReset } from '../hooks/useTabScrollReset';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Share, Alert, Image, Modal, RefreshControl } from 'react-native';
 import { useThemedStyles, useTheme } from '../context/ThemeContext';
 import { Palette, radius } from '../theme';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFriends } from '../hooks/useFriends';
-import { useDuels, formatTimeLeft, formatAgo, DUEL_REACTIONS, reactionText } from '../hooks/useDuels';
-import { useInvites, daysLabel, INVITE_RULES, inviteMessage } from '../hooks/useInvites';
+import { useDuels, formatTimeLeft, formatAgo, DUEL_REACTIONS, reactionText, appsOf } from '../hooks/useDuels';
+import { useScreenTime, formatMinutes, trackedTotal, todayKey } from '../hooks/useScreenTime';
+import { AppIcon } from '../components/AppIcon';
+import { SwordsClash } from '../components/SwordsClash';
+import { useInvites, daysLabel, inviteMessage } from '../hooks/useInvites';
 import * as Clipboard from 'expo-clipboard';
 import { useAuth } from '../context/AuthContext';
 import { TrainingState, UserStats } from '../types/training';
@@ -33,13 +36,27 @@ interface Entry {
   displayName: string;
   photoURL: string | null;
   currentStreak: number;
+  longestStreak: number;
   totalChallenges: number;
   level: number;
+  currentXP: number;
   isMe: boolean;
   badge: Badge | null;
   frame: string | null;
   nameEffect: string | null;
+  todayMinutes: number;
+  weekAvgMinutes: number;
+  trackedApps: string[];
 }
+
+const EntryName: React.FC<{ entry: Entry; style: any }> = ({ entry, style }) => {
+  const fx = nameEffectById(entry.nameEffect);
+  return (
+    <Text style={[style, fx ? [{ color: fx.color }, glowStyle(fx.glow)] : null]} numberOfLines={1}>
+      {entry.isMe ? 'YOU' : entry.displayName}
+    </Text>
+  );
+};
 
 const abbrFor = (name: string): string => {
   const words = name.trim().split(/\s+/).filter(Boolean);
@@ -104,7 +121,9 @@ const RankBadge: React.FC<{ level: number }> = ({ level }) => {  const styles =
   );
 };
 
-export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const styles = useThemedStyles(makeStyles);
+export const FriendsScreen: React.FC<FriendsProps> = ({ stats, onNavigate }) => {  const styles = useThemedStyles(makeStyles);
+  const scrollRef = useRef<any>(null);
+  useTabScrollReset('FRIENDS', scrollRef);
   const palette = useTheme();
 
   const { fbUser } = useAuth();
@@ -119,20 +138,17 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
   const [adding, setAdding] = useState(false);
   const [addResult, setAddResult] = useState<'idle' | 'accepted' | 'pending' | 'err'>('idle');
 
-  const [monitoredApps, setMonitoredApps] = useState<string[]>([]);
+  const { tracked: monitoredApps, trackedToday, week } = useScreenTime();
+  const myWeekAvg = useMemo(() => {
+    const past = week.filter((w) => w.date < todayKey()).map((w) => trackedTotal(w.apps, monitoredApps));
+    return past.length ? past.reduce((a, b) => a + b, 0) / past.length : trackedToday;
+  }, [week, monitoredApps, trackedToday]);
+  const [profile, setProfile] = useState<Entry | null>(null);
   const [duelTarget, setDuelTarget] = useState<Entry | null>(null);
   const [duelStake, setDuelStake] = useState<number>(DUEL_STAKE);
+  const [duelApps, setDuelApps] = useState<string[]>([]);
   const [sending, setSending] = useState(false);
-
-  useEffect(() => {
-    AsyncStorage.getItem('@ironmind_onboarding')
-      .then((raw) => {
-        if (!raw) return;
-        const data = JSON.parse(raw);
-        if (Array.isArray(data?.targetApps)) setMonitoredApps(data.targetApps);
-      })
-      .catch(() => {});
-  }, []);
+  const [clashKey, setClashKey] = useState(0);
 
   const leaderboard = useMemo<Entry[]>(() => {
     const me: Entry = {
@@ -140,12 +156,17 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
       displayName: fbUser?.displayName || fbUser?.email || 'You',
       photoURL: fbUser?.photoURL ?? null,
       currentStreak: stats.currentStreak,
+      longestStreak: stats.longestStreak,
       totalChallenges: stats.totalChallenges,
       level: stats.level,
+      currentXP: stats.currentXP,
       isMe: true,
       badge: topBadgeFor(stats, isPro, isOwner),
       frame: equippedFrame,
       nameEffect: equippedNameEffect,
+      todayMinutes: trackedToday,
+      weekAvgMinutes: myWeekAvg,
+      trackedApps: monitoredApps,
     };
 
     const others: Entry[] = friends.map((f) => ({
@@ -153,8 +174,13 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
       displayName: f.displayName,
       photoURL: f.photoURL,
       currentStreak: f.currentStreak,
+      longestStreak: f.longestStreak,
       totalChallenges: f.totalChallenges,
       level: f.level,
+      currentXP: f.currentXP,
+      todayMinutes: f.todayMinutes ?? 0,
+      weekAvgMinutes: f.weekAvgMinutes ?? 0,
+      trackedApps: f.trackedApps ?? [],
       isMe: false,
       badge: topBadgeFor(
         {
@@ -174,12 +200,9 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
     }));
 
     return [me, ...others].sort(
-      (a, b) =>
-        b.currentStreak - a.currentStreak ||
-        b.level - a.level ||
-        b.totalChallenges - a.totalChallenges
+      (a, b) => a.todayMinutes - b.todayMinutes || b.currentStreak - a.currentStreak || b.level - a.level
     );
-  }, [fbUser?.uid, fbUser?.displayName, fbUser?.email, fbUser?.photoURL, stats, friends, isPro, isOwner, equippedFrame, equippedNameEffect]);
+  }, [fbUser?.uid, fbUser?.displayName, fbUser?.email, fbUser?.photoURL, stats, friends, isPro, isOwner, equippedFrame, equippedNameEffect, trackedToday, myWeekAvg, monitoredApps]);
 
   const handleCopy = async () => {
     if (!code) return;
@@ -224,23 +247,34 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
     ]);
   };
 
+  const openProfile = (entry: Entry) => setProfile(entry);
+
   const openDuel = (entry: Entry) => {
     if (entry.isMe) return;
     if (monitoredApps.length === 0) {
       Alert.alert('No apps tracked', 'Pick at least one app to track in the APPS tab before starting a duel.');
       return;
     }
-    setDuelStake(DUEL_STAKE);
+    setProfile(null);
+    setDuelStake(coins >= DUEL_STAKE ? DUEL_STAKE : FREE_STAKE);
+    setDuelApps([monitoredApps[0]]);
     setDuelTarget(entry);
   };
 
-  const sendChallenge = async (app: string) => {
-    if (!duelTarget) return;
+  const toggleDuelApp = (app: string) =>
+    setDuelApps((prev) => (prev.includes(app) ? prev.filter((a) => a !== app) : [...prev, app]));
+
+  const sendChallenge = async () => {
+    if (!duelTarget || duelApps.length === 0) return;
     setSending(true);
-    const ok = await challenge(duelTarget.uid, app, duelStake);
+    const err = await challenge(duelTarget.uid, duelApps, duelStake);
     setSending(false);
     setDuelTarget(null);
-    if (!ok) Alert.alert('Could not start duel', duelError || 'Try again.');
+    if (err) {
+      Alert.alert('Could not start duel', err);
+      return;
+    }
+    setClashKey((k) => k + 1);
   };
 
   const onRefresh = async () => {
@@ -297,6 +331,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
 
   return (
     <ScrollView
+      ref={scrollRef}
       style={styles.root}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
@@ -306,79 +341,74 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
         <Text style={styles.headerTitle}>FRIENDS</Text>
       </View>
 
-      <View style={styles.codeCard}>
-        <Text style={styles.codeLabel}>YOUR INVITE CODE</Text>
-        <Text style={styles.codeValue}>{code || '——————'}</Text>
-        <View style={styles.codeActions}>
-          <TouchableOpacity style={styles.copyBtn} onPress={handleCopy} activeOpacity={0.85} disabled={!code}>
-            <Text style={styles.copyBtnText}>{copied ? 'COPIED ✓' : 'COPY'}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.shareBtn} onPress={handleShare} activeOpacity={0.85} disabled={!code}>
-            <Text style={styles.shareBtnText}>SHARE CODE →</Text>
-          </TouchableOpacity>
+      {!hasFriends ? (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyTitle}>NOBODY HERE YET</Text>
+          <Text style={styles.emptySub}>Add a friend with their code below and compete on screen time.</Text>
         </View>
-      </View>
+      ) : (
+        <>
+          <Text style={styles.sectionLabel}>TODAY · LEAST SCREEN TIME WINS</Text>
 
-      {invites && (
-        <View style={styles.inviteCard}>
-          <Text style={styles.addLabel}>INVITE FRIENDS · EARN PRO</Text>
-          {invites.next ? (
-            <>
-              <View style={styles.inviteHead}>
-                <Text style={styles.inviteCount}>
-                  {Math.min(invites.active, invites.next.at)}
-                  <Text style={styles.inviteOf}> / {invites.next.at} friends</Text>
-                </Text>
-                <Text style={styles.inviteReward}>{daysLabel(invites.next.days)} PRO</Text>
-              </View>
-              <View style={styles.inviteBarBg}>
-                <View style={[styles.inviteBarFill, { width: `${Math.min(invites.active / invites.next.at, 1) * 100}%` }]} />
-              </View>
-            </>
-          ) : (
-            <Text style={styles.inviteCount}>All rewards earned</Text>
-          )}
-          <View style={styles.inviteSteps}>
-            {invites.milestones.map((m) => (
-              <View key={m.at} style={[styles.inviteStep, invites.rewarded.includes(m.at) && styles.inviteStepDone]}>
-                <Text style={[styles.inviteStepText, invites.rewarded.includes(m.at) && styles.inviteStepTextDone]}>
-                  {invites.rewarded.includes(m.at) ? '✓ ' : ''}{m.at} → {daysLabel(m.days)}
-                </Text>
-              </View>
-            ))}
+          <View style={styles.podium}>
+            {podiumOrder.map((i) => {
+              const entry = podium[i];
+              const metal = PODIUM[i];
+              const first = i === 0;
+              return (
+                <TouchableOpacity
+                  key={entry.uid}
+                  style={[styles.podiumSlot, first && styles.podiumSlotFirst]}
+                  onPress={() => openProfile(entry)}
+                  activeOpacity={0.85}
+                >
+                  {first && <Text style={styles.crown}>♛</Text>}
+                  <Avatar entry={entry} size={first ? 64 : 50} ring={metal.color} />
+                  <View style={styles.nameRow}>
+                    {entry.badge && (
+                      <Text style={[styles.eliteGlyph, { color: entry.badge.color }]}>{entry.badge.glyph}</Text>
+                    )}
+                    <EntryName entry={entry} style={[styles.podiumName, entry.isMe && styles.podiumNameMe]} />
+                  </View>
+                  <Text style={styles.podiumStreakSmall}>🔥 {entry.currentStreak}</Text>
+                  <View style={[styles.podiumBlock, { backgroundColor: metal.color, height: first ? 64 : 44 }]}>
+                    <Text style={styles.podiumPlace}>{metal.label}</Text>
+                    <Text style={styles.podiumStreak}>{formatMinutes(entry.todayMinutes)}</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
           </View>
-          {invites.joined > invites.active && (
-            <Text style={styles.invitePending}>
-              {invites.joined - invites.active} joined, waiting to become active
-            </Text>
-          )}
-          <Text style={styles.inviteRules}>{INVITE_RULES}</Text>
-        </View>
-      )}
 
-      <View style={styles.addCard}>
-        <Text style={styles.addLabel}>ADD A FRIEND</Text>
-        <View style={styles.addRow}>
-          <TextInput
-            style={styles.addInput}
-            placeholder="Enter their code"
-            placeholderTextColor={palette.textFaint}
-            autoCapitalize="characters"
-            autoCorrect={false}
-            value={inputCode}
-            onChangeText={setInputCode}
-            maxLength={6}
-          />
-          <TouchableOpacity style={styles.addBtn} onPress={handleAdd} activeOpacity={0.85} disabled={adding}>
-            {adding ? <ActivityIndicator color={palette.accentContrast} size="small" /> : <Text style={styles.addBtnText}>ADD</Text>}
-          </TouchableOpacity>
-        </View>
-        {addResult === 'accepted' && <Text style={styles.addOk}>Friend added ✓</Text>}
-        {addResult === 'pending' && (
-          <Text style={styles.addOk}>Request sent — waiting for them to accept</Text>
-        )}
-        {addResult === 'err' && <Text style={styles.addErr}>{error || 'Could not add friend'}</Text>}
-      </View>
+          {rest.map((entry, i) => (
+            <TouchableOpacity
+              key={entry.uid}
+              style={[styles.friendCard, entry.isMe && styles.friendCardMe]}
+              onPress={() => openProfile(entry)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.rank}>{i + 4}</Text>
+              <Avatar entry={entry} size={40} />
+              <View style={styles.friendBody}>
+                <View style={styles.nameRow}>
+                  {entry.badge && (
+                    <Text style={[styles.eliteGlyph, { color: entry.badge.color }]}>{entry.badge.glyph}</Text>
+                  )}
+                  <EntryName entry={entry} style={styles.friendName} />
+                </View>
+                <View style={styles.friendMeta}>
+                  <RankBadge level={entry.level} />
+                  <Text style={styles.friendSub}>🔥 {entry.currentStreak} streak</Text>
+                </View>
+              </View>
+              <View style={styles.friendRight}>
+                <Text style={styles.friendStreak}>{formatMinutes(entry.todayMinutes)}</Text>
+                <Text style={styles.friendStreakLabel}>TODAY</Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </>
+      )}
 
       {requests.length > 0 && (
         <>
@@ -401,25 +431,42 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
       {incomingDuels.length > 0 && (
         <>
           <Text style={styles.sectionLabel}>DUEL CHALLENGES · {incomingDuels.length}</Text>
-          {incomingDuels.map((d) => (
-            <View key={d.id} style={styles.duelCard}>
-              <View style={styles.duelHead}>
-                <Text style={styles.duelTitle} numberOfLines={1}>{d.opponentName}</Text>
-                <Text style={styles.duelStake}>◉ {d.stake}</Text>
+          {incomingDuels.map((d) => {
+            const missing = appsOf(d).filter((a) => !monitoredApps.includes(a));
+            return (
+              <View key={d.id} style={styles.duelCard}>
+                <View style={styles.duelHead}>
+                  <Text style={styles.duelTitle} numberOfLines={1}>{d.opponentName}</Text>
+                  <Text style={styles.duelStake}>{d.stake > 0 ? `◉ ${d.stake}` : 'FREE'}</Text>
+                </View>
+                <Text style={styles.duelSub}>
+                  Fewest minutes on {d.app} over 24 hours wins.
+                </Text>
+                {missing.length > 0 && (
+                  <View style={styles.missingBox}>
+                    <Text style={styles.missingText}>
+                      You don't track {missing.join(' or ')}. Add {missing.length > 1 ? 'them' : 'it'} in Apps to accept, or decline if you don't have {missing.length > 1 ? 'them' : 'it'}.
+                    </Text>
+                    <TouchableOpacity onPress={() => onNavigate('APPS')} activeOpacity={0.8}>
+                      <Text style={styles.missingLink}>OPEN APPS →</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+                <View style={styles.duelActions}>
+                  <TouchableOpacity style={styles.rejectBtn} onPress={() => handleDuelResponse(d.id, 'decline')} activeOpacity={0.8}>
+                    <Text style={styles.rejectBtnText}>✕</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.acceptBtn, missing.length > 0 && styles.acceptBtnOff]}
+                    onPress={() => missing.length === 0 && handleDuelResponse(d.id, 'accept')}
+                    activeOpacity={missing.length > 0 ? 1 : 0.8}
+                  >
+                    <Text style={styles.acceptBtnText}>ACCEPT DUEL</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-              <Text style={styles.duelSub}>
-                Fewest minutes on {d.app} over 24 hours wins.
-              </Text>
-              <View style={styles.duelActions}>
-                <TouchableOpacity style={styles.rejectBtn} onPress={() => handleDuelResponse(d.id, 'decline')} activeOpacity={0.8}>
-                  <Text style={styles.rejectBtnText}>✕</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.acceptBtn} onPress={() => handleDuelResponse(d.id, 'accept')} activeOpacity={0.8}>
-                  <Text style={styles.acceptBtnText}>ACCEPT DUEL</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ))}
+            );
+          })}
         </>
       )}
 
@@ -555,103 +602,74 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
         </>
       )}
 
-      {!hasFriends ? (
-        <>
-          <Text style={styles.sectionLabel}>NO FRIENDS YET</Text>
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>NOBODY HERE YET</Text>
-            <Text style={styles.emptySub}>Share your code or enter a friend's to start comparing streaks.</Text>
-          </View>
-        </>
-      ) : (
-        <>
-          <Text style={styles.sectionLabel}>LEADERBOARD · {leaderboard.length}</Text>
-          <Text style={styles.duelHint}>Tap a friend to challenge them to a 24-hour duel.</Text>
+      <Text style={styles.sectionLabel}>INVITE & ADD FRIENDS</Text>
+      <View style={styles.codeCard}>
+        <Text style={styles.codeLabel}>YOUR INVITE CODE</Text>
+        <Text style={styles.codeValue}>{code || '——————'}</Text>
+        <View style={styles.codeActions}>
+          <TouchableOpacity style={styles.copyBtn} onPress={handleCopy} activeOpacity={0.85} disabled={!code}>
+            <Text style={styles.copyBtnText}>{copied ? 'COPIED ✓' : 'COPY'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.shareBtn} onPress={handleShare} activeOpacity={0.85} disabled={!code}>
+            <Text style={styles.shareBtnText}>SHARE CODE →</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
 
-          <View style={styles.podium}>
-            {podiumOrder.map((i) => {
-              const entry = podium[i];
-              const metal = PODIUM[i];
-              const first = i === 0;
-              return (
-                <TouchableOpacity
-                  key={entry.uid}
-                  style={[styles.podiumSlot, first && styles.podiumSlotFirst]}
-                  onPress={() => openDuel(entry)}
-                  activeOpacity={entry.isMe ? 1 : 0.85}
-                >
-                  {first && <Text style={styles.crown}>♛</Text>}
-                  <Avatar entry={entry} size={first ? 64 : 50} ring={metal.color} />
-                  <View style={styles.nameRow}>
-                    {entry.badge && (
-                      <Text style={[styles.eliteGlyph, { color: entry.badge.color }]}>{entry.badge.glyph}</Text>
-                    )}
-                    {(() => {
-                      const fx = nameEffectById(entry.nameEffect);
-                      return (
-                        <Text
-                          style={[
-                            styles.podiumName,
-                            entry.isMe && styles.podiumNameMe,
-                            fx ? [{ color: fx.color }, glowStyle(fx.glow)] : null,
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {entry.isMe ? 'YOU' : entry.displayName}
-                        </Text>
-                      );
-                    })()}
-                  </View>
-                  <RankBadge level={entry.level} />
-                  <View style={[styles.podiumBlock, { backgroundColor: metal.color, height: first ? 64 : 44 }]}>
-                    <Text style={styles.podiumPlace}>{metal.label}</Text>
-                    <Text style={styles.podiumStreak}>{entry.currentStreak}</Text>
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
+      {invites && (
+        <View style={styles.inviteCard}>
+          <Text style={styles.addLabel}>INVITE FRIENDS · EARN PRO</Text>
+          {invites.next ? (
+            <>
+              <View style={styles.inviteHead}>
+                <Text style={styles.inviteCount}>
+                  {Math.min(invites.active, invites.next.at)}
+                  <Text style={styles.inviteOf}> / {invites.next.at} friends</Text>
+                </Text>
+                <Text style={styles.inviteReward}>{daysLabel(invites.next.days)} PRO</Text>
+              </View>
+              <View style={styles.inviteBarBg}>
+                <View style={[styles.inviteBarFill, { width: `${Math.min(invites.active / invites.next.at, 1) * 100}%` }]} />
+              </View>
+            </>
+          ) : (
+            <Text style={styles.inviteCount}>All rewards earned</Text>
+          )}
+          <View style={styles.inviteSteps}>
+            {invites.milestones.map((m) => (
+              <View key={m.at} style={[styles.inviteStep, invites.rewarded.includes(m.at) && styles.inviteStepDone]}>
+                <Text style={[styles.inviteStepText, invites.rewarded.includes(m.at) && styles.inviteStepTextDone]}>
+                  {invites.rewarded.includes(m.at) ? '✓ ' : ''}{m.at} → {daysLabel(m.days)}
+                </Text>
+              </View>
+            ))}
           </View>
-
-          {rest.map((entry, i) => (
-            <TouchableOpacity
-              key={entry.uid}
-              style={[styles.friendCard, entry.isMe && styles.friendCardMe]}
-              onPress={() => openDuel(entry)}
-              onLongPress={() => !entry.isMe && handleRemove(entry.uid, entry.displayName)}
-              activeOpacity={entry.isMe ? 1 : 0.85}
-            >
-              <Text style={styles.rank}>{i + 4}</Text>
-              <Avatar entry={entry} size={40} />
-              <View style={styles.friendBody}>
-                <View style={styles.nameRow}>
-                  {entry.badge && (
-                    <Text style={[styles.eliteGlyph, { color: entry.badge.color }]}>{entry.badge.glyph}</Text>
-                  )}
-                  {(() => {
-                    const fx = nameEffectById(entry.nameEffect);
-                    return (
-                      <Text
-                        style={[styles.friendName, fx ? [{ color: fx.color }, glowStyle(fx.glow)] : null]}
-                        numberOfLines={1}
-                      >
-                        {entry.isMe ? 'YOU' : entry.displayName}
-                      </Text>
-                    );
-                  })()}
-                </View>
-                <View style={styles.friendMeta}>
-                  <RankBadge level={entry.level} />
-                  <Text style={styles.friendSub}>{entry.totalChallenges} challenges</Text>
-                </View>
-              </View>
-              <View style={styles.friendRight}>
-                <Text style={styles.friendStreak}>{entry.currentStreak}</Text>
-                <Text style={styles.friendStreakLabel}>STREAK</Text>
-              </View>
-            </TouchableOpacity>
-          ))}
-        </>
+        </View>
       )}
+
+      <View style={styles.addCard}>
+        <Text style={styles.addLabel}>ADD A FRIEND</Text>
+        <View style={styles.addRow}>
+          <TextInput
+            style={styles.addInput}
+            placeholder="Enter their code"
+            placeholderTextColor={palette.textFaint}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            value={inputCode}
+            onChangeText={setInputCode}
+            maxLength={6}
+          />
+          <TouchableOpacity style={styles.addBtn} onPress={handleAdd} activeOpacity={0.85} disabled={adding}>
+            {adding ? <ActivityIndicator color={palette.accentContrast} size="small" /> : <Text style={styles.addBtnText}>ADD</Text>}
+          </TouchableOpacity>
+        </View>
+        {addResult === 'accepted' && <Text style={styles.addOk}>Friend added ✓</Text>}
+        {addResult === 'pending' && (
+          <Text style={styles.addOk}>Request sent — waiting for them to accept</Text>
+        )}
+        {addResult === 'err' && <Text style={styles.addErr}>{error || 'Could not add friend'}</Text>}
+      </View>
 
       <Modal
         visible={duelTarget !== null}
@@ -663,8 +681,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>CHALLENGE {duelTarget?.displayName.toUpperCase()}</Text>
             <Text style={styles.modalSub}>
-              Whoever spends fewer minutes on the chosen app over the next 24 hours wins.
-              Whoever spends fewer minutes on the chosen app over the next 24 hours wins.
+              Whoever spends fewer minutes on the chosen apps over the next 24 hours wins.
             </Text>
 
             <Text style={styles.modalLabel}>STAKE</Text>
@@ -694,21 +711,38 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.modalLabel}>PICK THE APP</Text>
-            {monitoredApps.map((app) => (
-              <TouchableOpacity
-                key={app}
-                style={styles.appOption}
-                onPress={() => sendChallenge(app)}
-                activeOpacity={0.85}
-                disabled={sending}
-              >
-                <Text style={styles.appOptionText}>{app}</Text>
-                <Text style={styles.appOptionArrow}>→</Text>
-              </TouchableOpacity>
-            ))}
+            <Text style={styles.modalLabel}>PICK THE APPS · {duelApps.length} SELECTED</Text>
+            {monitoredApps.map((app) => {
+              const on = duelApps.includes(app);
+              return (
+                <TouchableOpacity
+                  key={app}
+                  style={[styles.appOption, on && styles.appOptionOn]}
+                  onPress={() => toggleDuelApp(app)}
+                  activeOpacity={0.85}
+                  disabled={sending}
+                >
+                  <AppIcon app={app} style={styles.appOptionIcon} textStyle={styles.appOptionIconText} />
+                  <Text style={styles.appOptionText}>{app}</Text>
+                  <View style={[styles.checkBox, on && styles.checkBoxOn]}>
+                    {on && <Text style={styles.checkMark}>✓</Text>}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
 
-            {sending && <ActivityIndicator color={palette.accent} style={styles.modalSpinner} />}
+            <TouchableOpacity
+              style={[styles.sendDuelBtn, (duelApps.length === 0 || sending) && styles.acceptBtnOff]}
+              onPress={sendChallenge}
+              activeOpacity={0.85}
+              disabled={duelApps.length === 0 || sending}
+            >
+              {sending ? (
+                <ActivityIndicator color={palette.accentContrast} />
+              ) : (
+                <Text style={styles.sendDuelText}>⚔ SEND DUEL</Text>
+              )}
+            </TouchableOpacity>
 
             <TouchableOpacity style={styles.modalCancel} onPress={() => setDuelTarget(null)} activeOpacity={0.8}>
               <Text style={styles.modalCancelText}>CANCEL</Text>
@@ -716,6 +750,78 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats }) => {  const st
           </View>
         </View>
       </Modal>
+
+      <Modal visible={profile !== null} transparent animationType="fade" onRequestClose={() => setProfile(null)}>
+        <View style={styles.modalBackdrop}>
+          {profile && (
+            <View style={styles.modalCard}>
+              <View style={styles.profileHead}>
+                <Avatar entry={profile} size={72} />
+                <View style={styles.profileHeadBody}>
+                  <EntryName entry={profile} style={styles.profileName} />
+                  <View style={styles.friendMeta}>
+                    <RankBadge level={profile.level} />
+                    <Text style={styles.friendSub}>LV {profile.level} · {profile.currentXP} XP</Text>
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.profileGrid}>
+                <View style={styles.profileStat}>
+                  <Text style={styles.profileStatVal}>{formatMinutes(profile.todayMinutes)}</Text>
+                  <Text style={styles.profileStatLabel}>TODAY</Text>
+                </View>
+                <View style={styles.profileStat}>
+                  <Text style={styles.profileStatVal}>{formatMinutes(profile.weekAvgMinutes)}</Text>
+                  <Text style={styles.profileStatLabel}>7-DAY AVG</Text>
+                </View>
+                <View style={styles.profileStat}>
+                  <Text style={styles.profileStatVal}>🔥 {profile.currentStreak}</Text>
+                  <Text style={styles.profileStatLabel}>STREAK</Text>
+                </View>
+                <View style={styles.profileStat}>
+                  <Text style={styles.profileStatVal}>{profile.longestStreak}</Text>
+                  <Text style={styles.profileStatLabel}>BEST STREAK</Text>
+                </View>
+              </View>
+
+              {profile.trackedApps.length > 0 && (
+                <View style={styles.profileApps}>
+                  {profile.trackedApps.map((app) => (
+                    <AppIcon key={app} app={app} style={styles.appOptionIcon} textStyle={styles.appOptionIconText} />
+                  ))}
+                </View>
+              )}
+
+              {!profile.isMe && (
+                <TouchableOpacity style={styles.sendDuelBtn} onPress={() => openDuel(profile)} activeOpacity={0.85}>
+                  <Text style={styles.sendDuelText}>⚔ DUEL</Text>
+                </TouchableOpacity>
+              )}
+
+              {!profile.isMe && (
+                <TouchableOpacity
+                  style={styles.modalCancel}
+                  onPress={() => {
+                    const target = profile;
+                    setProfile(null);
+                    handleRemove(target.uid, target.displayName);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.removeText}>REMOVE FRIEND</Text>
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity style={styles.modalCancel} onPress={() => setProfile(null)} activeOpacity={0.8}>
+                <Text style={styles.modalCancelText}>CLOSE</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      </Modal>
+
+      <SwordsClash playKey={clashKey} />
     </ScrollView>
   );
 };
@@ -759,7 +865,6 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   inviteStepText: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 0.3 },
   inviteStepTextDone: { color: c.accent },
   invitePending: { color: c.textSecondary, fontSize: 11, marginTop: 10 },
-  inviteRules: { color: c.textFaint, fontSize: 10, lineHeight: 14, marginTop: 10 },
   addCard: { backgroundColor: c.surface, borderRadius: 14, marginHorizontal: 16, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: c.border },
   addLabel: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 1, marginBottom: 10 },
   addRow: { flexDirection: 'row', gap: 10 },
@@ -946,16 +1051,38 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   appOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 12,
     backgroundColor: c.surfaceRaised,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     marginBottom: 8,
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
-  appOptionText: { color: c.textPrimary, fontSize: 13, fontWeight: '800' },
-  appOptionArrow: { color: c.accent, fontSize: 14, fontWeight: '900' },
-  modalSpinner: { marginVertical: 8 },
+  appOptionOn: { borderColor: c.accent, backgroundColor: c.accentMuted },
+  appOptionIcon: { width: 30, height: 30, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+  appOptionIconText: { color: '#FFFFFF', fontSize: 10, fontWeight: '900' },
+  appOptionText: { flex: 1, color: c.textPrimary, fontSize: 13, fontWeight: '800' },
+  checkBox: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: c.border, justifyContent: 'center', alignItems: 'center' },
+  checkBoxOn: { backgroundColor: c.accent, borderColor: c.accent },
+  checkMark: { color: c.accentContrast, fontSize: 12, fontWeight: '900' },
+  sendDuelBtn: { backgroundColor: c.accent, borderRadius: 12, paddingVertical: 15, alignItems: 'center', marginTop: 8 },
+  sendDuelText: { color: c.accentContrast, fontSize: 14, fontWeight: '900', letterSpacing: 1 },
+  acceptBtnOff: { opacity: 0.4 },
+  missingBox: { backgroundColor: c.surfaceRaised, borderRadius: 10, padding: 12, marginBottom: 12, borderLeftWidth: 3, borderLeftColor: c.danger },
+  missingText: { color: c.textSecondary, fontSize: 12, lineHeight: 17 },
+  missingLink: { color: c.accent, fontSize: 11, fontWeight: '900', letterSpacing: 0.5, marginTop: 8 },
+  podiumStreakSmall: { color: c.textTertiary, fontSize: 11, fontWeight: '800', marginTop: 4, marginBottom: 4 },
+  profileHead: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 18 },
+  profileHeadBody: { flex: 1, gap: 6 },
+  profileName: { color: c.textPrimary, fontSize: 18, fontWeight: '900' },
+  profileGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
+  profileStat: { width: '48%', flexGrow: 1, backgroundColor: c.surfaceRaised, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
+  profileStatVal: { color: c.textPrimary, fontSize: 20, fontWeight: '900' },
+  profileStatLabel: { color: c.textTertiary, fontSize: 9, fontWeight: '900', letterSpacing: 1, marginTop: 4 },
+  profileApps: { flexDirection: 'row', gap: 8, justifyContent: 'center', marginBottom: 8 },
+  removeText: { color: c.danger, fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
   modalCancel: { alignItems: 'center', paddingVertical: 14, marginTop: 4 },
   modalCancelText: { color: c.textTertiary, fontSize: 12, fontWeight: '900', letterSpacing: 0.5 },
 

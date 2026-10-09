@@ -16,6 +16,8 @@ import { InviteRewardOverlay } from './src/components/InviteRewardOverlay';
 import { useStats } from './src/hooks/useStats';
 import { useNotifications } from './src/hooks/useNotifications';
 import { useAppMonitor, syncAppMonitor } from './src/hooks/useAppMonitor';
+import { useScreenTimeSync } from './src/hooks/useScreenTime';
+import { notifyTabChange } from './src/hooks/useTabScrollReset';
 import { radius, spacing, cardShadow, Palette } from './src/theme';
 import { ThemeProvider, useThemedStyles, useTheme } from './src/context/ThemeContext';
 import { authedFetch } from './src/utils/authFetch';
@@ -143,6 +145,7 @@ function RootNavigator() {
   const [checkingOnboarding, setCheckingOnboarding] = useState<boolean>(true);
 
   useAppMonitor(fbUser?.uid);
+  useScreenTimeSync(fbUser?.uid);
 
   const screenRef = useRef(screen);
   screenRef.current = screen;
@@ -153,6 +156,7 @@ function RootNavigator() {
   ).current;
 
   const slideTo = (nextIndex: number) => {
+    if (SCREEN_ORDER[nextIndex] !== screenRef.current) notifyTabChange(SCREEN_ORDER[nextIndex]);
     setScreen(SCREEN_ORDER[nextIndex]);
     Animated.timing(position, {
       toValue: -nextIndex * SCREEN_WIDTH,

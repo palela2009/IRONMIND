@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE_URL } from '../config/api';
 import { authedFetch } from '../utils/authFetch';
+import { todayKey } from './useScreenTime';
+import { useLiveRefresh } from './useLiveRefresh';
 
 const API_URL = `${API_BASE_URL}/api/friends`;
 
@@ -20,6 +22,9 @@ export interface Friend {
   isOwner: boolean;
   frame: string | null;
   nameEffect: string | null;
+  todayMinutes: number;
+  weekAvgMinutes: number;
+  trackedApps: string[];
 }
 
 export interface FriendRequestItem {
@@ -48,11 +53,10 @@ export const useFriends = () => {
       setLoading(false);
       return;
     }
-    setLoading(true);
     try {
       const [codeRes, friendsRes, requestsRes] = await Promise.all([
         authedFetch(`${API_URL}/code`),
-        authedFetch(API_URL),
+        authedFetch(`${API_URL}?date=${todayKey()}`),
         authedFetch(`${API_URL}/requests`),
       ]);
       if (codeRes.ok) setCode((await codeRes.json()).code ?? '');
@@ -65,6 +69,8 @@ export const useFriends = () => {
   useEffect(() => {
     load();
   }, [load]);
+
+  useLiveRefresh(load, !!fbUser?.uid);
 
   const addByCode = async (inputCode: string): Promise<AddOutcome> => {
     setError('');

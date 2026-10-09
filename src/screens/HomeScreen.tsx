@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useTabScrollReset } from '../hooks/useTabScrollReset';
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, Image, ActivityIndicator, NativeModules, Platform, AppState } from 'react-native';
 import { useThemedStyles, useTheme } from '../context/ThemeContext';
 import { UserStats, ChallengeItem, TrainingState } from '../types/training';
@@ -7,6 +8,8 @@ import { usePro } from '../context/ProContext';
 import { ShopScreen } from './ShopScreen';
 import { usePause, resumeMonitoring } from '../hooks/usePause';
 import { XP_PER_LEVEL } from '../constants/leveling';
+import { useScreenTime, formatMinutes, trackedTotal, todayKey } from '../hooks/useScreenTime';
+import { AppIcon } from '../components/AppIcon';
 import { spacing, radius, type, cardShadow, glowFor, Palette } from '../theme';
 
 interface HomeProps {
@@ -29,26 +32,6 @@ const getTodaySuccess = (history: ChallengeItem[]): number => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   return history.filter((i) => i.timestamp >= today.getTime() && i.wasSuccessful).length;
-};
-
-const getWeeklyBars = (history: ChallengeItem[]): number[] => {
-  const bars = [0, 0, 0, 0, 0, 0, 0];
-  const now = new Date();
-  const dayOfWeek = now.getDay();
-  const daysSinceMon = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-  const monday = new Date(now);
-  monday.setDate(now.getDate() - daysSinceMon);
-  monday.setHours(0, 0, 0, 0);
-  const mondayMs = monday.getTime();
-
-  history.forEach((item) => {
-    if (item.timestamp < mondayMs) return;
-    const d = new Date(item.timestamp);
-    let idx = d.getDay() - 1;
-    if (idx < 0) idx = 6;
-    bars[idx]++;
-  });
-  return bars;
 };
 
 const getTodayBarIndex = (): number => {
@@ -92,11 +75,14 @@ const DOTS_PER_COLUMN = 5;
 const RECENT_PAGE = 5;
 
 export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallengeLimit, onNavigate }) => {  const styles = useThemedStyles(makeStyles);
+  const scrollRef = useRef<any>(null);
+  useTabScrollReset('HOME', scrollRef);
   const { coins, streakFreezes } = usePro();
   const [showShop, setShowShop] = useState<boolean>(false);
   const [visibleCount, setVisibleCount] = useState<number>(RECENT_PAGE);
   const firedToday = useFiredToday(history.length + dailyChallengeLimit);
   const { paused, remaining } = usePause();
+  const { screenTime, tracked, week, trackedToday } = useScreenTime();
 
   const { fbUser } = useAuth();
 
@@ -116,9 +102,27 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallenge
   const dotColumns = Array.from({ length: Math.ceil(dailyChallengeLimit / DOTS_PER_COLUMN) }, (_, col) =>
     Array.from({ length: Math.min(DOTS_PER_COLUMN, dailyChallengeLimit - col * DOTS_PER_COLUMN) }, (_, row) => col * DOTS_PER_COLUMN + row)
   );
-  const weekBars = getWeeklyBars(history);
-  const maxBar = Math.max(...weekBars, 1);
   const todayBarIdx = getTodayBarIndex();
+  const trackedRows = tracked
+    .map((app) => ({ app, minutes: screenTime.find((s) => s.app === app)?.minutes ?? 0 }))
+    .sort((a, b) => b.minutes - a.minutes)
+    .slice(0, 4);
+  const maxAppMinutes = Math.max(...trackedRows.map((r) => r.minutes), 1);
+  const weekMinutes = DAYS.map((_, i) => {
+    if (i === todayBarIdx) return trackedToday;
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    return trackedTotal(week.find((w) => w.date === todayKey(d))?.apps ?? [], tracked);
+  });
+  const maxWeek = Math.max(...weekMinutes, 1);
+  const pastDays = week.filter((w) => w.date < todayKey()).map((w) => trackedTotal(w.apps, tracked));
+  const average = pastDays.length ? pastDays.reduce((a, b) => a + b, 0) / pastDays.length : null;
+  const compare =
+    average === null
+      ? { text: 'On the apps you track', better: false, worse: false }
+      : trackedToday > average
+      ? { text: `Above your daily average of ${formatMinutes(average)}`, better: false, worse: true }
+      : { text: `Under your daily average of ${formatMinutes(average)}`, better: true, worse: false };
   const streakStr = String(stats.currentStreak);
   const rxnDisplay = stats.bestReactionTime > 0 ? `${stats.bestReactionTime.toFixed(2)}s` : '—';
   const xpPct = Math.min(((stats.currentXP % XP_PER_LEVEL) / XP_PER_LEVEL) * 100, 100);
@@ -132,6 +136,7 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallenge
 
   return (
     <FlatList
+      ref={scrollRef}
       style={styles.root}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
@@ -162,21 +167,43 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallenge
           <View style={styles.heroCard}>
             <View style={styles.heroGlow} />
             <View style={styles.heroTopRow}>
+              <Text style={styles.metaChipText}>SCREEN TIME TODAY</Text>
               <Text style={styles.metaChipText}>WK {weekNum}</Text>
-              <View style={styles.lvBadge}>
-                <Text style={styles.lvText}>LV {stats.level}</Text>
+            </View>
+
+            <Text style={styles.stValue}>{formatMinutes(trackedToday)}</Text>
+            <Text style={[styles.stCompare, compare.better ? styles.stBetter : compare.worse ? styles.stWorse : null]}>
+              {compare.text}
+            </Text>
+
+            {trackedRows.length > 0 && (
+              <View style={styles.stApps}>
+                {trackedRows.map((row) => (
+                  <View key={row.app} style={styles.stAppRow}>
+                    <AppIcon app={row.app} style={styles.stAppIcon} textStyle={styles.stAppIconText} />
+                    <Text style={styles.stAppName} numberOfLines={1}>{row.app}</Text>
+                    <View style={styles.stAppBarBg}>
+                      <View style={[styles.stAppBarFill, { width: `${Math.max((row.minutes / maxAppMinutes) * 100, 3)}%` }]} />
+                    </View>
+                    <Text style={styles.stAppMinutes}>{formatMinutes(row.minutes)}</Text>
+                  </View>
+                ))}
               </View>
-            </View>
+            )}
 
-            <Text style={styles.heroNum}>{streakStr}</Text>
-            <Text style={styles.streakLabel}>STREAK</Text>
-
-            <View style={styles.xpBarBg}>
-              <View style={[styles.xpBarFill, { width: `${xpPct}%` }]} />
-            </View>
-            <View style={styles.xpLabelRow}>
-              <Text style={styles.xpLabel}>{stats.currentXP % XP_PER_LEVEL} / {XP_PER_LEVEL} XP</Text>
-              <Text style={styles.xpNext}>NEXT · LV {stats.level + 1}</Text>
+            <View style={styles.barChart}>
+              {weekMinutes.map((m, i) => (
+                <View key={i} style={styles.barCol}>
+                  <View style={styles.barTrack}>
+                    <View style={[
+                      styles.bar,
+                      { height: Math.max((m / maxWeek) * 56, 4) },
+                      i === todayBarIdx && styles.barToday,
+                    ]} />
+                  </View>
+                  <Text style={[styles.dayLabel, i === todayBarIdx && styles.dayToday]}>{DAYS[i]}</Text>
+                </View>
+              ))}
             </View>
           </View>
 
@@ -190,33 +217,47 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallenge
             </TouchableOpacity>
           )}
 
-          <View style={styles.todayCard}>
-            <View style={styles.todayLeft}>
-              <Text style={styles.todayLabel}>TODAY'S CHALLENGES</Text>
-              <Text style={styles.todayCount}>
+          <View style={styles.halfRow}>
+            <View style={styles.halfCard}>
+              <View style={styles.halfHead}>
+                <Text style={styles.todayLabel}>STREAK</Text>
+                <View style={styles.lvBadge}>
+                  <Text style={styles.lvText}>LV {stats.level}</Text>
+                </View>
+              </View>
+              <Text style={styles.halfNum}>{streakStr}</Text>
+              <View style={styles.xpBarBg}>
+                <View style={[styles.xpBarFill, { width: `${xpPct}%` }]} />
+              </View>
+              <Text style={styles.xpLabel}>{stats.currentXP % XP_PER_LEVEL} / {XP_PER_LEVEL} XP</Text>
+            </View>
+
+            <View style={styles.halfCard}>
+              <View style={styles.halfHead}>
+                <Text style={styles.todayLabel}>CHALLENGES</Text>
+                <View style={styles.todayDots}>
+                  {dotColumns.map((column, c) => (
+                    <View key={c} style={styles.dotColumn}>
+                      {column.map((i) => (
+                        <View
+                          key={i}
+                          style={[
+                            styles.dot,
+                            i < todaySuccess && styles.dotSuccess,
+                            i >= todaySuccess && i < todayCount && styles.dotFail,
+                          ]}
+                        />
+                      ))}
+                    </View>
+                  ))}
+                </View>
+              </View>
+              <Text style={styles.halfNum}>
                 {todayCount}<Text style={styles.todayOf}> / {dailyChallengeLimit}</Text>
               </Text>
               <Text style={[styles.todayRemain, firedRemaining === 0 && styles.todayCapped]}>
-                {firedRemaining > 0
-                  ? `${todaySuccess} won · ${firedRemaining} more may fire today`
-                  : `${todaySuccess} won · daily limit reached, no more until tomorrow`}
+                {firedRemaining > 0 ? `${todaySuccess} won · ${firedRemaining} left` : `${todaySuccess} won · done for today`}
               </Text>
-            </View>
-            <View style={styles.todayDots}>
-              {dotColumns.map((column, c) => (
-                <View key={c} style={styles.dotColumn}>
-                  {column.map((i) => (
-                    <View
-                      key={i}
-                      style={[
-                        styles.dot,
-                        i < todaySuccess && styles.dotSuccess,
-                        i >= todaySuccess && i < todayCount && styles.dotFail,
-                      ]}
-                    />
-                  ))}
-                </View>
-              ))}
             </View>
           </View>
 
@@ -233,26 +274,6 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallenge
               <Text style={styles.coinVal}>◉ {coins}</Text>
               <Text style={styles.shopLabel}>SHOP →</Text>
             </TouchableOpacity>
-          </View>
-
-          <View style={styles.chartCard}>
-            <Text style={styles.chartLabel}>THIS WEEK</Text>
-            <View style={styles.barChart}>
-              {weekBars.map((h, i) => (
-                <View key={i} style={styles.barCol}>
-                  <View style={styles.barTrack}>
-                    <View style={[
-                      styles.bar,
-                      { height: Math.max((h / maxBar) * 72, 4) },
-                      i === todayBarIdx && styles.barToday,
-                    ]} />
-                  </View>
-                  <Text style={[styles.dayLabel, i === todayBarIdx && styles.dayToday]}>
-                    {DAYS[i]}
-                  </Text>
-                </View>
-              ))}
-            </View>
           </View>
 
           <View style={styles.recentHeader}>
@@ -366,8 +387,30 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   lvBadge: { backgroundColor: c.accentMuted, paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.pill },
   lvText: { color: c.accent, fontSize: 11, fontWeight: '900', letterSpacing: 0.3 },
 
-  heroNum: { color: c.textPrimary, fontSize: 92, fontWeight: '900', letterSpacing: -4, lineHeight: 92 },
-  streakLabel: { color: c.textSecondary, fontSize: 12, fontWeight: '700', marginBottom: spacing.lg, letterSpacing: 0.3 },
+  stValue: { color: c.textPrimary, fontSize: 56, fontWeight: '900', letterSpacing: -2, lineHeight: 60 },
+  stCompare: { color: c.textTertiary, fontSize: 12, fontWeight: '700', marginTop: 2, marginBottom: spacing.lg },
+  stBetter: { color: c.accent },
+  stWorse: { color: c.danger },
+  stApps: { gap: 10, marginBottom: spacing.lg },
+  stAppRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  stAppIcon: { width: 26, height: 26, borderRadius: 7, justifyContent: 'center', alignItems: 'center' },
+  stAppIconText: { color: '#FFFFFF', fontSize: 9, fontWeight: '900' },
+  stAppName: { color: c.textSecondary, fontSize: 12, fontWeight: '700', width: 78 },
+  stAppBarBg: { flex: 1, height: 6, borderRadius: 3, backgroundColor: c.borderSubtle, overflow: 'hidden' },
+  stAppBarFill: { height: 6, borderRadius: 3, backgroundColor: c.accent },
+  stAppMinutes: { color: c.textPrimary, fontSize: 12, fontWeight: '900', width: 52, textAlign: 'right' },
+
+  halfRow: { flexDirection: 'row', gap: spacing.sm, marginHorizontal: spacing.lg, marginBottom: spacing.sm },
+  halfCard: {
+    flex: 1,
+    backgroundColor: c.surface,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: c.border,
+  },
+  halfHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', minHeight: 28 },
+  halfNum: { color: c.textPrimary, fontSize: 40, fontWeight: '900', letterSpacing: -1.5, marginBottom: spacing.sm },
 
   xpBarBg: { height: 6, backgroundColor: c.borderSubtle, borderRadius: radius.pill, marginBottom: spacing.sm, overflow: 'hidden' },
   xpBarFill: { height: '100%', backgroundColor: c.accent, borderRadius: radius.pill },
@@ -453,10 +496,10 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     marginBottom: spacing.xl,
   },
   chartLabel: { color: c.textTertiary, fontSize: 10, fontWeight: '800', letterSpacing: 1, marginBottom: spacing.lg },
-  barChart: { flexDirection: 'row', alignItems: 'flex-end', height: 84, justifyContent: 'space-between' },
+  barChart: { flexDirection: 'row', alignItems: 'flex-end', height: 76, justifyContent: 'space-between' },
   barCol: { flex: 1, alignItems: 'center', gap: spacing.sm },
-  barTrack: { height: 72, justifyContent: 'flex-end' },
-  bar: { width: 22, backgroundColor: c.borderSubtle, borderRadius: radius.pill },
+  barTrack: { height: 56, justifyContent: 'flex-end' },
+  bar: { width: 18, backgroundColor: c.borderSubtle, borderRadius: 9 },
   barToday: { backgroundColor: c.accent },
   dayLabel: { color: c.textFaint, fontSize: 10, fontWeight: '700' },
   dayToday: { color: c.accent },

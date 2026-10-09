@@ -1,70 +1,122 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { NativeModules, Platform, AppState } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../config/api';
 import { authedFetch } from '../utils/authFetch';
 
 const { UsageMonitor } = NativeModules;
 
-const BASE_URL = API_BASE_URL;
+const SYNC_INTERVAL_MS = 5 * 60 * 1000;
 
 export interface AppUsage {
   app: string;
   minutes: number;
 }
 
-const getTodayDate = () => {
-  const d = new Date();
+export interface ScreenTimeDay {
+  date: string;
+  apps: AppUsage[];
+}
+
+export const todayKey = (d = new Date()): string => {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 };
 
-const saveToBackend = async (apps: AppUsage[]) => {
+interface Store {
+  today: AppUsage[];
+  tracked: string[];
+  week: ScreenTimeDay[];
+  loading: boolean;
+}
+
+let store: Store = { today: [], tracked: [], week: [], loading: true };
+const listeners = new Set<(s: Store) => void>();
+
+const publish = (next: Partial<Store>) => {
+  store = { ...store, ...next };
+  listeners.forEach((l) => l(store));
+};
+
+const loadTracked = async (): Promise<string[]> => {
   try {
-    await authedFetch(`${BASE_URL}/api/screentime`, {
-      method: 'POST',
-      body: JSON.stringify({ date: getTodayDate(), apps }),
-    });
+    const raw = await AsyncStorage.getItem('@ironmind_onboarding');
+    return raw ? JSON.parse(raw).targetApps ?? [] : [];
+  } catch {
+    return [];
+  }
+};
+
+const loadWeek = async () => {
+  try {
+    const res = await authedFetch(`${API_BASE_URL}/api/screentime/history?days=7`);
+    if (!res.ok) return;
+    const rows: { date: string; apps: AppUsage[] }[] = await res.json();
+    publish({ week: rows.map((r) => ({ date: r.date, apps: r.apps })) });
   } catch {}
 };
 
-export const useScreenTime = (userId?: string) => {
-  const [screenTime, setScreenTime] = useState<AppUsage[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-
-  const fetchStats = useCallback(async () => {
-    if (Platform.OS !== 'android' || !UsageMonitor) {
-      setLoading(false);
-      return;
+export const refreshScreenTime = async (upload = true) => {
+  const tracked = await loadTracked();
+  publish({ tracked });
+  if (Platform.OS !== 'android' || !UsageMonitor?.getUsageStats) {
+    publish({ loading: false });
+    return;
+  }
+  try {
+    const raw: AppUsage[] = await UsageMonitor.getUsageStats();
+    const apps = raw.filter((a) => a.minutes > 0).sort((a, b) => b.minutes - a.minutes).slice(0, 25);
+    publish({ today: apps, loading: false });
+    if (upload && apps.length > 0) {
+      await authedFetch(`${API_BASE_URL}/api/screentime`, {
+        method: 'POST',
+        body: JSON.stringify({ date: todayKey(), apps }),
+      }).catch(() => {});
     }
-    try {
-      const raw: AppUsage[] = await UsageMonitor.getUsageStats();
-      const top10 = raw
-        .filter((a) => a.minutes > 0)
-        .sort((a, b) => b.minutes - a.minutes)
-        .slice(0, 10);
-      setScreenTime(top10);
+  } catch {
+    publish({ loading: false });
+  }
+  loadWeek();
+};
 
-      if (userId && top10.length > 0) {
-        saveToBackend(top10);
-      }
-    } catch {
-      setScreenTime([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [userId]);
-
+export const useScreenTimeSync = (uid?: string) => {
   useEffect(() => {
-    fetchStats();
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') fetchStats();
+    if (!uid) return;
+    refreshScreenTime();
+    const timer = setInterval(() => {
+      if (AppState.currentState === 'active') refreshScreenTime();
+    }, SYNC_INTERVAL_MS);
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s === 'active') refreshScreenTime();
     });
-    return () => sub.remove();
-  }, [fetchStats]);
+    return () => {
+      clearInterval(timer);
+      sub.remove();
+    };
+  }, [uid]);
+};
 
-  return { screenTime, loading, refetch: fetchStats };
+export const trackedTotal = (apps: AppUsage[], tracked: string[]): number =>
+  apps.filter((a) => tracked.includes(a.app)).reduce((sum, a) => sum + a.minutes, 0);
+
+export const useScreenTime = () => {
+  const [state, setState] = useState<Store>(store);
+  useEffect(() => {
+    listeners.add(setState);
+    return () => {
+      listeners.delete(setState);
+    };
+  }, []);
+  return {
+    screenTime: state.today,
+    tracked: state.tracked,
+    week: state.week,
+    loading: state.loading,
+    trackedToday: trackedTotal(state.today, state.tracked),
+    refetch: refreshScreenTime,
+  };
 };
 
 export const formatMinutes = (minutes: number): string => {

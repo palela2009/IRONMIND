@@ -3,6 +3,7 @@ import { NativeModules, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DIFFICULTY_WINDOW_SECONDS, DEFAULT_DIFFICULTY, DifficultyLevel } from '../constants/difficulty';
 import { DAILY_LIMIT_VALUES, DEFAULT_DAILY_LIMIT } from '../constants/dailyLimit';
+import { refreshScreenTime } from './useScreenTime';
 
 const { UsageMonitor } = NativeModules;
 
@@ -22,6 +23,7 @@ let currentUid = '';
 export const syncAppMonitor = async () => {
   if (Platform.OS !== 'android') return;
   await startMonitoringFromStorage();
+  refreshScreenTime(false);
 };
 
 const startMonitoringFromStorage = async () => {

@@ -24,6 +24,7 @@ export const FRAMES: Frame[] = [
   { id: 'neon', name: 'NEON', desc: 'Vivid neon with a live glow', ring: '#22FF6A', glow: '#22FF6A', price: 150 },
   { id: 'galaxy', name: 'GALAXY', desc: 'Deep violet, lit from within', ring: '#B14CFF', glow: '#B14CFF', price: 250 },
   { id: 'mythic', name: 'MYTHIC', desc: 'Molten crimson-gold plasma', ring: '#FF3B6B', glow: '#FFA23B', price: 400 },
+  { id: 'galactic', name: 'GALACTIC', desc: 'A living nebula. The rarest frame in IronMind', ring: '#8B5CFF', glow: '#22E1FF', price: 3000 },
 ];
 
 export const NAME_EFFECTS: NameEffect[] = [
