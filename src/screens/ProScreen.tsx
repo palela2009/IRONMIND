@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Modal, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, Linking } from 'react-native';
+import { appAlert } from '../components/AppDialog';
 import { useThemedStyles, useTheme } from '../context/ThemeContext';
 import { Palette, PALETTES } from '../theme';
 import { usePro } from '../context/ProContext';
@@ -25,7 +26,7 @@ export const ProScreen: React.FC<ProScreenProps> = ({ visible, onClose }) => {
 
   const chooseTheme = (id: string, requiresPro: boolean) => {
     if (requiresPro && !isPro) {
-      Alert.alert('Pro theme', 'Unlock this theme with IronMind Pro to use it.');
+      appAlert('Pro theme', 'Unlock this theme with IronMind Pro to use it.');
       return;
     }
     setTheme(id);
@@ -34,16 +35,16 @@ export const ProScreen: React.FC<ProScreenProps> = ({ visible, onClose }) => {
   const handleSelect = async (p: ProPlan) => {
     const product = productFor(p);
     if (!product) {
-      Alert.alert('Not available yet', 'Purchases are not available right now. Try again later.');
+      appAlert('Not available yet', 'Purchases are not available right now. Try again later.');
       return;
     }
     setBusy(p.id);
     const outcome = await purchase(product);
     setBusy(null);
     if (outcome === 'purchased') {
-      Alert.alert('Welcome to Pro', 'Every Pro feature is now unlocked.');
+      appAlert('Welcome to Pro', 'Every Pro feature is now unlocked.');
     } else if (outcome === 'failed') {
-      Alert.alert('Purchase did not go through', 'You have not been charged. Try again in a moment.');
+      appAlert('Purchase did not go through', 'You have not been charged. Try again in a moment.');
     }
   };
 
@@ -51,7 +52,7 @@ export const ProScreen: React.FC<ProScreenProps> = ({ visible, onClose }) => {
     setBusy('restore');
     const ok = await restore();
     setBusy(null);
-    Alert.alert(
+    appAlert(
       ok ? 'Purchases restored' : 'Nothing to restore',
       ok ? 'Any Pro purchase on this Google account has been applied.' : 'No Pro purchase was found for this Google account.'
     );

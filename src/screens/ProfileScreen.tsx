@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTabScrollReset } from '../hooks/useTabScrollReset';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Alert, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, TextInput } from 'react-native';
+import { appAlert } from '../components/AppDialog';
 import { useThemedStyles, useTheme } from '../context/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
@@ -13,6 +14,7 @@ import { useAuth } from '../context/AuthContext';
 import { usePro } from '../context/ProContext';
 import { ProScreen } from './ProScreen';
 import { StatusCard } from '../components/StatusCard';
+import { CoachCard } from '../components/CoachCard';
 import { ELITE_BADGES, earnedBadges } from '../constants/badges';
 import { signOut, updateProfile } from 'firebase/auth';
 import { auth } from '../config/firebase';
@@ -196,7 +198,7 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
       const res = await authedFetch(DELETE_ACCOUNT_URL, { method: 'DELETE' });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        Alert.alert('Could not delete account', body.message ?? 'Try again.');
+        appAlert('Could not delete account', body.message ?? 'Try again.');
         setDeletingAccount(false);
         return;
       }
@@ -210,7 +212,7 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
       ]);
       await signOut(auth);
     } catch {
-      Alert.alert('Could not delete account', 'Network error — try again.');
+      appAlert('Could not delete account', 'Network error — try again.');
       setDeletingAccount(false);
     }
   };
@@ -232,7 +234,7 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
     try {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!perm.granted) {
-        Alert.alert('Permission needed', 'Allow photo library access to set a profile picture.');
+        appAlert('Permission needed', 'Allow photo library access to set a profile picture.');
         return;
       }
 
@@ -252,7 +254,7 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
       });
       if (!uploadRes.ok) {
         const body = await uploadRes.json().catch(() => ({}));
-        Alert.alert('Could not update photo', body.message ?? 'Try again.');
+        appAlert('Could not update photo', body.message ?? 'Try again.');
         setUploadingPhoto(false);
         return;
       }
@@ -262,7 +264,7 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
       await refreshUser();
       resyncIdentityToBackend(fbUser.displayName, newPhotoUrl);
     } catch (e) {
-      Alert.alert('Could not update photo', 'Try again.');
+      appAlert('Could not update photo', 'Try again.');
     }
     setUploadingPhoto(false);
   };
@@ -284,14 +286,14 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
       await refreshUser();
       resyncIdentityToBackend(trimmed, fbUser.photoURL);
     } catch {
-      Alert.alert('Could not update name', 'Try again.');
+      appAlert('Could not update name', 'Try again.');
     }
     setSavingName(false);
     setEditingName(false);
   };
 
   const handleDeleteAccount = () => {
-    Alert.alert(
+    appAlert(
       'Delete your account?',
       'This permanently deletes your account, streak, history, and friends. This cannot be undone.',
       [
@@ -415,6 +417,8 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
         </View>
         <Text style={styles.proBannerArrow}>{isPro ? '✓' : '→'}</Text>
       </TouchableOpacity>
+
+      <CoachCard isPro={isPro} stats={stats} onUnlock={() => setShowPro(true)} />
 
       <View style={styles.sectionRow}>
         <Text style={styles.sectionTitle}>ACHIEVEMENTS</Text>

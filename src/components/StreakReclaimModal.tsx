@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, Modal, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { appAlert } from './AppDialog';
 import { usePro } from '../context/ProContext';
 import { useRewardedAd, AD_UNITS, ADS_AVAILABLE } from '../hooks/useRewardedAd';
 import { PRICES } from '../screens/ShopScreen';
@@ -30,7 +31,7 @@ export const StreakReclaimModal: React.FC<Props> = ({ lostStreak, onReclaim, onD
 
   const saveWithCoins = async () => {
     if (!canAfford) {
-      Alert.alert('Not enough coins', `Saving this streak costs ◉ ${PRICES.reclaim}. You have ◉ ${coins}. Win challenges to earn more.`);
+      appAlert('Not enough coins', `Saving this streak costs ◉ ${PRICES.reclaim}. You have ◉ ${coins}. Win challenges to earn more.`);
       return;
     }
     setBuying(true);
@@ -39,7 +40,7 @@ export const StreakReclaimModal: React.FC<Props> = ({ lostStreak, onReclaim, onD
     if (result.ok) {
       onReclaim('coins');
     } else {
-      Alert.alert('Could not save your streak', result.message ?? 'Try again.');
+      appAlert('Could not save your streak', result.message ?? 'Try again.');
     }
   };
 
@@ -50,7 +51,7 @@ export const StreakReclaimModal: React.FC<Props> = ({ lostStreak, onReclaim, onD
       return;
     }
     if (result === 'unavailable') {
-      Alert.alert('No ad available', 'We could not load an ad just now, so your streak is safe this time.');
+      appAlert('No ad available', 'We could not load an ad just now, so your streak is safe this time.');
       onReclaim('ad');
       return;
     }

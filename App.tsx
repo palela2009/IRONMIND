@@ -13,6 +13,7 @@ import { ProScreen } from './src/screens/ProScreen';
 import { WelcomeOfferScreen } from './src/screens/WelcomeOfferScreen';
 import { ProIntroScreen } from './src/screens/ProIntroScreen';
 import { InviteRewardOverlay } from './src/components/InviteRewardOverlay';
+import { AppDialogHost } from './src/components/AppDialog';
 import { useStats } from './src/hooks/useStats';
 import { useNotifications } from './src/hooks/useNotifications';
 import { useAppMonitor, syncAppMonitor } from './src/hooks/useAppMonitor';
@@ -329,6 +330,7 @@ function RootNavigator() {
       <WelcomeOfferScreen />
       <ProIntroScreen />
       <InviteRewardOverlay />
+      <AppDialogHost />
 
       <StreakSavedOverlay
         streak={savedStreak?.streak ?? 0}

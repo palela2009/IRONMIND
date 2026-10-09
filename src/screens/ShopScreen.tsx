@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal } from 'react-native';
+import { appAlert } from '../components/AppDialog';
 import { useThemedStyles, useTheme } from '../context/ThemeContext';
 import { Palette, PALETTES, radius, spacing, cardShadow } from '../theme';
 import { usePro } from '../context/ProContext';
@@ -23,16 +24,16 @@ export const ShopScreen: React.FC<Props> = ({ visible, onClose }) => {
     setBusy(id ?? item);
     const result = await buyItem(item, item === 'theme' ? { themeId: id } : { cosmeticId: id });
     setBusy(null);
-    if (!result.ok) Alert.alert('Could not buy', result.message ?? 'Try again.');
+    if (!result.ok) appAlert('Could not buy', result.message ?? 'Try again.');
     else if (item === 'theme' && id) setTheme(id);
   };
 
   const confirmBuy = (label: string, price: number, item: 'freeze' | 'theme' | 'frame' | 'nameEffect' | 'proWeek', id?: string) => {
     if (coins < price) {
-      Alert.alert('Not enough coins', `${label} costs ${price} coins. You have ${coins}.`);
+      appAlert('Not enough coins', `${label} costs ${price} coins. You have ${coins}.`);
       return;
     }
-    Alert.alert('Confirm purchase', `Buy ${label} for ${price} coins?`, [
+    appAlert('Confirm purchase', `Buy ${label} for ${price} coins?`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Buy', onPress: () => buy(item, id) },
     ]);

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Image } from 'react-native';
+import { appAlert } from '../components/AppDialog';
 import { useThemedStyles, useTheme } from '../context/ThemeContext';
 import { Palette } from '../theme';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
@@ -37,13 +38,13 @@ export const LoginScreen: React.FC = () => {  const styles = useThemedStyles(ma
       }
     } catch (error: any) {
       console.error('Google Sign-In Error:', error);
-      Alert.alert('Sign-In Error', error.message);
+      appAlert('Sign-In Error', error.message);
     }
   };
 
   const handleEmailSubmit = async () => {
     if (!email.trim() || !password) {
-      Alert.alert('Missing info', 'Enter both your email and password.');
+      appAlert('Missing info', 'Enter both your email and password.');
       return;
     }
     setSubmitting(true);
@@ -54,7 +55,7 @@ export const LoginScreen: React.FC = () => {  const styles = useThemedStyles(ma
         await signInWithEmailAndPassword(auth, email.trim(), password);
       }
     } catch (error: any) {
-      Alert.alert(mode === 'signup' ? 'Sign-Up Error' : 'Sign-In Error', error.message);
+      appAlert(mode === 'signup' ? 'Sign-Up Error' : 'Sign-In Error', error.message);
     }
     setSubmitting(false);
   };

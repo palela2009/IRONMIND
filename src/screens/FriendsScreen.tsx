@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { useTabScrollReset } from '../hooks/useTabScrollReset';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Share, Alert, Image, Modal, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Share, Image, Modal, RefreshControl } from 'react-native';
+import { appAlert } from '../components/AppDialog';
 import { useThemedStyles, useTheme } from '../context/ThemeContext';
 import { Palette, radius } from '../theme';
 import { useFriends } from '../hooks/useFriends';
@@ -232,16 +233,16 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats, onNavigate }) => 
 
   const handleAccept = async (id: string) => {
     const ok = await acceptRequest(id);
-    if (!ok) Alert.alert('Could not accept request', error || 'Try again.');
+    if (!ok) appAlert('Could not accept request', error || 'Try again.');
   };
 
   const handleReject = async (id: string) => {
     const ok = await rejectRequest(id);
-    if (!ok) Alert.alert('Could not reject request', error || 'Try again.');
+    if (!ok) appAlert('Could not reject request', error || 'Try again.');
   };
 
   const handleRemove = (uid: string, name: string) => {
-    Alert.alert('Remove friend', `Remove ${name} from your friends?`, [
+    appAlert('Remove friend', `Remove ${name} from your friends?`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Remove', style: 'destructive', onPress: () => removeFriend(uid) },
     ]);
@@ -252,7 +253,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats, onNavigate }) => 
   const openDuel = (entry: Entry) => {
     if (entry.isMe) return;
     if (monitoredApps.length === 0) {
-      Alert.alert('No apps tracked', 'Pick at least one app to track in the APPS tab before starting a duel.');
+      appAlert('No apps tracked', 'Pick at least one app to track in the APPS tab before starting a duel.');
       return;
     }
     setProfile(null);
@@ -271,7 +272,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats, onNavigate }) => 
     setSending(false);
     setDuelTarget(null);
     if (err) {
-      Alert.alert('Could not start duel', err);
+      appAlert('Could not start duel', err);
       return;
     }
     setClashKey((k) => k + 1);
@@ -284,14 +285,14 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats, onNavigate }) => 
   };
 
   const handleCancelDuel = (id: string, opponent: string) => {
-    Alert.alert('Cancel duel?', `Your duel with ${opponent} ends now. Nobody wins and both antes are refunded.`, [
+    appAlert('Cancel duel?', `Your duel with ${opponent} ends now. Nobody wins and both antes are refunded.`, [
       { text: 'Keep duelling', style: 'cancel' },
       {
         text: 'Cancel duel',
         style: 'destructive',
         onPress: async () => {
           const ok = await cancelDuel(id);
-          if (!ok) Alert.alert('Could not cancel duel', duelError || 'Try again.');
+          if (!ok) appAlert('Could not cancel duel', duelError || 'Try again.');
         },
       },
     ]);
@@ -301,12 +302,12 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats, onNavigate }) => 
     setReactingId(duelId);
     const err = await react(duelId, reaction);
     setReactingId(null);
-    if (err) Alert.alert('Not sent', err);
+    if (err) appAlert('Not sent', err);
   };
 
   const handleDuelResponse = async (id: string, action: 'accept' | 'decline') => {
     const ok = await respond(id, action);
-    if (!ok) Alert.alert(`Could not ${action} duel`, duelError || 'Try again.');
+    if (!ok) appAlert(`Could not ${action} duel`, duelError || 'Try again.');
   };
 
   if (loading) {

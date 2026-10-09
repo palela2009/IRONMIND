@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal } from 'react-native';
+import { appAlert } from '../components/AppDialog';
 import { useThemedStyles, useTheme } from '../context/ThemeContext';
 import { Palette, radius, spacing, cardShadow, glowFor } from '../theme';
 import { usePro } from '../context/ProContext';
@@ -20,7 +21,7 @@ export const WelcomeOfferScreen: React.FC = () => {
   const handleSelect = async (p: ProPlan) => {
     const product = welcome.productFor(p);
     if (!product) {
-      Alert.alert('Not available yet', 'Purchases are not available right now. Try again later.');
+      appAlert('Not available yet', 'Purchases are not available right now. Try again later.');
       return;
     }
     setBusy(p.id);
@@ -30,12 +31,12 @@ export const WelcomeOfferScreen: React.FC = () => {
     if (outcome === 'purchased') {
       await closeWelcomeOffer();
     } else if (outcome === 'failed') {
-      Alert.alert('Purchase did not go through', 'You have not been charged. Try again in a moment.');
+      appAlert('Purchase did not go through', 'You have not been charged. Try again in a moment.');
     }
   };
 
   const decline = () => {
-    Alert.alert(
+    appAlert(
       'Skip this offer?',
       'This is a one-time welcome price. If you close it now it will not come back.',
       [
