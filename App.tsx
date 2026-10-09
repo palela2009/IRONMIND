@@ -330,7 +330,6 @@ function RootNavigator() {
       <WelcomeOfferScreen />
       <ProIntroScreen />
       <InviteRewardOverlay />
-      <AppDialogHost />
 
       <StreakSavedOverlay
         streak={savedStreak?.streak ?? 0}
@@ -349,6 +348,7 @@ export default function App() {
       <ProProvider>
         <ThemeProvider>
           <RootNavigator />
+          <AppDialogHost />
         </ThemeProvider>
       </ProProvider>
     </AuthProvider>
