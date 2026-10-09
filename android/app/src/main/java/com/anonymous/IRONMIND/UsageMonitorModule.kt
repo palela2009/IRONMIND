@@ -104,8 +104,7 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
                 UsageMonitorService.PREFS_NAME,
                 Context.MODE_PRIVATE
             )
-            val cal = java.util.Calendar.getInstance()
-            val todayKey = "${cal.get(java.util.Calendar.YEAR)}-${cal.get(java.util.Calendar.DAY_OF_YEAR)}"
+            val todayKey = TrustedClock.dayKey(reactContext)
             val count = if (prefs.getString("date", null) == todayKey) prefs.getInt("count", 0) else 0
 
             val map = Arguments.createMap()

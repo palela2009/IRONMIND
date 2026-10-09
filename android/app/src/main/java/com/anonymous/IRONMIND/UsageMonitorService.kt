@@ -21,6 +21,9 @@ import com.facebook.react.modules.core.DeviceEventManagerModule
 class UsageMonitorService : Service() {
 
     private data class ActiveChallenge(val appName: String, val pkg: String, val startTime: Long)
+    private data class PendingWin(val appName: String, val pkg: String, val exactMs: Long, val leftAt: Long)
+
+    private var pendingWin: PendingWin? = null
 
     private val handler = Handler(Looper.getMainLooper())
     private var monitoredPackages: List<Pair<String, String>> = emptyList()
@@ -163,13 +166,31 @@ class UsageMonitorService : Service() {
         lastKnownForeground = foreground
         val now = System.currentTimeMillis()
 
+        pendingWin?.let { win ->
+            if (resumedSince(win.pkg, win.leftAt + 500)) {
+                pendingWin = null
+                emitChallengeResult(win.appName, REENTRY_MS / 1000.0, false)
+                fireReentryNotification(win.appName)
+                return
+            }
+            if (now - win.leftAt >= REENTRY_MS) {
+                pendingWin = null
+                emitChallengeResult(win.appName, win.exactMs / 1000.0, true)
+            } else {
+                return
+            }
+        }
+
         activeChallenge?.let { challenge ->
             val elapsedMs = now - challenge.startTime
             if (foreground != challenge.pkg) {
                 val leftAt = leaveTimeAfter(challenge.pkg, challenge.startTime) ?: now
                 val exactMs = (leftAt - challenge.startTime).coerceAtLeast(0L)
-                val success = exactMs < challengeWindowMs
-                emitChallengeResult(challenge.appName, exactMs / 1000.0, success)
+                if (exactMs < challengeWindowMs) {
+                    pendingWin = PendingWin(challenge.appName, challenge.pkg, exactMs, leftAt)
+                } else {
+                    emitChallengeResult(challenge.appName, exactMs / 1000.0, false)
+                }
                 activeChallenge = null
                 return
             }
@@ -191,8 +212,8 @@ class UsageMonitorService : Service() {
                     maybeWarn(appName, limit - used)
                 }
 
-                val sameAppCooldown = appName == lastChallengedApp && (now - lastChallengeTime) < cooldownMs
-                val allowed = overBudget || (!sameAppCooldown && getFiredCountToday() < maxDailyChallenges)
+                val inCooldown = lastChallengeTime > 0L && (now - lastChallengeTime) < cooldownMs
+                val allowed = overBudget || (!inCooldown && getFiredCountToday() < maxDailyChallenges)
 
                 if (allowed) {
                     lastChallengedApp = appName
@@ -225,9 +246,29 @@ class UsageMonitorService : Service() {
         nm.notify(WARNING_ID, notification)
     }
 
-    private fun getTodayKey(): String {
-        val cal = java.util.Calendar.getInstance()
-        return "${cal.get(java.util.Calendar.YEAR)}-${cal.get(java.util.Calendar.DAY_OF_YEAR)}"
+    private fun getTodayKey(): String = TrustedClock.dayKey(this)
+
+    private fun resumedSince(pkg: String, since: Long): Boolean {
+        val usm = getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager ?: return false
+        val events = usm.queryEvents(since, System.currentTimeMillis()) ?: return false
+        val event = android.app.usage.UsageEvents.Event()
+        while (events.hasNextEvent()) {
+            events.getNextEvent(event)
+            if (event.packageName == pkg && isResumeEvent(event.eventType) && event.timeStamp >= since) return true
+        }
+        return false
+    }
+
+    private fun fireReentryNotification(appName: String) {
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val notification = NotificationCompat.Builder(this, CHALLENGE_CHANNEL)
+            .setContentTitle("Back too soon")
+            .setContentText("You reopened $appName within ${REENTRY_MS / 1000} seconds, so that challenge counts as lost.")
+            .setSmallIcon(android.R.drawable.ic_dialog_alert)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .build()
+        nm.notify(CHALLENGE_ID, notification)
     }
 
     private fun getFiredCountToday(): Int {
@@ -363,5 +404,6 @@ class UsageMonitorService : Service() {
         const val PREFS_NAME = "ironmind_challenge_prefs"
         const val FOREGROUND_LOOKBACK_MS = 60_000L
         const val STUCK_CHALLENGE_MS = 10 * 60 * 1000L
+        const val REENTRY_MS = 20_000L
     }
 }
