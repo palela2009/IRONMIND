@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Linking, Platform } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { useThemedStyles, useTheme } from '../context/ThemeContext';
 import { Palette, radius, spacing, cardShadow } from '../theme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Notifications from 'expo-notifications';
 import { API_BASE_URL } from '../config/api';
 import { authedFetch } from '../utils/authFetch';
 import { DifficultyLevel, DIFFICULTY_WINDOW_SECONDS } from '../constants/difficulty';
@@ -12,6 +11,8 @@ import { APPS_LIST } from '../constants/apps';
 import { AppIcon } from '../components/AppIcon';
 import { useAuth } from '../context/AuthContext';
 import { syncAppMonitor } from '../hooks/useAppMonitor';
+import { usePermissions } from '../hooks/usePermissions';
+import { PermissionSteps } from '../components/PermissionSteps';
 
 interface OnboardingProps {
   onComplete: () => void;
@@ -79,40 +80,16 @@ export const OnboardingScreen: React.FC<OnboardingProps> = ({ onComplete }) => {
   const [goal, setGoal] = useState<string>('');
   const [intensity, setIntensity] = useState<string>('standard');
   const [saving, setSaving] = useState<boolean>(false);
-  const [notifStatus, setNotifStatus] = useState<'unknown' | 'granted' | 'denied'>('unknown');
-  const [usageOpened, setUsageOpened] = useState<boolean>(false);
-
-  useEffect(() => {
-    if (step === TOTAL_STEPS) {
-      Notifications.getPermissionsAsync().then(({ status }) => {
-        if (status === 'granted') setNotifStatus('granted');
-        else if (status === 'denied') setNotifStatus('denied');
-      });
-    }
-  }, [step]);
+  const perms = usePermissions();
 
   const toggleApp = (app: string) =>
     setSelectedApps((prev) => (prev.includes(app) ? prev.filter((a) => a !== app) : [...prev, app]));
-
-  const requestNotifications = async () => {
-    const { status } = await Notifications.requestPermissionsAsync();
-    setNotifStatus(status === 'granted' ? 'granted' : 'denied');
-  };
-
-  const openUsageAccess = async () => {
-    setUsageOpened(true);
-    try {
-      if (Platform.OS === 'android') await Linking.sendIntent('android.settings.USAGE_ACCESS_SETTINGS');
-      else await Linking.openSettings();
-    } catch {
-      await Linking.openSettings();
-    }
-  };
 
   const canAdvance = (): boolean => {
     if (step === 1) return selectedApps.length > 0;
     if (step === 2) return hours !== null;
     if (step === 3) return goal !== '';
+    if (step === TOTAL_STEPS) return perms.allGranted;
     return true;
   };
 
@@ -295,51 +272,11 @@ export const OnboardingScreen: React.FC<OnboardingProps> = ({ onComplete }) => {
 
         {step === 5 && (
           <>
-            <Text style={styles.title}>TWO{'\n'}PERMISSIONS.</Text>
+            <Text style={styles.title}>THREE{'\n'}PERMISSIONS.</Text>
             <Text style={styles.sub}>
-              IRONMIND cannot detect anything without these. It takes about ten seconds.
+              IRONMIND cannot work without all three. Turn each one green, it takes about twenty seconds.
             </Text>
-
-            <View style={[styles.permCard, notifStatus === 'granted' && styles.permCardDone]}>
-              <View style={styles.permHead}>
-                <View style={[styles.permNum, notifStatus === 'granted' && styles.permNumDone]}>
-                  <Text style={[styles.permNumText, notifStatus === 'granted' && styles.permNumTextDone]}>
-                    {notifStatus === 'granted' ? '✓' : '1'}
-                  </Text>
-                </View>
-                <Text style={styles.permTitle}>NOTIFICATIONS</Text>
-              </View>
-              <Text style={styles.permDesc}>
-                {notifStatus === 'granted'
-                  ? 'Granted. Challenges will arrive as alerts.'
-                  : 'Challenges arrive as alerts. Without this you will never see one.'}
-              </Text>
-              {notifStatus !== 'granted' && (
-                <TouchableOpacity style={styles.permBtn} onPress={requestNotifications} activeOpacity={0.85}>
-                  <Text style={styles.permBtnText}>ALLOW NOTIFICATIONS →</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-
-            <View style={[styles.permCard, usageOpened && styles.permCardDone]}>
-              <View style={styles.permHead}>
-                <View style={[styles.permNum, usageOpened && styles.permNumDone]}>
-                  <Text style={[styles.permNumText, usageOpened && styles.permNumTextDone]}>
-                    {usageOpened ? '✓' : '2'}
-                  </Text>
-                </View>
-                <Text style={styles.permTitle}>USAGE ACCESS</Text>
-              </View>
-              <Text style={styles.permDesc}>
-                Lets IRONMIND see which app is open so it knows when to fire. Find IRONMIND in the
-                list and turn it on.
-              </Text>
-              <TouchableOpacity style={styles.permBtn} onPress={openUsageAccess} activeOpacity={0.85}>
-                <Text style={styles.permBtnText}>
-                  {usageOpened ? 'OPEN SETTINGS AGAIN' : 'OPEN USAGE ACCESS →'}
-                </Text>
-              </TouchableOpacity>
-            </View>
+            <PermissionSteps perms={perms} />
           </>
         )}
       </ScrollView>
@@ -359,6 +296,9 @@ export const OnboardingScreen: React.FC<OnboardingProps> = ({ onComplete }) => {
             </Text>
           )}
         </TouchableOpacity>
+        {step === TOTAL_STEPS && !perms.allGranted && (
+          <Text style={styles.hint}>Turn all three green to start.</Text>
+        )}
         {step === 1 && selectedApps.length === 0 && (
           <Text style={styles.hint}>Pick at least one app to continue.</Text>
         )}
@@ -446,37 +386,6 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   impactNum: { color: c.accent, fontSize: 56, fontWeight: '900', letterSpacing: -2 },
   impactLabel: { color: c.textSecondary, fontSize: 11, fontWeight: '900', letterSpacing: 1.5, marginTop: -spacing.xs },
   impactSub: { color: c.textTertiary, fontSize: 12, lineHeight: 17, textAlign: 'center', marginTop: spacing.md },
-
-  permCard: {
-    backgroundColor: c.surface,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: c.border,
-    padding: spacing.lg,
-    marginBottom: spacing.md,
-  },
-  permCardDone: { borderColor: c.accentDim },
-  permHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.sm },
-  permNum: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: c.surfaceRaised,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  permNumDone: { backgroundColor: c.accent },
-  permNumText: { color: c.textSecondary, fontSize: 12, fontWeight: '900' },
-  permNumTextDone: { color: c.accentContrast },
-  permTitle: { color: c.textPrimary, fontSize: 13, fontWeight: '900', letterSpacing: 0.5 },
-  permDesc: { color: c.textTertiary, fontSize: 12, lineHeight: 17, marginBottom: spacing.md },
-  permBtn: {
-    backgroundColor: c.surfaceRaised,
-    borderRadius: radius.sm,
-    paddingVertical: 13,
-    alignItems: 'center',
-  },
-  permBtnText: { color: c.textPrimary, fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
 
   footer: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl, paddingTop: spacing.md },
   cta: {

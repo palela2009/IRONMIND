@@ -14,6 +14,7 @@ import { WelcomeOfferScreen } from './src/screens/WelcomeOfferScreen';
 import { ProIntroScreen } from './src/screens/ProIntroScreen';
 import { InviteRewardOverlay } from './src/components/InviteRewardOverlay';
 import { AppDialogHost } from './src/components/AppDialog';
+import { PermissionGate } from './src/components/PermissionGate';
 import { useStats } from './src/hooks/useStats';
 import { useNotifications } from './src/hooks/useNotifications';
 import { useAppMonitor, syncAppMonitor } from './src/hooks/useAppMonitor';
@@ -330,6 +331,7 @@ function RootNavigator() {
       <WelcomeOfferScreen />
       <ProIntroScreen />
       <InviteRewardOverlay />
+      <PermissionGate />
 
       <StreakSavedOverlay
         streak={savedStreak?.streak ?? 0}
@@ -343,6 +345,10 @@ function RootNavigator() {
 }
 
 export default function App() {
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/health`).catch(() => {});
+  }, []);
+
   return (
     <AuthProvider>
       <ProProvider>

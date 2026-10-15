@@ -85,6 +85,26 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
     }
 
     @ReactMethod
+    fun openAutostartSettings(promise: Promise) {
+        val targets = listOf(
+            android.content.ComponentName("com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity"),
+            android.content.ComponentName("com.miui.securitycenter", "com.miui.powercenter.PowerSettings")
+        )
+        for (target in targets) {
+            try {
+                val intent = Intent().apply {
+                    component = target
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                reactContext.startActivity(intent)
+                promise.resolve(true)
+                return
+            } catch (_: Exception) {}
+        }
+        promise.resolve(false)
+    }
+
+    @ReactMethod
     fun setPausedUntil(untilMs: Double) {
         reactContext.getSharedPreferences(UsageMonitorService.PREFS_NAME, Context.MODE_PRIVATE)
             .edit().putLong("pausedUntil", untilMs.toLong()).apply()
