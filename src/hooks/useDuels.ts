@@ -17,6 +17,7 @@ export interface Duel {
   apps: string[];
   stake: number;
   status: DuelStatus;
+  resolutionReason: string | null;
   startAt: string | null;
   endAt: string | null;
   opponentUid: string;
@@ -87,7 +88,7 @@ export const useDuels = () => {
 
   const fetchDuels = useCallback(async (): Promise<Duel[]> => {
     const res = await authedFetch(API_URL);
-    if (!res.ok) return [];
+    if (!res.ok) throw new Error('Could not load duels');
     return res.json();
   }, []);
 
@@ -99,6 +100,7 @@ export const useDuels = () => {
     }
     try {
       const list = await fetchDuels();
+      setError('');
       setDuels(list);
 
       const active = list.filter((d) => d.status === 'active' && d.startAt && d.endAt);
@@ -108,11 +110,11 @@ export const useDuels = () => {
             const minutes = await measureWindow(appsOf(d), d.startAt!, d.endAt!);
             if (minutes === null) return false;
             try {
-              await authedFetch(`${API_URL}/${d.id}/report`, {
+              const response = await authedFetch(`${API_URL}/${d.id}/report`, {
                 method: 'POST',
                 body: JSON.stringify({ minutes }),
               });
-              return true;
+              return response.ok;
             } catch {
               return false;
             }

@@ -69,13 +69,13 @@ export const buyProduct = async (product: PurchasesStoreProduct, offerTag?: stri
   }
 };
 
-export const restorePurchases = async (): Promise<boolean> => {
-  if (!purchasesAvailable() || !configured) return false;
+export const restorePurchases = async (): Promise<'found' | 'none' | 'failed'> => {
+  if (!purchasesAvailable() || !configured) return 'failed';
   try {
-    await Purchases.restorePurchases();
-    return true;
+    const info = await Purchases.restorePurchases();
+    return info.entitlements.active.pro ? 'found' : 'none';
   } catch {
-    return false;
+    return 'failed';
   }
 };
 

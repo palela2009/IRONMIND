@@ -3,7 +3,7 @@ import { useTabScrollReset } from '../hooks/useTabScrollReset';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Share, Image, Modal, RefreshControl } from 'react-native';
 import { appAlert } from '../components/AppDialog';
 import { useThemedStyles, useTheme } from '../context/ThemeContext';
-import { Palette, radius } from '../theme';
+import { Palette, radius, spacing } from '../theme';
 import { useFriends } from '../hooks/useFriends';
 import { useDuels, formatTimeLeft, formatAgo, DUEL_REACTIONS, reactionText, appsOf } from '../hooks/useDuels';
 import { useScreenTime, formatMinutes, trackedTotal, todayKey } from '../hooks/useScreenTime';
@@ -327,7 +327,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats, onNavigate }) => 
   const outgoingDuels = duels.filter((d) => d.status === 'pending' && !d.incoming);
   const activeDuels = duels.filter((d) => d.status === 'active');
   const settledDuels = duels
-    .filter((d) => d.status === 'completed' || d.status === 'void')
+    .filter((d) => d.status === 'completed' || d.status === 'void' || d.status === 'cancelled')
     .slice(0, 5);
 
   return (
@@ -648,7 +648,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats, onNavigate }) => 
         <>
           <Text style={styles.sectionLabel}>DUEL HISTORY</Text>
           {settledDuels.map((d) => (
-            <View key={d.id} style={styles.resultRow}>
+            <TouchableOpacity key={d.id} style={styles.resultRow} onPress={() => appAlert('Duel result', d.resolutionReason ?? 'Open the app after a duel ends to sync your final usage.')}>
               <Text
                 style={[
                   styles.resultTag,
@@ -659,15 +659,15 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats, onNavigate }) => 
                     : styles.resultVoid,
                 ]}
               >
-                {d.status === 'void' ? 'VOID' : d.iWon ? 'WON' : 'LOST'}
+                {d.status === 'cancelled' ? 'CANCELLED' : d.status === 'void' ? 'REFUNDED' : d.iWon ? 'WON' : 'LOST'}
               </Text>
               <Text style={styles.resultName} numberOfLines={1}>{d.opponentName}</Text>
               <Text style={styles.resultDetail}>
-                {d.status === 'void'
-                  ? 'no data'
+                {d.status === 'void' || d.status === 'cancelled'
+                  ? d.startAt ? 'coins returned' : 'no charge'
                   : `${Math.round(d.myMinutes ?? 0)}–${Math.round(d.theirMinutes ?? 0)}m`}
               </Text>
-            </View>
+            </TouchableOpacity>
           ))}
         </>
       )}
@@ -829,7 +829,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats, onNavigate }) => 
 
 const makeStyles = (c: Palette) => StyleSheet.create({
   root: { flex: 1, backgroundColor: c.bg },
-  content: { paddingTop: 52, paddingBottom: 48 },
+  content: { paddingTop: spacing.lg, paddingBottom: 48 },
   centerFill: { justifyContent: 'center', alignItems: 'center' },
 
   header: { paddingHorizontal: 20, marginBottom: 16 },

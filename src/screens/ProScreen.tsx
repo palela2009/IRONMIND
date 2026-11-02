@@ -43,18 +43,20 @@ export const ProScreen: React.FC<ProScreenProps> = ({ visible, onClose }) => {
     setBusy(null);
     if (outcome === 'purchased') {
       appAlert('Welcome to Pro', 'Every Pro feature is now unlocked.');
+    } else if (outcome === 'pending') {
+      appAlert('Confirming your purchase', 'Your purchase is awaiting confirmation. We will retry automatically. Please do not buy again.');
     } else if (outcome === 'failed') {
-      appAlert('Purchase did not go through', 'You have not been charged. Try again in a moment.');
+      appAlert('Purchase did not go through', 'Check your Google Play purchase history or use Restore purchases before trying again.');
     }
   };
 
   const handleRestore = async () => {
     setBusy('restore');
-    const ok = await restore();
+    const outcome = await restore();
     setBusy(null);
     appAlert(
-      ok ? 'Purchases restored' : 'Nothing to restore',
-      ok ? 'Any Pro purchase on this Google account has been applied.' : 'No Pro purchase was found for this Google account.'
+      outcome === 'restored' ? 'Purchases restored' : outcome === 'pending' ? 'Checking your purchases' : outcome === 'none' ? 'Nothing to restore' : 'Could not restore purchases',
+      outcome === 'restored' ? 'Your Pro purchase has been confirmed.' : outcome === 'pending' ? 'Verification is pending. We will retry automatically.' : outcome === 'none' ? 'No active Pro purchase was found for this Google account.' : 'Check your connection and try Restore purchases again.'
     );
   };
 

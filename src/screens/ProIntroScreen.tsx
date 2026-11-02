@@ -17,8 +17,8 @@ const PERKS = [
 
 export const ProIntroScreen: React.FC = () => {
   const styles = useThemedStyles(makeStyles);
-  const { welcomeOffer, isPro, coins, closeWelcomeOffer } = usePro();
-  const visible = welcomeOffer && !isPro && !purchasesAvailable();
+  const { welcomeOffer, welcomeGiftAvailable, isPro, coins, closeWelcomeOffer } = usePro();
+  const visible = welcomeOffer && !welcomeGiftAvailable && !isPro && !purchasesAvailable();
 
   const pulse = useRef(new Animated.Value(1)).current;
   const items = useRef([0, 1, 2, 3].map(() => new Animated.Value(0))).current;

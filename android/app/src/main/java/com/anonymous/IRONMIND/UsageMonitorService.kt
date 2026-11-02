@@ -1,5 +1,7 @@
 package com.anonymous.IRONMIND
 
+import org.json.JSONObject
+import java.util.UUID
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -20,8 +22,8 @@ import com.facebook.react.modules.core.DeviceEventManagerModule
 
 class UsageMonitorService : Service() {
 
-    private data class ActiveChallenge(val appName: String, val pkg: String, val startTime: Long)
-    private data class PendingWin(val appName: String, val pkg: String, val exactMs: Long, val leftAt: Long)
+    private data class ActiveChallenge(val appName: String, val pkg: String, val startTime: Long, val id: String, val uid: String, val windowMs: Long)
+    private data class PendingWin(val appName: String, val pkg: String, val exactMs: Long, val leftAt: Long, val id: String, val uid: String, val startTime: Long)
 
     private var pendingWin: PendingWin? = null
 
@@ -50,12 +52,13 @@ class UsageMonitorService : Service() {
 
     private val pollRunnable = object : Runnable {
         override fun run() {
-            checkForegroundApp()
+            try { checkForegroundApp() } catch (e: Exception) { android.util.Log.e("IRONMIND", "Monitor tick failed", e) }
             handler.postDelayed(this, 2000)
         }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        running = true
         createChannels()
         val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
@@ -69,11 +72,16 @@ class UsageMonitorService : Service() {
             val uid = intent.getStringExtra("uid") ?: ""
             val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             if (uid.isNotEmpty() && prefs.getString("uid", null) != uid) {
+                activeChallenge = null
+                pendingWin = null
+                ChallengeStore.saveActive(this, null)
                 prefs.edit().putString("uid", uid).putString("date", null).putInt("count", 0).apply()
             }
+            intent.getStringExtra("timeZoneId")?.let { prefs.edit().putString("accountTimeZone", it).apply() }
             saveConfig(apps, intent.getDoubleExtra("challengeWindowSeconds", 10.0), intent.getDoubleExtra("dailyLimit", 5.0))
             intent.getStringExtra("appLimits")?.let { saveLimits(it) }
         }
+        lastChallengeTime = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getLong("lastChallengeTime", 0L)
         appLimits = loadLimits()
 
         val config = loadConfig()
@@ -83,6 +91,7 @@ class UsageMonitorService : Service() {
         challengeWindowMs = (config.second * 1000).toLong()
         maxDailyChallenges = config.third.toInt()
 
+        restoreChallenge()
         handler.removeCallbacks(pollRunnable)
         handler.post(pollRunnable)
 
@@ -156,9 +165,12 @@ class UsageMonitorService : Service() {
     }
 
     private fun checkForegroundApp() {
+        if (getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString("uid", null).isNullOrEmpty()) return
         val pausedUntil = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getLong("pausedUntil", 0L)
         if (System.currentTimeMillis() < pausedUntil) {
             activeChallenge = null
+            pendingWin = null
+            ChallengeStore.saveActive(this, null)
             return
         }
 
@@ -168,14 +180,14 @@ class UsageMonitorService : Service() {
 
         pendingWin?.let { win ->
             if (resumedSince(win.pkg, win.leftAt + 500)) {
+                emitChallengeResult(win.appName, REENTRY_MS / 1000.0, false, win.id, win.uid, win.startTime)
                 pendingWin = null
-                emitChallengeResult(win.appName, REENTRY_MS / 1000.0, false)
                 fireReentryNotification(win.appName)
                 return
             }
             if (now - win.leftAt >= REENTRY_MS) {
+                emitChallengeResult(win.appName, win.exactMs / 1000.0, true, win.id, win.uid, win.startTime)
                 pendingWin = null
-                emitChallengeResult(win.appName, win.exactMs / 1000.0, true)
             } else {
                 return
             }
@@ -186,17 +198,18 @@ class UsageMonitorService : Service() {
             if (foreground != challenge.pkg) {
                 val leftAt = leaveTimeAfter(challenge.pkg, challenge.startTime) ?: now
                 val exactMs = (leftAt - challenge.startTime).coerceAtLeast(0L)
-                if (exactMs < challengeWindowMs) {
-                    pendingWin = PendingWin(challenge.appName, challenge.pkg, exactMs, leftAt)
+                if (exactMs < challenge.windowMs) {
+                    pendingWin = PendingWin(challenge.appName, challenge.pkg, exactMs, leftAt, challenge.id, challenge.uid, challenge.startTime)
+                    saveChallenge()
                 } else {
-                    emitChallengeResult(challenge.appName, exactMs / 1000.0, false)
+                    emitChallengeResult(challenge.appName, exactMs / 1000.0, false, challenge.id, challenge.uid, challenge.startTime)
                 }
                 activeChallenge = null
                 return
             }
 
             if (elapsedMs > STUCK_CHALLENGE_MS) {
-                emitChallengeResult(challenge.appName, elapsedMs / 1000.0, false)
+                emitChallengeResult(challenge.appName, elapsedMs / 1000.0, false, challenge.id, challenge.uid, challenge.startTime)
                 activeChallenge = null
             }
             return
@@ -218,7 +231,11 @@ class UsageMonitorService : Service() {
                 if (allowed) {
                     lastChallengedApp = appName
                     lastChallengeTime = now
-                    activeChallenge = ActiveChallenge(appName, pkg, now)
+                    getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putLong("lastChallengeTime", now).apply()
+                    val uid = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString("uid", "") ?: ""
+                    if (uid.isEmpty()) return
+                    activeChallenge = ActiveChallenge(appName, pkg, now, UUID.randomUUID().toString(), uid, challengeWindowMs)
+                    saveChallenge()
                     fireChallengeNotification(appName, overBudget)
                     if (!overBudget) incrementFiredCountToday()
                 }
@@ -285,7 +302,27 @@ class UsageMonitorService : Service() {
             .apply()
     }
 
-    private fun emitChallengeResult(appName: String, elapsedTime: Double, wasSuccessful: Boolean) {
+    private fun saveChallenge() {
+        val win = pendingWin
+        val challenge = activeChallenge
+        val state = if (win != null) JSONObject().put("phase", "pending").put("appName", win.appName).put("pkg", win.pkg).put("startTime", win.startTime).put("id", win.id).put("uid", win.uid).put("exactMs", win.exactMs).put("leftAt", win.leftAt)
+            else if (challenge != null) JSONObject().put("phase", "active").put("appName", challenge.appName).put("pkg", challenge.pkg).put("startTime", challenge.startTime).put("id", challenge.id).put("uid", challenge.uid).put("windowMs", challenge.windowMs)
+            else null
+        ChallengeStore.saveActive(this, state)
+    }
+
+    private fun restoreChallenge() {
+        val state = ChallengeStore.active(this) ?: return
+        if (state.getString("phase") == "pending") {
+            pendingWin = PendingWin(state.getString("appName"), state.getString("pkg"), state.getLong("exactMs"), state.getLong("leftAt"), state.getString("id"), state.getString("uid"), state.getLong("startTime"))
+            activeChallenge = null
+        } else {
+            activeChallenge = ActiveChallenge(state.getString("appName"), state.getString("pkg"), state.getLong("startTime"), state.getString("id"), state.getString("uid"), state.optLong("windowMs", challengeWindowMs))
+        }
+    }
+
+    private fun emitChallengeResult(appName: String, elapsedTime: Double, wasSuccessful: Boolean, id: String, uid: String, startedAt: Long) {
+        ChallengeStore.finish(this, JSONObject().put("id", id).put("uid", uid).put("targetApp", appName).put("elapsedTime", elapsedTime.coerceIn(0.0, 86400.0)).put("wasSuccessful", wasSuccessful).put("timestamp", startedAt))
         try {
             val reactContext = (applicationContext as? ReactApplication)?.reactHost?.currentReactContext
                 ?: return
@@ -308,7 +345,8 @@ class UsageMonitorService : Service() {
         val event = android.app.usage.UsageEvents.Event()
         while (events.hasNextEvent()) {
             events.getNextEvent(event)
-            if (isResumeEvent(event.eventType) && event.packageName != pkg && event.timeStamp >= since) {
+            val left = (isResumeEvent(event.eventType) && event.packageName != pkg) || (event.packageName == pkg && event.eventType == android.app.usage.UsageEvents.Event.ACTIVITY_PAUSED) || event.eventType == android.app.usage.UsageEvents.Event.SCREEN_NON_INTERACTIVE
+            if (left && event.timeStamp >= since) {
                 return event.timeStamp
             }
         }
@@ -320,6 +358,8 @@ class UsageMonitorService : Service() {
             type == android.app.usage.UsageEvents.Event.ACTIVITY_RESUMED
 
     private fun getForegroundPackage(): String? {
+        val power = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+        if (!power.isInteractive) return "__screen_off__"
         val usm = getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager ?: return null
         val now = System.currentTimeMillis()
 
@@ -327,6 +367,7 @@ class UsageMonitorService : Service() {
         val event = android.app.usage.UsageEvents.Event()
         var latestPkg: String? = null
         var latestTime = 0L
+        var stopped = false
 
         while (events.hasNextEvent()) {
             events.getNextEvent(event)
@@ -335,10 +376,14 @@ class UsageMonitorService : Service() {
             if (isResume && event.timeStamp >= latestTime) {
                 latestTime = event.timeStamp
                 latestPkg = event.packageName
+                stopped = false
+            } else if ((event.eventType == android.app.usage.UsageEvents.Event.ACTIVITY_PAUSED && event.packageName == (latestPkg ?: lastKnownForeground)) || event.eventType == android.app.usage.UsageEvents.Event.SCREEN_NON_INTERACTIVE) {
+                latestPkg = null
+                stopped = true
             }
         }
 
-        return latestPkg ?: lastKnownForeground
+        return latestPkg ?: if (stopped) "__no_foreground__" else lastKnownForeground
     }
 
     private fun fireChallengeNotification(appName: String, overBudget: Boolean = false) {
@@ -389,6 +434,7 @@ class UsageMonitorService : Service() {
     }
 
     override fun onDestroy() {
+        running = false
         super.onDestroy()
         handler.removeCallbacks(pollRunnable)
     }
@@ -396,6 +442,7 @@ class UsageMonitorService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {
+        @Volatile var running = false
         const val FOREGROUND_ID = 1001
         const val CHALLENGE_ID = 1002
         const val WARNING_ID = 1003

@@ -35,7 +35,7 @@ export const NAME_EFFECTS: NameEffect[] = [
   { id: 'void', name: 'VOID', desc: 'Violet pulled out of the dark', color: '#B14CFF', glow: '#B14CFF', price: 200 },
 ];
 
-export const PRO_WEEK_PRICE = 1000;
+export const PRO_WEEK_PRICE = 500;
 
 export const frameById = (id: string | null | undefined): Frame | null =>
   id ? FRAMES.find((f) => f.id === id) ?? null : null;

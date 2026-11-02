@@ -6,6 +6,8 @@ export interface ChallengeItem {
   elapsedTime: number;
   timestamp: number;
   wasSuccessful: boolean;
+  counted?: boolean;
+  freezeUsed?: boolean;
 }
 
 export interface UserStats {

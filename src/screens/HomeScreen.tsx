@@ -8,31 +8,25 @@ import { usePro } from '../context/ProContext';
 import { ShopScreen } from './ShopScreen';
 import { usePause, resumeMonitoring } from '../hooks/usePause';
 import { XP_PER_LEVEL } from '../constants/leveling';
-import { useScreenTime, formatMinutes, trackedTotal, todayKey } from '../hooks/useScreenTime';
+import { useScreenTime, formatMinutes, todayKey } from '../hooks/useScreenTime';
+import { totalUsageMinutes } from '../utils/screenTime';
 import { AppIcon } from '../components/AppIcon';
+import { challengeDay } from '../utils/challengeTime';
 import { spacing, radius, type, cardShadow, glowFor, Palette } from '../theme';
 
 interface HomeProps {
   stats: UserStats;
   history: ChallengeItem[];
   dailyChallengeLimit: number;
+  challengeTimeZone: string;
   onNavigate: (state: TrainingState) => void;
 }
 
 const DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 
-const getTodayCount = (history: ChallengeItem[]): number => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return history.filter((i) => i.timestamp >= today.getTime()).length;
-};
-
-const getTodaySuccess = (history: ChallengeItem[]): number => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return history.filter((i) => i.timestamp >= today.getTime() && i.wasSuccessful).length;
-};
+const getTodayCount = (history: ChallengeItem[], zone: string): number => history.filter((item) => item.counted !== false && challengeDay(item.timestamp, zone) === challengeDay(Date.now(), zone)).length;
+const getTodaySuccess = (history: ChallengeItem[], zone: string): number => history.filter((item) => item.counted !== false && item.wasSuccessful && challengeDay(item.timestamp, zone) === challengeDay(Date.now(), zone)).length;
 
 const getTodayBarIndex = (): number => {
   const day = new Date().getDay();
@@ -74,7 +68,7 @@ const useFiredToday = (refreshKey: number): number | null => {
 const DOTS_PER_COLUMN = 5;
 const RECENT_PAGE = 5;
 
-export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallengeLimit, onNavigate }) => {  const styles = useThemedStyles(makeStyles);
+export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallengeLimit, challengeTimeZone, onNavigate }) => {  const styles = useThemedStyles(makeStyles);
   const scrollRef = useRef<any>(null);
   useTabScrollReset('HOME', scrollRef);
   const { coins, streakFreezes } = usePro();
@@ -82,7 +76,7 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallenge
   const [visibleCount, setVisibleCount] = useState<number>(RECENT_PAGE);
   const firedToday = useFiredToday(history.length + dailyChallengeLimit);
   const { paused, remaining } = usePause();
-  const { screenTime, tracked, week, trackedToday } = useScreenTime();
+  const { screenTime, tracked, week, totalToday, trackedToday, limits, loading: screenTimeLoading } = useScreenTime();
 
   const { fbUser } = useAuth();
 
@@ -96,8 +90,8 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallenge
   const dayOfYear = Math.floor((now.getTime() - start.getTime()) / 86400000);
   const weekNum = String(Math.ceil((dayOfYear + start.getDay() + 1) / 7)).padStart(2, '0');
 
-  const todayCount = getTodayCount(history);
-  const todaySuccess = getTodaySuccess(history);
+  const todayCount = getTodayCount(history, challengeTimeZone);
+  const todaySuccess = getTodaySuccess(history, challengeTimeZone);
   const firedRemaining = Math.max(dailyChallengeLimit - Math.max(firedToday ?? 0, todayCount), 0);
   const dotColumns = Array.from({ length: Math.ceil(dailyChallengeLimit / DOTS_PER_COLUMN) }, (_, col) =>
     Array.from({ length: Math.min(DOTS_PER_COLUMN, dailyChallengeLimit - col * DOTS_PER_COLUMN) }, (_, row) => col * DOTS_PER_COLUMN + row)
@@ -109,18 +103,18 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallenge
     .slice(0, 4);
   const maxAppMinutes = Math.max(...trackedRows.map((r) => r.minutes), 1);
   const weekMinutes = DAYS.map((_, i) => {
-    if (i === todayBarIdx) return trackedToday;
+    if (i === todayBarIdx) return totalToday;
     const d = new Date(monday);
     d.setDate(monday.getDate() + i);
-    return trackedTotal(week.find((w) => w.date === todayKey(d))?.apps ?? [], tracked);
+    return totalUsageMinutes(week.find((w) => w.date === todayKey(d))?.apps ?? []);
   });
   const maxWeek = Math.max(...weekMinutes, 1);
-  const pastDays = week.filter((w) => w.date < todayKey()).map((w) => trackedTotal(w.apps, tracked));
+  const pastDays = week.filter((w) => w.date < todayKey()).map((w) => totalUsageMinutes(w.apps));
   const average = pastDays.length ? pastDays.reduce((a, b) => a + b, 0) / pastDays.length : null;
   const compare =
     average === null
-      ? { text: 'On the apps you track', better: false, worse: false }
-      : trackedToday > average
+      ? { text: 'Across all your apps today', better: false, worse: false }
+      : totalToday > average
       ? { text: `Above your daily average of ${formatMinutes(average)}`, better: false, worse: true }
       : { text: `Under your daily average of ${formatMinutes(average)}`, better: true, worse: false };
   const streakStr = String(stats.currentStreak);
@@ -135,6 +129,7 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallenge
   };
 
   return (
+    <>
     <FlatList
       ref={scrollRef}
       style={styles.root}
@@ -142,7 +137,7 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallenge
       showsVerticalScrollIndicator={false}
       data={history.slice(0, visibleCount)}
       keyExtractor={(item) => item.id}
-      ListHeaderComponent={() => (
+      ListHeaderComponent={(
         <>
           <View style={styles.header}>
             <View style={styles.brand}>
@@ -171,17 +166,18 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallenge
               <Text style={styles.metaChipText}>WK {weekNum}</Text>
             </View>
 
-            <Text style={styles.stValue}>{formatMinutes(trackedToday)}</Text>
+            <Text style={styles.stValue}>{screenTimeLoading ? '\u2014' : formatMinutes(totalToday)}</Text>
             <Text style={[styles.stCompare, compare.better ? styles.stBetter : compare.worse ? styles.stWorse : null]}>
               {compare.text}
             </Text>
 
             {trackedRows.length > 0 && (
               <View style={styles.stApps}>
+                <Text style={styles.trackedSummary}>TRACKED APPS · {formatMinutes(trackedToday)}</Text>
                 {trackedRows.map((row) => (
                   <View key={row.app} style={styles.stAppRow}>
                     <AppIcon app={row.app} style={styles.stAppIcon} textStyle={styles.stAppIconText} />
-                    <Text style={styles.stAppName} numberOfLines={1}>{row.app}</Text>
+                    <Text style={styles.stAppName} numberOfLines={1}>{row.app}{limits[row.app] ? row.minutes >= limits[row.app] ? ' - limit reached' : ` - ${Math.ceil(limits[row.app] - row.minutes)}m left` : ''}</Text>
                     <View style={styles.stAppBarBg}>
                       <View style={[styles.stAppBarFill, { width: `${Math.max((row.minutes / maxAppMinutes) * 100, 3)}%` }]} />
                     </View>
@@ -281,7 +277,7 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallenge
           </View>
         </>
       )}
-      ListEmptyComponent={() => (
+      ListEmptyComponent={(
         <View style={styles.emptyState}>
           <Text style={styles.emptyTitle}>NO CHALLENGES YET</Text>
           <Text style={styles.emptySub}>Enable app monitoring to start receiving challenges.</Text>
@@ -304,7 +300,7 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallenge
         </View>
       )}
       ItemSeparatorComponent={() => <View style={styles.repDivider} />}
-      ListFooterComponent={() => (
+      ListFooterComponent={(
         <>
           {history.length > visibleCount ? (
             <TouchableOpacity style={styles.moreBtn} onPress={() => setVisibleCount((n) => n + 10)} activeOpacity={0.8}>
@@ -315,16 +311,17 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallenge
               <Text style={styles.moreText}>SHOW LESS</Text>
             </TouchableOpacity>
           ) : null}
-          <ShopScreen visible={showShop} onClose={() => setShowShop(false)} />
         </>
       )}
     />
+    <ShopScreen visible={showShop} onClose={() => setShowShop(false)} />
+    </>
   );
 };
 
 const makeStyles = (c: Palette) => StyleSheet.create({
   root: { flex: 1, backgroundColor: c.bg },
-  content: { paddingTop: 50, paddingBottom: 30 },
+  content: { paddingTop: spacing.lg, paddingBottom: 30 },
 
   header: {
     flexDirection: 'row',
@@ -392,6 +389,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   stBetter: { color: c.accent },
   stWorse: { color: c.danger },
   stApps: { gap: 10, marginBottom: spacing.lg },
+  trackedSummary: { color: c.textSecondary, fontSize: 10, fontWeight: '800', letterSpacing: 0.6 },
   stAppRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   stAppIcon: { width: 26, height: 26, borderRadius: 7, justifyContent: 'center', alignItems: 'center' },
   stAppIconText: { color: '#FFFFFF', fontSize: 9, fontWeight: '900' },

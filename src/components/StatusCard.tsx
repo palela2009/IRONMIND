@@ -6,9 +6,10 @@ import { usePermissions, isXiaomiFamily } from '../hooks/usePermissions';
 
 export const StatusCard: React.FC = () => {
   const styles = useThemedStyles(makeStyles);
-  const { status, allGranted, requestNotifications, openUsageAccess, requestBatteryExemption, openAutostart } = usePermissions();
+  const { status, allGranted, monitoring, recovering, restartMonitoring, requestNotifications, openUsageAccess, requestBatteryExemption, openAutostart } = usePermissions();
 
   const rows = [
+    { label: 'Background monitor', ok: monitoring, okText: 'RUNNING', fixText: recovering ? 'STARTING...' : 'RESTART >', onFix: restartMonitoring },
     { label: 'Notifications', ok: status.notifications, okText: 'ALLOWED', fixText: 'ENABLE →', onFix: requestNotifications },
     { label: 'Usage Access', ok: status.usage, okText: 'ON', fixText: 'TURN ON →', onFix: openUsageAccess },
     { label: 'Battery Optimization', ok: status.battery, okText: 'OFF', fixText: 'TURN OFF →', onFix: requestBatteryExemption },
@@ -71,13 +72,13 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     borderWidth: 1,
     borderColor: c.border,
   },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14 },
+  row: { flexDirection: 'row', flexWrap: 'wrap', columnGap: spacing.md, rowGap: spacing.sm, justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14 },
   divider: { height: 1, backgroundColor: c.borderSubtle },
-  left: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  left: { flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1 },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: c.danger },
   dotOn: { backgroundColor: c.accent },
   dotNeutral: { backgroundColor: c.textFaint },
-  label: { color: c.textPrimary, fontSize: 13, fontWeight: '700' },
+  label: { color: c.textPrimary, fontSize: 13, fontWeight: '700', flexShrink: 1 },
   ok: { color: c.accent, fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
   fix: { color: c.textPrimary, fontSize: 11, fontWeight: '900', letterSpacing: 0.3 },
   hint: {

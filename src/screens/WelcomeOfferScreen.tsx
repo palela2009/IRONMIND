@@ -11,10 +11,10 @@ import { WELCOME_OFFER_TAG, purchasesAvailable } from '../config/purchases';
 export const WelcomeOfferScreen: React.FC = () => {
   const styles = useThemedStyles(makeStyles);
   const palette = useTheme();
-  const { welcomeOffer, purchase, closeWelcomeOffer } = usePro();
+  const { welcomeOffer, welcomeGiftAvailable, purchasePending, purchase, closeWelcomeOffer } = usePro();
   const [busy, setBusy] = useState<ProPlanId | null>(null);
 
-  const visible = welcomeOffer && purchasesAvailable();
+  const visible = welcomeOffer && !welcomeGiftAvailable && !purchasePending && purchasesAvailable();
   const welcome = useStoreProducts(WELCOME_PLANS, visible, WELCOME_OFFER_TAG);
   const standard = useStoreProducts(PRO_PLANS, visible);
 
@@ -30,8 +30,10 @@ export const WelcomeOfferScreen: React.FC = () => {
 
     if (outcome === 'purchased') {
       await closeWelcomeOffer();
+    } else if (outcome === 'pending') {
+      appAlert('Confirming your purchase', 'We will retry confirmation automatically. Please do not buy again.');
     } else if (outcome === 'failed') {
-      appAlert('Purchase did not go through', 'You have not been charged. Try again in a moment.');
+      appAlert('Purchase did not go through', 'Check your Google Play purchase history or use Restore purchases before trying again.');
     }
   };
 

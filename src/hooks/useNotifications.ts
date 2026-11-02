@@ -1,128 +1,64 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { AppState, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../config/api';
 import { authedFetch } from '../utils/authFetch';
+import { TrainingState } from '../types/training';
+import { reportHandledError } from '../config/sentry';
 
-const BACKEND_URL = `${API_BASE_URL}/api/save-token`;
-
-const getProjectId = (): string | undefined => {
-  return (
-    Constants.expoConfig?.extra?.eas?.projectId ??
-    (Constants as any).easConfig?.projectId ??
-    undefined
-  );
-};
-
-export const useNotifications = (userId?: string) => {
-  const [expoPushToken, setExpoPushToken] = useState<string>('');
-  const [permissionStatus, setPermissionStatus] = useState<string>('');
-  const notifListenerRef = useRef<Notifications.Subscription | null>(null);
-  const responseListenerRef = useRef<Notifications.Subscription | null>(null);
+export const useNotifications = (userId?: string, onNavigate?: (screen: TrainingState) => void) => {
+  const [expoPushToken, setToken] = useState('');
+  const [permissionStatus, setPermissionStatus] = useState('');
+  const navigateRef = useRef(onNavigate);
+  navigateRef.current = onNavigate;
+  const handledRef = useRef<string | null>(null);
 
   useEffect(() => {
-    registerForPushNotifications();
-
-    notifListenerRef.current = Notifications.addNotificationReceivedListener((notif) => {
-      console.log('[IRONMIND] Notification received:', notif.request.content.title);
-    });
-
-    responseListenerRef.current = Notifications.addNotificationResponseReceivedListener((response) => {
-      console.log('[IRONMIND] User tapped notification:', response.notification.request.content.title);
-    });
-
-    return () => {
-      notifListenerRef.current?.remove();
-      responseListenerRef.current?.remove();
+    let cancelled = false;
+    let registering = false;
+    const register = async () => {
+      if (!userId || registering) return;
+      registering = true;
+      try {
+        if (Platform.OS === 'android') {
+          await Notifications.setNotificationChannelAsync('ironmind-social', { name: 'Friends and duels', importance: Notifications.AndroidImportance.DEFAULT });
+          await Notifications.setNotificationChannelAsync('ironmind_challenges', { name: 'IRONMIND Challenges', importance: Notifications.AndroidImportance.HIGH, vibrationPattern: [0, 250, 250, 250] });
+        }
+        const { status } = await Notifications.getPermissionsAsync();
+        if (cancelled) return;
+        setPermissionStatus(status);
+        if (status !== 'granted') return;
+        const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
+        if (!projectId) return;
+        const { data } = await Notifications.getExpoPushTokenAsync({ projectId });
+        if (cancelled) return;
+        const res = await authedFetch(`${API_BASE_URL}/api/save-token`, { method: 'POST', body: JSON.stringify({ pushToken: data }) }, userId);
+        if (!res.ok) throw new Error(`Push registration failed (${res.status})`);
+        if (cancelled) return;
+        await AsyncStorage.setItem('@ironmind_push_token', data);
+        setToken(data);
+      } catch (error) { reportHandledError(error, { operation: 'register_push' }); }
+      finally { registering = false; }
     };
+    const handleResponse = (response: Notifications.NotificationResponse | null) => {
+      if (!response || !userId || cancelled) return;
+      const { identifier, content } = response.notification.request;
+      if (handledRef.current === identifier) return;
+      const data = content.data ?? {};
+      if (data.recipientUid && data.recipientUid !== userId) return;
+      const type = String(data.type ?? '');
+      const target: TrainingState = type.startsWith('duel') || type.startsWith('friend') || type.startsWith('referral') || type === 'leaderboard_passed' ? 'FRIENDS' : 'HOME';
+      handledRef.current = identifier;
+      navigateRef.current?.(target);
+      void Notifications.clearLastNotificationResponseAsync().catch(() => {});
+    };
+    void register();
+    void Notifications.getLastNotificationResponseAsync().then(handleResponse).catch(() => {});
+    const response = Notifications.addNotificationResponseReceivedListener(handleResponse);
+    const active = AppState.addEventListener('change', (state) => { if (state === 'active') void register(); });
+    return () => { cancelled = true; response.remove(); active.remove(); };
   }, [userId]);
-
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active' && userId) {
-        resyncToken(userId);
-      }
-    });
-    return () => sub.remove();
-  }, [userId]);
-
-  const resyncToken = async (uid: string) => {
-    try {
-      const cached = await AsyncStorage.getItem('@ironmind_push_token');
-      if (cached) {
-        await sendTokenToBackend(cached, uid);
-      } else {
-        await registerForPushNotifications();
-      }
-    } catch {}
-  };
-
-  const registerForPushNotifications = async () => {
-    if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('ironmind-challenges', {
-        name: 'IRONMIND Challenges',
-        importance: Notifications.AndroidImportance.MAX,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#CCFF00',
-      });
-    }
-
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
-
-    setPermissionStatus(finalStatus);
-
-    if (finalStatus !== 'granted') {
-      console.log('[IRONMIND] Notification permission denied');
-      return;
-    }
-
-    const projectId = getProjectId();
-    if (!projectId) {
-      console.warn('[IRONMIND] No EAS project ID found in app.json — push token skipped. Add extra.eas.projectId to app.json.');
-      return;
-    }
-
-    try {
-      const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
-      const token = tokenData.data;
-
-      console.log('[IRONMIND] Expo Push Token:', token);
-      setExpoPushToken(token);
-
-      await AsyncStorage.setItem('@ironmind_push_token', token);
-
-      if (userId) {
-        await sendTokenToBackend(token, userId);
-      }
-    } catch (e) {
-      console.error('[IRONMIND] Failed to get push token:', e);
-    }
-  };
-
-  const sendTokenToBackend = async (token: string, uid: string) => {
-    try {
-      const res = await authedFetch(BACKEND_URL, {
-        method: 'POST',
-        body: JSON.stringify({ pushToken: token }),
-      });
-      if (res.ok) {
-        console.log('[IRONMIND] Push token saved to backend for user:', uid);
-      } else {
-        const body = await res.text().catch(() => '');
-        console.error(`[IRONMIND] Backend rejected push token save (${res.status}):`, body);
-      }
-    } catch (e) {
-      console.error('[IRONMIND] Failed to send push token to backend:', e);
-    }
-  };
-
   return { expoPushToken, permissionStatus };
 };

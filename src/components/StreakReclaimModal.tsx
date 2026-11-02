@@ -9,7 +9,7 @@ import { useThemedStyles, useTheme } from '../context/ThemeContext';
 
 interface Props {
   lostStreak: number;
-  onReclaim: (source: 'ad' | 'coins') => void;
+  onReclaim: (source: 'ad' | 'coins') => Promise<boolean>;
   onDismiss: () => void;
   onOpenPro: () => void;
 }
@@ -17,7 +17,7 @@ interface Props {
 export const StreakReclaimModal: React.FC<Props> = ({ lostStreak, onReclaim, onDismiss, onOpenPro }) => {
   const styles = useThemedStyles(makeStyles);
   const palette = useTheme();
-  const { isPro, coins, buyItem } = usePro();
+  const { isPro, coins } = usePro();
   const { show, showing } = useRewardedAd();
   const [step, setStep] = useState<'offer' | 'ad'>('offer');
   const [buying, setBuying] = useState(false);
@@ -35,13 +35,7 @@ export const StreakReclaimModal: React.FC<Props> = ({ lostStreak, onReclaim, onD
       return;
     }
     setBuying(true);
-    const result = await buyItem('reclaim');
-    setBuying(false);
-    if (result.ok) {
-      onReclaim('coins');
-    } else {
-      appAlert('Could not save your streak', result.message ?? 'Try again.');
-    }
+    try { await onReclaim('coins'); } finally { setBuying(false); }
   };
 
   const watchAd = async () => {
@@ -51,8 +45,7 @@ export const StreakReclaimModal: React.FC<Props> = ({ lostStreak, onReclaim, onD
       return;
     }
     if (result === 'unavailable') {
-      appAlert('No ad available', 'We could not load an ad just now, so your streak is safe this time.');
-      onReclaim('ad');
+      appAlert('No ad available', 'Try again later or use coins to reclaim your streak.');
       return;
     }
     onDismiss();

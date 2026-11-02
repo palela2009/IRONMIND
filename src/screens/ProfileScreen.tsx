@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTabScrollReset } from '../hooks/useTabScrollReset';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, TextInput, NativeModules } from 'react-native';
 import { appAlert } from '../components/AppDialog';
 import { useThemedStyles, useTheme } from '../context/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -15,6 +15,7 @@ import { usePro } from '../context/ProContext';
 import { ProScreen } from './ProScreen';
 import { StatusCard } from '../components/StatusCard';
 import { CoachCard } from '../components/CoachCard';
+import { NotificationSettings } from '../components/NotificationSettings';
 import { ELITE_BADGES, earnedBadges } from '../constants/badges';
 import { signOut, updateProfile } from 'firebase/auth';
 import { auth } from '../config/firebase';
@@ -28,6 +29,10 @@ import { spacing, radius, cardShadow, Palette } from '../theme';
 interface ProfileProps {
   stats: UserStats;
   history: ChallengeItem[];
+  syncStatus: string;
+  syncMessage: string;
+  pendingCount: number;
+  onRetrySync: () => Promise<void>;
   onSettingsChanged?: () => void;
   onNavigate: (state: any) => void;
 }
@@ -81,7 +86,7 @@ const getAchievements = (s: UserStats, history: ChallengeItem[], dailyLimit: num
   { id: '08', title: 'CENTURY', desc: '100 challenges completed', done: s.totalChallenges >= 100 },
 ];
 
-export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettingsChanged }) => {  const styles = useThemedStyles(makeStyles);
+export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettingsChanged, syncStatus, syncMessage, pendingCount, onRetrySync }) => {  const styles = useThemedStyles(makeStyles);
   const scrollRef = useRef<any>(null);
   useTabScrollReset('PROFILE', scrollRef);
   const palette = useTheme();
@@ -187,7 +192,11 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
     : '—';
 
   const handleSignOut = async () => {
-    try { await signOut(auth); } catch {}
+    try {
+      const pushToken = await AsyncStorage.getItem('@ironmind_push_token');
+      if (pushToken) await authedFetch(`${API_BASE_URL}/api/save-token`, { method: 'DELETE', body: JSON.stringify({ pushToken }) }).catch(() => {});
+      await signOut(auth);
+    } catch {}
   };
 
   const [deletingAccount, setDeletingAccount] = useState<boolean>(false);
@@ -202,7 +211,13 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
         setDeletingAccount(false);
         return;
       }
+      const uid = fbUser?.uid;
+      if (uid) await NativeModules.UsageMonitor?.clearAccountData?.(uid);
+      await signOut(auth);
       await AsyncStorage.multiRemove([
+        ...(uid ? (await AsyncStorage.getAllKeys()).filter((key) => key.startsWith(`@ironmind_shop_pending:${uid}:`)) : []),
+        ...(uid ? [`@ironmind_progress_v3:${uid}`, `@ironmind_screentime:${uid}`, `@ironmind_notifications:${uid}`, `@ironmind_pro_v1:${uid}`, `@ironmind_purchase_pending:${uid}`, `@ironmind_shop_pending:${uid}`] : []),
+        '@ironmind_pro_v1',
         '@ironmind_stats_v2',
         '@ironmind_history_v2',
         '@ironmind_onboarded',
@@ -210,7 +225,6 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
         '@ironmind_push_token',
         '@ironmind_last_uid',
       ]);
-      await signOut(auth);
     } catch {
       appAlert('Could not delete account', 'Network error — try again.');
       setDeletingAccount(false);
@@ -634,14 +648,18 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
         </View>
       )}
 
-      {[
-        { label: 'NOTIFICATIONS', value: 'ON' },
-      ].map((s) => (
-        <TouchableOpacity key={s.label} style={styles.settingRow}>
-          <Text style={styles.settingLabel}>{s.label}</Text>
-          <Text style={styles.settingValue}>{s.value}</Text>
+      {(syncStatus === 'offline' || syncStatus === 'error') && (
+        <TouchableOpacity style={styles.settingRow} onPress={onRetrySync}>
+          <View style={{ flex: 1, marginRight: spacing.md }}>
+            <Text style={styles.settingLabel}>PROGRESS NOT SYNCED</Text>
+            <Text style={{ color: palette.textTertiary, fontSize: 11, marginTop: 4 }}>
+              {syncStatus === 'error' ? syncMessage : pendingCount ? `${pendingCount} results saved on this phone` : 'Tap to reconnect'}
+            </Text>
+          </View>
+          <Text style={styles.settingValue}>RETRY ›</Text>
         </TouchableOpacity>
-      ))}
+      )}
+      <NotificationSettings />
 
       <TouchableOpacity style={styles.settingRow} onPress={handleSignOut}>
         <Text style={styles.signOut}>SIGN OUT</Text>
@@ -756,11 +774,10 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   proBannerArrow: { color: c.accent, fontSize: 16, fontWeight: '900' },
 
   root: { flex: 1, backgroundColor: c.bg },
-  content: { paddingBottom: 48 },
+  content: { paddingTop: spacing.lg, paddingBottom: 48 },
 
   header: {
     paddingHorizontal: spacing.xl,
-    paddingTop: 52,
     paddingBottom: spacing.xl,
   },
   headerTitle: { color: c.textPrimary, fontSize: 18, fontWeight: '900', letterSpacing: 0.5 },
@@ -839,6 +856,9 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   settingsSection: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 1, paddingHorizontal: spacing.xl, marginBottom: spacing.sm },
   settingRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    columnGap: spacing.md,
+    rowGap: spacing.sm,
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingVertical: spacing.lg,
@@ -848,8 +868,8 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     backgroundColor: c.surface,
     borderRadius: radius.md,
   },
-  settingLabel: { color: c.textPrimary, fontSize: 13, fontWeight: '700' },
-  settingValue: { color: c.textSecondary, fontSize: 13, fontWeight: '600' },
+  settingLabel: { color: c.textPrimary, fontSize: 13, fontWeight: '700', flexShrink: 1 },
+  settingValue: { color: c.textSecondary, fontSize: 13, fontWeight: '600', flexShrink: 1, marginLeft: 'auto', textAlign: 'right' },
   signOut: { color: c.danger, fontSize: 13, fontWeight: '900' },
   deleteAccount: { color: c.textTertiary, fontSize: 12, fontWeight: '700' },
 

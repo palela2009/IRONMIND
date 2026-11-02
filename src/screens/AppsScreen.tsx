@@ -27,7 +27,7 @@ export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged }) 
   const palette = useTheme();
 
   const { fbUser } = useAuth();
-  const { screenTime, loading: stLoading, trackedToday } = useScreenTime();
+  const { screenTime, loading: stLoading, totalToday, trackedToday } = useScreenTime();
   const [monitoredApps, setMonitoredApps] = useState<string[]>([]);
   const [editing, setEditing] = useState(false);
   const [pending, setPending] = useState<string[]>([]);
@@ -149,7 +149,7 @@ export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged }) 
 
   const minutesForApp = (app: string) => screenTime.find((s) => s.app === app)?.minutes ?? 0;
 
-  const totalMinutes = trackedToday;
+  const totalMinutes = totalToday;
   const maxMins = screenTime.length > 0 ? screenTime[0].minutes || 1 : 1;
 
   return (
@@ -164,6 +164,7 @@ export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged }) 
       <View style={styles.hero}>
         <Text style={styles.heroLabel}>TODAY'S SCREEN TIME</Text>
         <Text style={styles.heroValue}>{stLoading ? '—' : formatMinutes(totalMinutes)}</Text>
+        <Text style={styles.heroSub}>All apps · {formatMinutes(trackedToday)} in tracked apps</Text>
       </View>
 
       <View style={styles.sectionRow}>
@@ -338,7 +339,7 @@ export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged }) 
 
 const makeStyles = (c: Palette) => StyleSheet.create({
   root: { flex: 1, backgroundColor: c.bg },
-  content: { paddingTop: 52, paddingBottom: 48 },
+  content: { paddingTop: spacing.lg, paddingBottom: 48 },
 
   header: { paddingHorizontal: spacing.xl, marginBottom: spacing.lg },
   headerTitle: { color: c.textPrimary, fontSize: 18, fontWeight: '900', letterSpacing: 0.5 },
@@ -356,6 +357,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   },
   heroLabel: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 1.2 },
   heroValue: { color: c.textPrimary, fontSize: 40, fontWeight: '900', letterSpacing: -1.5, marginTop: 6 },
+  heroSub: { color: c.textSecondary, fontSize: 12, marginTop: spacing.sm },
 
   sectionRow: {
     flexDirection: 'row',

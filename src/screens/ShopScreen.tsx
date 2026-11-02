@@ -5,6 +5,7 @@ import { useThemedStyles, useTheme } from '../context/ThemeContext';
 import { Palette, PALETTES, radius, spacing, cardShadow } from '../theme';
 import { usePro } from '../context/ProContext';
 import { FRAMES, NAME_EFFECTS, PRO_WEEK_PRICE, glowStyle } from '../constants/cosmetics';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 interface Props {
   visible: boolean;
@@ -17,7 +18,8 @@ export const ShopScreen: React.FC<Props> = ({ visible, onClose }) => {
   const styles = useThemedStyles(makeStyles);
   const palette = useTheme();
   const { coins, streakFreezes, isPro, unlockedThemes, themeId, buyItem, setTheme,
-    ownedFrames, ownedNameEffects, equippedFrame, equippedNameEffect, equipCosmetic } = usePro();
+    ownedFrames, ownedNameEffects, equippedFrame, equippedNameEffect, equipCosmetic,
+    welcomeGiftAvailable, claimWelcomeGift, source } = usePro();
   const [busy, setBusy] = useState<string | null>(null);
 
   const buy = async (item: 'freeze' | 'theme' | 'frame' | 'nameEffect' | 'proWeek', id?: string) => {
@@ -39,9 +41,18 @@ export const ShopScreen: React.FC<Props> = ({ visible, onClose }) => {
     ]);
   };
 
+  const claimTheme = async (id: string) => {
+    if (busy !== null) return;
+    setBusy(id);
+    try {
+      const result = await claimWelcomeGift(id);
+      if (!result.ok) appAlert('Could not claim gift', result.message ?? 'Try again.');
+    } finally { setBusy(null); }
+  };
+
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View style={styles.root}>
+      <SafeAreaView style={styles.root}>
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <TouchableOpacity style={styles.close} onPress={onClose} activeOpacity={0.8}>
             <Text style={styles.closeText}>✕</Text>
@@ -54,8 +65,8 @@ export const ShopScreen: React.FC<Props> = ({ visible, onClose }) => {
             <Text style={styles.balance}>◉ {coins}</Text>
             <Text style={styles.balanceSub}>
               {isPro
-                ? 'Pro earns double on every win, plus 500 coins a month.'
-                : 'Earn 10 per challenge won. Pro earns double.'}
+                ? source === 'store' ? 'Double challenge rewards. Paid Pro also gets 500 bonus coins each month.' : 'Pro doubles challenge rewards. Monthly bonus coins are a paid Pro benefit.'
+                : 'Earn 10 per win, plus 50 for a perfect day. Pro doubles both rewards.'}
             </Text>
           </View>
 
@@ -78,7 +89,13 @@ export const ShopScreen: React.FC<Props> = ({ visible, onClose }) => {
             )}
           </TouchableOpacity>
 
-          <Text style={styles.section}>THEMES</Text>
+          {welcomeGiftAvailable && (
+            <View style={styles.giftCard}>
+              <Text style={styles.giftTitle}>YOUR WELCOME GIFT</Text>
+              <Text style={styles.giftDescription}>Choose one theme below to keep forever, plus one free streak freeze. Your coins stay yours.</Text>
+            </View>
+          )}
+          <Text style={styles.section}>{welcomeGiftAvailable ? 'CHOOSE YOUR FREE THEME' : 'THEMES'}</Text>
           {PALETTES.filter((p) => p.pro).map((p) => {
             const owned = isPro || unlockedThemes.includes(p.id);
             const active = themeId === p.id;
@@ -86,7 +103,7 @@ export const ShopScreen: React.FC<Props> = ({ visible, onClose }) => {
               <TouchableOpacity
                 key={p.id}
                 style={[styles.itemCard, { borderColor: active ? p.accent : palette.border }]}
-                onPress={() => (owned ? setTheme(p.id) : confirmBuy(`the ${p.name} theme`, PRICES.theme, 'theme', p.id))}
+                onPress={() => welcomeGiftAvailable ? void claimTheme(p.id) : owned ? void setTheme(p.id) : confirmBuy(`the ${p.name} theme`, PRICES.theme, 'theme', p.id)}
                 activeOpacity={0.85}
                 disabled={busy !== null}
               >
@@ -101,6 +118,8 @@ export const ShopScreen: React.FC<Props> = ({ visible, onClose }) => {
                 </View>
                 {busy === p.id ? (
                   <ActivityIndicator color={palette.accent} size="small" />
+                ) : welcomeGiftAvailable ? (
+                  <Text style={styles.itemOwned}>FREE GIFT</Text>
                 ) : active ? (
                   <Text style={[styles.itemOwned, { color: p.accent }]}>ACTIVE</Text>
                 ) : owned ? (
@@ -206,19 +225,22 @@ export const ShopScreen: React.FC<Props> = ({ visible, onClose }) => {
             winner takes the whole pot.
           </Text>
         </ScrollView>
-      </View>
+      </SafeAreaView>
     </Modal>
   );
 };
 
 const makeStyles = (c: Palette) => StyleSheet.create({
   root: { flex: 1, backgroundColor: c.bg },
-  content: { padding: spacing.lg, paddingTop: 56, paddingBottom: 48 },
+  content: { padding: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.xxl },
 
-  close: { position: 'absolute', top: 52, right: spacing.lg, width: 36, height: 36, borderRadius: 18, backgroundColor: c.surfaceRaised, justifyContent: 'center', alignItems: 'center', zIndex: 2 },
+  close: { position: 'absolute', top: spacing.lg, right: spacing.lg, width: 36, height: 36, borderRadius: 18, backgroundColor: c.surfaceRaised, justifyContent: 'center', alignItems: 'center', zIndex: 2 },
   closeText: { color: c.textSecondary, fontSize: 14, fontWeight: '900' },
 
-  title: { color: c.textPrimary, fontSize: 26, fontWeight: '900', letterSpacing: -0.5, marginBottom: spacing.lg },
+  title: { color: c.textPrimary, fontSize: 26, fontWeight: '900', letterSpacing: -0.5, marginBottom: spacing.lg, paddingRight: 48 },
+  giftCard: { backgroundColor: c.accentMuted, borderRadius: radius.md, borderWidth: 1, borderColor: c.accent, padding: spacing.lg, marginBottom: spacing.lg },
+  giftTitle: { color: c.accent, fontSize: 12, fontWeight: '900' },
+  giftDescription: { color: c.textSecondary, fontSize: 12, lineHeight: 18, marginTop: spacing.sm },
 
   balanceCard: {
     backgroundColor: c.surface,
@@ -247,7 +269,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     marginBottom: spacing.md,
   },
   itemGlyph: { color: c.accent, fontSize: 22, width: 34, textAlign: 'center' },
-  itemBody: { flex: 1 },
+  itemBody: { flex: 1, minWidth: 0 },
   itemName: { color: c.textPrimary, fontSize: 13, fontWeight: '900', letterSpacing: 0.4 },
   itemDesc: { color: c.textTertiary, fontSize: 11, marginTop: 3, lineHeight: 15 },
   itemPrice: { color: c.accent, fontSize: 14, fontWeight: '900' },

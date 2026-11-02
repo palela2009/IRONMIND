@@ -28,6 +28,41 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
     )
 
     @ReactMethod
+    fun getPendingResults(uid: String, promise: Promise) {
+        try { promise.resolve(ChallengeStore.pending(reactContext, uid)) }
+        catch (e: Exception) { promise.reject("RESULTS_ERROR", e.message) }
+    }
+
+    @ReactMethod
+    fun acknowledgeResult(uid: String, id: String, promise: Promise) {
+        try { ChallengeStore.acknowledge(reactContext, uid, id); promise.resolve(true) }
+        catch (e: Exception) { promise.reject("ACK_ERROR", e.message) }
+    }
+
+    @ReactMethod
+    fun isMonitoring(promise: Promise) { promise.resolve(UsageMonitorService.running) }
+
+    @ReactMethod
+    fun setChallengeTimeZone(timeZoneId: String) {
+        reactContext.getSharedPreferences(UsageMonitorService.PREFS_NAME, Context.MODE_PRIVATE).edit().putString("accountTimeZone", timeZoneId).apply()
+    }
+
+    @ReactMethod
+    fun clearAccountData(uid: String, promise: Promise) {
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            try {
+                val prefs = reactContext.getSharedPreferences(UsageMonitorService.PREFS_NAME, Context.MODE_PRIVATE)
+                if (prefs.getString("uid", null) == uid) {
+                    check(prefs.edit().clear().commit()) { "Could not clear monitoring settings" }
+                    reactContext.stopService(Intent(reactContext, UsageMonitorService::class.java))
+                }
+                ChallengeStore.clearAccount(reactContext, uid)
+                promise.resolve(true)
+            } catch (e: Exception) { promise.reject("CLEAR_ERROR", e.message) }
+        }
+    }
+
+    @ReactMethod
     fun startMonitoring(
         apps: ReadableArray,
         challengeWindowSeconds: Double,
@@ -35,6 +70,7 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
         uid: String?,
         appLimitsJson: String?
     ) {
+        if (uid.isNullOrBlank()) return
         val appList = Array(apps.size()) { apps.getString(it) }
         val intent = Intent(reactContext, UsageMonitorService::class.java).apply {
             putExtra("apps", appList)
@@ -186,36 +222,15 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
 
     private fun foregroundTimesFor(startMs: Long, endMs: Long): Map<String, Long> {
         val usm = reactContext.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
-        val eventsQuery = usm?.queryEvents(startMs, endMs) ?: return emptyMap()
-
-        val foregroundTimes = mutableMapOf<String, Long>()
-        val foregroundStart = mutableMapOf<String, Long>()
-
+        val cutoff = minOf(endMs, System.currentTimeMillis())
+        val eventsQuery = usm?.queryEvents(maxOf(0L, startMs - 86400000L), cutoff) ?: return emptyMap()
+        val timeline = UsageTimeline(startMs, cutoff)
         val event = android.app.usage.UsageEvents.Event()
         while (eventsQuery.hasNextEvent()) {
             eventsQuery.getNextEvent(event)
-            when (event.eventType) {
-                android.app.usage.UsageEvents.Event.MOVE_TO_FOREGROUND -> {
-                    foregroundStart[event.packageName] = event.timeStamp
-                }
-                android.app.usage.UsageEvents.Event.MOVE_TO_BACKGROUND -> {
-                    val start = foregroundStart.remove(event.packageName)
-                    if (start != null) {
-                        foregroundTimes[event.packageName] =
-                            (foregroundTimes[event.packageName] ?: 0L) + (event.timeStamp - start)
-                    }
-                }
-            }
+            timeline.onEvent(event.packageName, event.eventType, event.timeStamp)
         }
-
-        val cutoff = minOf(endMs, System.currentTimeMillis())
-        foregroundStart.forEach { (pkg, start) ->
-            if (cutoff > start) {
-                foregroundTimes[pkg] = (foregroundTimes[pkg] ?: 0L) + (cutoff - start)
-            }
-        }
-
-        return foregroundTimes
+        return timeline.totals()
     }
 
     @ReactMethod
@@ -273,7 +288,6 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
             )
 
             fun isRealUserApp(pkg: String): Boolean {
-                if (pkg == reactContext.packageName) return false
                 if (NON_APP_PACKAGES.contains(pkg)) return false
                 return pm.getLaunchIntentForPackage(pkg) != null
             }
@@ -284,7 +298,6 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
                 .filter { it.value > 0L && isRealUserApp(it.key) }
                 .entries
                 .sortedByDescending { it.value }
-                .take(10)
                 .forEach { (pkg, timeMs) ->
                     try {
                         val appInfo = pm.getApplicationInfo(pkg, 0)

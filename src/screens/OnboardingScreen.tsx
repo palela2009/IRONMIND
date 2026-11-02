@@ -11,6 +11,7 @@ import { APPS_LIST } from '../constants/apps';
 import { AppIcon } from '../components/AppIcon';
 import { useAuth } from '../context/AuthContext';
 import { syncAppMonitor } from '../hooks/useAppMonitor';
+import { deviceTimeZone } from '../utils/challengeTime';
 import { usePermissions } from '../hooks/usePermissions';
 import { PermissionSteps } from '../components/PermissionSteps';
 
@@ -99,6 +100,7 @@ export const OnboardingScreen: React.FC<OnboardingProps> = ({ onComplete }) => {
     const dailyChallengeLimit = DAILY_LIMIT_VALUES[chosen.limit];
 
     const data = {
+      timeZone: deviceTimeZone(),
       targetApps: selectedApps,
       goals: [goal],
       difficultyLevel: chosen.difficulty,
@@ -111,6 +113,7 @@ export const OnboardingScreen: React.FC<OnboardingProps> = ({ onComplete }) => {
       await authedFetch(ONBOARDING_URL, {
         method: 'POST',
         body: JSON.stringify({
+          timeZone: data.timeZone,
           targetApps: data.targetApps,
           goals: data.goals,
           difficultyLevel: data.difficultyLevel,

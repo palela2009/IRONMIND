@@ -20,10 +20,12 @@
     "react": "19.2.3",
     "react-native": "0.85.3",
     "react-native-google-mobile-ads": "^16.5.0",
-    "react-native-purchases": "^10.11.0"
+    "react-native-purchases": "^10.11.0",
+    "react-native-safe-area-context": "~5.7.0"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
+    "react-test-renderer": "19.2.3",
     "typescript": "~6.0.3"
   },
   "scripts": {

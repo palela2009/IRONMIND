@@ -32,6 +32,7 @@ object TrustedClock {
 
     private fun timeZone(context: Context, now: Long): TimeZone {
         val prefs = context.getSharedPreferences(UsageMonitorService.PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.getString("accountTimeZone", null)?.let { return TimeZone.getTimeZone(it) }
         val current = TimeZone.getDefault().id
         val pinned = prefs.getString("tzId", null)
         val pinnedAt = prefs.getLong("tzPinnedAt", 0L)
@@ -46,6 +47,10 @@ object TrustedClock {
         val now = now(context)
         val cal = Calendar.getInstance(timeZone(context, now))
         cal.timeInMillis = now
-        return "${cal.get(Calendar.YEAR)}-${cal.get(Calendar.DAY_OF_YEAR)}"
+        val key = String.format(java.util.Locale.US, "%04d-%02d-%02d", cal.get(Calendar.YEAR), cal.get(Calendar.MONTH) + 1, cal.get(Calendar.DAY_OF_MONTH))
+        val prefs = context.getSharedPreferences(UsageMonitorService.PREFS_NAME, Context.MODE_PRIVATE)
+        val legacy = "${cal.get(Calendar.YEAR)}-${cal.get(Calendar.DAY_OF_YEAR)}"
+        if (prefs.getString("date", null) == legacy) prefs.edit().putString("date", key).apply()
+        return key
     }
 }

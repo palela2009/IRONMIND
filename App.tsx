@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaView, StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, DeviceEventEmitter, PanResponder, Animated, Dimensions, AppState, Easing } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, PanResponder, Animated, Dimensions, AppState, Easing } from 'react-native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { ProProvider, usePro } from './src/context/ProContext';
-import { initCrashReporting, setCrashUser } from './src/config/sentry';
+import { initCrashReporting, setCrashUser, wrapWithCrashReporting } from './src/config/sentry';
 import { StreakReclaimModal } from './src/components/StreakReclaimModal';
 import { StreakSavedOverlay } from './src/components/StreakSavedOverlay';
 import { reportActiveDuels } from './src/hooks/useDuels';
@@ -15,6 +16,7 @@ import { ProIntroScreen } from './src/screens/ProIntroScreen';
 import { InviteRewardOverlay } from './src/components/InviteRewardOverlay';
 import { AppDialogHost } from './src/components/AppDialog';
 import { PermissionGate } from './src/components/PermissionGate';
+import { WelcomeGiftScreen } from './src/screens/WelcomeGiftScreen';
 import { useStats } from './src/hooks/useStats';
 import { useNotifications } from './src/hooks/useNotifications';
 import { useAppMonitor, syncAppMonitor } from './src/hooks/useAppMonitor';
@@ -23,6 +25,8 @@ import { notifyTabChange } from './src/hooks/useTabScrollReset';
 import { radius, spacing, cardShadow, Palette } from './src/theme';
 import { ThemeProvider, useThemedStyles, useTheme } from './src/context/ThemeContext';
 import { authedFetch } from './src/utils/authFetch';
+import { deviceTimeZone } from './src/utils/challengeTime';
+import { auth } from './src/config/firebase';
 import { API_BASE_URL } from './src/config/api';
 
 initCrashReporting();
@@ -97,20 +101,32 @@ function RootNavigator() {
   const nav = useThemedStyles(makeNav);
   const palette = useTheme();
   const { fbUser, loading } = useAuth();
-  const { stats, history, recordChallenge, DAILY_CHALLENGE_LIMIT, refreshSettings, lostStreak, reclaimStreak, dismissLostStreak, savedStreak, dismissSavedStreak } = useStats();
+  const { stats, history, challengeTimeZone, syncStatus, syncMessage, pendingCount, retrySync, DAILY_CHALLENGE_LIMIT, refreshSettings, lostStreak, reclaimStreak, dismissLostStreak, savedStreak, dismissSavedStreak } = useStats();
   const [showPro, setShowPro] = useState<boolean>(false);
   const { refresh: refreshEntitlement } = usePro();
-  useNotifications(fbUser?.uid);
+  const [notificationTarget, setNotificationTarget] = useState<TrainingState | null>(null);
+  useNotifications(fbUser?.uid, setNotificationTarget);
 
   useEffect(() => {
     if (!fbUser?.uid) return;
     authedFetch(`${API_BASE_URL}/api/user/onboarding`, {
       method: 'POST',
       body: JSON.stringify({
+        timeZone: deviceTimeZone(),
         email: fbUser.email,
         displayName: fbUser.displayName,
         photoURL: fbUser.photoURL,
       }),
+    }, fbUser.uid).then(async (res) => {
+      if (!res.ok) return;
+      const profile = await res.json();
+      if (auth.currentUser?.uid !== fbUser.uid) return;
+      const raw = await AsyncStorage.getItem('@ironmind_onboarding');
+      if (raw && profile.challengeTimeZone) {
+        await AsyncStorage.setItem('@ironmind_onboarding', JSON.stringify({ ...JSON.parse(raw), timeZone: profile.challengeTimeZone }));
+        await syncAppMonitor();
+        await refreshSettings();
+      }
     }).catch(() => {});
   }, [fbUser?.uid]);
 
@@ -130,18 +146,6 @@ function RootNavigator() {
     return () => sub.remove();
   }, [fbUser?.uid]);
 
-  const recordChallengeRef = useRef(recordChallenge);
-  recordChallengeRef.current = recordChallenge;
-
-  useEffect(() => {
-    const sub = DeviceEventEmitter.addListener(
-      'IronmindChallengeResult',
-      (result: { targetApp: string; elapsedTime: number; wasSuccessful: boolean }) => {
-        recordChallengeRef.current(result.elapsedTime, result.targetApp, result.wasSuccessful);
-      }
-    );
-    return () => sub.remove();
-  }, []);
   const [screen, setScreen] = useState<TrainingState>('HOME');
   const [isOnboarded, setIsOnboarded] = useState<boolean>(false);
   const [checkingOnboarding, setCheckingOnboarding] = useState<boolean>(true);
@@ -176,6 +180,13 @@ function RootNavigator() {
     if (to === SCREEN_ORDER.indexOf(screenRef.current)) return;
     slideTo(to);
   };
+
+  useEffect(() => {
+    if (fbUser && isOnboarded && notificationTarget) {
+      goToTab(notificationTarget);
+      setNotificationTarget(null);
+    }
+  }, [fbUser?.uid, isOnboarded, notificationTarget]);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -229,6 +240,8 @@ function RootNavigator() {
                 goals: cloud.goals,
                 difficultyLevel: cloud.difficultyLevel,
                 dailyChallengeLimit: cloud.dailyChallengeLimit,
+                appLimits: cloud.appLimits ?? [],
+                timeZone: cloud.timeZone ?? deviceTimeZone(),
               }));
               await AsyncStorage.setItem('@ironmind_onboarded', 'true');
               await syncAppMonitor();
@@ -249,6 +262,7 @@ function RootNavigator() {
   const handleOnboardingComplete = async () => {
     await AsyncStorage.setItem('@ironmind_onboarded', 'true');
     await refreshEntitlement();
+    await refreshSettings();
     setIsOnboarded(true);
   };
 
@@ -270,9 +284,9 @@ function RootNavigator() {
       case 'FRIENDS':
         return <FriendsScreen stats={stats} onNavigate={goToTab} />;
       case 'PROFILE':
-        return <ProfileScreen stats={stats} history={history} onSettingsChanged={refreshSettings} onNavigate={goToTab} />;
+        return <ProfileScreen stats={stats} history={history} onSettingsChanged={refreshSettings} syncStatus={syncStatus} syncMessage={syncMessage} pendingCount={pendingCount} onRetrySync={retrySync} onNavigate={goToTab} />;
       default:
-        return <HomeScreen stats={stats} history={history} dailyChallengeLimit={DAILY_CHALLENGE_LIMIT} onNavigate={goToTab} />;
+        return <HomeScreen stats={stats} history={history} dailyChallengeLimit={DAILY_CHALLENGE_LIMIT} challengeTimeZone={challengeTimeZone} onNavigate={goToTab} />;
     }
   };
 
@@ -331,6 +345,7 @@ function RootNavigator() {
       <WelcomeOfferScreen />
       <ProIntroScreen />
       <InviteRewardOverlay />
+      <WelcomeGiftScreen />
       <PermissionGate />
 
       <StreakSavedOverlay
@@ -344,12 +359,13 @@ function RootNavigator() {
   );
 }
 
-export default function App() {
+function App() {
   useEffect(() => {
     fetch(`${API_BASE_URL}/health`).catch(() => {});
   }, []);
 
   return (
+    <SafeAreaProvider>
     <AuthProvider>
       <ProProvider>
         <ThemeProvider>
@@ -358,8 +374,11 @@ export default function App() {
         </ThemeProvider>
       </ProProvider>
     </AuthProvider>
+    </SafeAreaProvider>
   );
 }
+
+export default wrapWithCrashReporting(App);
 
 const makeStyles = (c: Palette) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.bg },

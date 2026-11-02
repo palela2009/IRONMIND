@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { AppState, Linking, NativeModules, Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import { syncAppMonitor } from './useAppMonitor';
 
 export interface PermissionStatus {
   notifications: boolean;
@@ -17,9 +18,9 @@ export const isXiaomiFamily = (): boolean => {
 };
 
 const readStatus = async (): Promise<PermissionStatus> => {
-  const { status } = await Notifications.getPermissionsAsync();
-  let usage = true;
-  let battery = true;
+  const { status } = await Notifications.getPermissionsAsync().catch(() => ({ status: 'denied' }));
+  let usage = Platform.OS !== 'android';
+  let battery = Platform.OS !== 'android';
   if (Platform.OS === 'android' && native) {
     try {
       usage = !!(await native.hasUsageAccess());
@@ -37,10 +38,14 @@ const readStatus = async (): Promise<PermissionStatus> => {
 
 export const usePermissions = () => {
   const [status, setStatus] = useState<PermissionStatus>({ notifications: false, usage: false, battery: false });
+  const [monitoring, setMonitoring] = useState(false);
+  const [recovering, setRecovering] = useState(false);
+  const [recoveryError, setRecoveryError] = useState('');
   const [checked, setChecked] = useState<boolean>(false);
 
   const refresh = useCallback(async () => {
     setStatus(await readStatus());
+    setMonitoring(!!(await native?.isMonitoring?.().catch(() => false)));
     setChecked(true);
   }, []);
 
@@ -49,7 +54,8 @@ export const usePermissions = () => {
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active') refresh();
     });
-    return () => sub.remove();
+    const timer = setInterval(() => { if (AppState.currentState === 'active') void refresh(); }, 5000);
+    return () => { sub.remove(); clearInterval(timer); };
   }, [refresh]);
 
   const requestNotifications = useCallback(async () => {
@@ -83,7 +89,19 @@ export const usePermissions = () => {
     if (!opened) await Linking.openSettings();
   }, []);
 
+  const restartMonitoring = useCallback(async () => {
+    setRecovering(true);
+    setRecoveryError('');
+    try {
+      await syncAppMonitor();
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      await refresh();
+      if (!(await native?.isMonitoring?.())) setRecoveryError('Monitoring has not started. Check usage access and your selected apps.');
+    } catch { setRecoveryError('Could not restart monitoring. Reopen IRONMIND and try again.'); }
+    finally { setRecovering(false); }
+  }, [refresh]);
+
   const allGranted = status.notifications && status.usage && status.battery;
 
-  return { status, checked, allGranted, refresh, requestNotifications, openUsageAccess, requestBatteryExemption, openAutostart };
+  return { status, checked, allGranted, monitoring, recovering, recoveryError, restartMonitoring, refresh, requestNotifications, openUsageAccess, requestBatteryExemption, openAutostart };
 };

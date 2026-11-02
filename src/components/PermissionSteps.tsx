@@ -54,8 +54,8 @@ export const PermissionSteps: React.FC<Props> = ({ perms }) => {
       key: 'battery',
       title: 'BATTERY OPTIMIZATION OFF',
       done: status.battery,
-      desc: 'Stops your phone from killing IRONMIND in the background. Tap Allow on the next screen.',
-      doneDesc: 'Off. IRONMIND keeps running in the background.',
+      desc: 'Helps IRONMIND keep monitoring while you use other apps. Tap Allow on the next screen.',
+      doneDesc: 'Allowed. Background monitoring is less likely to be interrupted.',
       action: 'TURN OFF OPTIMIZATION →',
       onPress: requestBatteryExemption,
     },
@@ -70,7 +70,7 @@ export const PermissionSteps: React.FC<Props> = ({ perms }) => {
               <Text style={[styles.numText, s.done && styles.numTextDone]}>{s.done ? '✓' : String(i + 1)}</Text>
             </View>
             <Text style={styles.title}>{s.title}</Text>
-            {s.done && <Text style={styles.on}>ON</Text>}
+            <Text style={styles.on}>{s.done ? 'READY' : 'NEEDED'}</Text>
           </View>
           <Text style={styles.desc}>{s.done ? s.doneDesc : s.desc}</Text>
           {!s.done && (

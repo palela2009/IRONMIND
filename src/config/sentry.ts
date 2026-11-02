@@ -1,7 +1,7 @@
 import * as Sentry from '@sentry/react-native';
 import Constants from 'expo-constants';
 
-const DSN = (Constants.expoConfig?.extra as { sentryDsn?: string } | undefined)?.sentryDsn ?? '';
+const DSN = process.env.EXPO_PUBLIC_SENTRY_DSN || (Constants.expoConfig?.extra as { sentryDsn?: string } | undefined)?.sentryDsn || '';
 
 export const CRASH_REPORTING_ENABLED = DSN.length > 0 && !__DEV__;
 
@@ -11,6 +11,11 @@ export const initCrashReporting = (): void => {
   Sentry.init({
     dsn: DSN,
     tracesSampleRate: 0,
+    beforeSend(event) {
+      if (event.request) { delete event.request.headers; delete event.request.cookies; delete event.request.data; delete event.request.query_string; }
+      event.breadcrumbs = event.breadcrumbs?.filter((entry) => entry.category !== 'console');
+      return event;
+    },
     sendDefaultPii: false,
     environment: __DEV__ ? 'development' : 'production',
   });
@@ -25,6 +30,8 @@ export const reportHandledError = (error: unknown, context?: Record<string, unkn
   if (!CRASH_REPORTING_ENABLED) return;
   Sentry.captureException(error, context ? { extra: context } : undefined);
 };
+
+export const wrapWithCrashReporting = Sentry.wrap;
 
 export const leaveBreadcrumb = (message: string, data?: Record<string, unknown>): void => {
   if (!CRASH_REPORTING_ENABLED) return;
