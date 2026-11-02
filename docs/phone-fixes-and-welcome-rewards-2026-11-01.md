@@ -7,7 +7,7 @@
 3. Shop is mounted outside Home's list footer. Header/footer content also uses stable element types. Home refreshes no longer remount the shop or restart its slide transition and scroll state.
 4. Starter coins remain 150, once per account. Accounts first created after this backend update are eligible to choose one permanent theme and receive one freeze. The server claims these together in a transaction; retries and simultaneous theme selections cannot grant a second theme or freeze. Existing accounts and balances are retained without granting another starter bonus. The gift can be deferred and claimed from the shop. The selected theme stays owned after Pro expires.
 5. Seven days of coin-bought Pro costs 500, still limited to one purchase per UTC calendar month. Win and perfect-day coin rewards and their caps are unchanged. Earned Pro keeps doubled challenge rewards and its existing freeze benefits. Only active store-sourced Pro receives 500 monthly bonus coins. Coin payouts have an independent calendar-month marker, and legacy paid refills are migrated without duplicating a current-month bonus.
-6. Updated the source privacy policy to describe overall app usage and the existing sharing of tracked-app totals with friends. The separately hosted policy copy is being synchronized from this source as part of the 2 November GitHub update.
+6. Updated the source privacy policy to describe overall app usage and the existing sharing of tracked-app totals with friends. The separately hosted policy copy was synchronized from this source on 2 November 2026, preserving its existing device-identifier and Xiaomi-help sections. The live page was verified to match the source.
 
 ## Verification
 
