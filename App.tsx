@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, PanResponder, Animated, Dimensions, AppState, Easing } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, ActivityIndicator, PanResponder, Animated, useWindowDimensions, AppState, Easing } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
@@ -72,7 +72,6 @@ const AppsIcon = ({ active }: { active: boolean }) => {
 };
 
 const SCREEN_ORDER: TrainingState[] = ['HOME', 'APPS', 'FRIENDS', 'PROFILE'];
-const SCREEN_WIDTH = Dimensions.get('window').width;
 
 const FriendsIcon = ({ active }: { active: boolean }) => {
   const palette = useTheme();
@@ -156,16 +155,23 @@ function RootNavigator() {
   const screenRef = useRef(screen);
   screenRef.current = screen;
 
+  const { width: windowWidth } = useWindowDimensions();
+  const [viewportWidth, setViewportWidth] = useState(0);
+  const pageWidth = Math.max(1, viewportWidth || windowWidth);
+  const pageWidthRef = useRef(pageWidth);
+  pageWidthRef.current = pageWidth;
+
   const position = useRef(new Animated.Value(0)).current;
-  const pageOffsets = useRef(
-    SCREEN_ORDER.map((_, i) => Animated.add(position, i * SCREEN_WIDTH))
-  ).current;
+  const pageOffsets = useMemo(
+    () => SCREEN_ORDER.map((_, i) => Animated.multiply(Animated.add(position, i), pageWidth)),
+    [position, pageWidth]
+  );
 
   const slideTo = (nextIndex: number) => {
     if (SCREEN_ORDER[nextIndex] !== screenRef.current) notifyTabChange(SCREEN_ORDER[nextIndex]);
     setScreen(SCREEN_ORDER[nextIndex]);
     Animated.timing(position, {
-      toValue: -nextIndex * SCREEN_WIDTH,
+      toValue: -nextIndex,
       duration: 240,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
@@ -196,12 +202,13 @@ function RootNavigator() {
         const index = SCREEN_ORDER.indexOf(screenRef.current);
         const atStart = index === 0 && gesture.dx > 0;
         const atEnd = index === SCREEN_ORDER.length - 1 && gesture.dx < 0;
-        position.setValue(-index * SCREEN_WIDTH + (atStart || atEnd ? gesture.dx * 0.25 : gesture.dx));
+        const drag = gesture.dx / pageWidthRef.current;
+        position.setValue(-index + (atStart || atEnd ? drag * 0.25 : drag));
       },
       onPanResponderRelease: (_, gesture) => {
         const index = SCREEN_ORDER.indexOf(screenRef.current);
         const flung = Math.abs(gesture.vx) > 0.5;
-        const far = Math.abs(gesture.dx) > SCREEN_WIDTH / 3;
+        const far = Math.abs(gesture.dx) > pageWidthRef.current / 3;
         if ((flung || far) && gesture.dx < 0 && index < SCREEN_ORDER.length - 1) {
           slideToRef.current(index + 1);
         } else if ((flung || far) && gesture.dx > 0 && index > 0) {
@@ -293,7 +300,11 @@ function RootNavigator() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="light" />
-      <View style={styles.mainContent} {...panResponder.panHandlers}>
+      <View
+        style={styles.mainContent}
+        onLayout={({ nativeEvent }) => setViewportWidth(nativeEvent.layout.width)}
+        {...panResponder.panHandlers}
+      >
         {SCREEN_ORDER.map((id, i) => (
           <Animated.View
             key={id}
