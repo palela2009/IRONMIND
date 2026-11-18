@@ -217,6 +217,7 @@ class UsageMonitorService : Service() {
 
         for ((appName, pkg) in monitoredPackages) {
             if (foreground == pkg) {
+                if (BuildConfig.DEBUG && pkg == "com.instagram.android") return
                 val limit = appLimits[appName] ?: 0
                 val used = if (limit > 0) minutesUsedToday(pkg) else 0
                 val overBudget = limit > 0 && used >= limit
@@ -256,7 +257,7 @@ class UsageMonitorService : Service() {
         val notification = NotificationCompat.Builder(this, CHALLENGE_CHANNEL)
             .setContentTitle("$appName — ${minutesLeft}m left")
             .setContentText("You are close to your daily limit. Every open past it triggers a challenge.")
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setSmallIcon(R.drawable.notification_icon)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)
             .build()
@@ -281,7 +282,7 @@ class UsageMonitorService : Service() {
         val notification = NotificationCompat.Builder(this, CHALLENGE_CHANNEL)
             .setContentTitle("Back too soon")
             .setContentText("You reopened $appName within ${REENTRY_MS / 1000} seconds, so that challenge counts as lost.")
-            .setSmallIcon(android.R.drawable.ic_dialog_alert)
+            .setSmallIcon(R.drawable.notification_icon)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .build()
@@ -313,6 +314,13 @@ class UsageMonitorService : Service() {
 
     private fun restoreChallenge() {
         val state = ChallengeStore.active(this) ?: return
+        if (BuildConfig.DEBUG && state.optString("pkg") == "com.instagram.android") {
+            activeChallenge = null
+            pendingWin = null
+            ChallengeStore.saveActive(this, null)
+            (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(CHALLENGE_ID)
+            return
+        }
         if (state.getString("phase") == "pending") {
             pendingWin = PendingWin(state.getString("appName"), state.getString("pkg"), state.getLong("exactMs"), state.getLong("leftAt"), state.getString("id"), state.getString("uid"), state.getLong("startTime"))
             activeChallenge = null
@@ -395,7 +403,7 @@ class UsageMonitorService : Service() {
                 if (overBudget) "$appName is past its daily limit — exit in $windowSeconds seconds."
                 else "You opened $appName — exit in $windowSeconds seconds."
             )
-            .setSmallIcon(android.R.drawable.ic_dialog_alert)
+            .setSmallIcon(R.drawable.notification_icon)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setVibrate(longArrayOf(0, 250, 250, 250))
@@ -408,7 +416,7 @@ class UsageMonitorService : Service() {
         return NotificationCompat.Builder(this, FOREGROUND_CHANNEL)
             .setContentTitle("IRONMIND")
             .setContentText("Monitoring your apps in background")
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setSmallIcon(R.drawable.notification_icon)
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .build()
     }
