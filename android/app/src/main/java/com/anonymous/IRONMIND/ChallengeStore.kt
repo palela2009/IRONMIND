@@ -18,12 +18,14 @@ object ChallengeStore {
     fun active(context: Context): JSONObject? = prefs(context).getString("active", null)?.let { JSONObject(it) }
 
     @Synchronized
-    fun finish(context: Context, result: JSONObject) {
+    fun finish(context: Context, result: JSONObject, clearActive: Boolean = true) {
         val store = prefs(context)
         val queue = JSONArray(store.getString("pending", "[]"))
         val exists = (0 until queue.length()).any { queue.getJSONObject(it).getString("id") == result.getString("id") }
         if (!exists) queue.put(result)
-        check(store.edit().putString("pending", queue.toString()).remove("active").commit()) { "Could not save challenge result" }
+        val editor = store.edit().putString("pending", queue.toString())
+        if (clearActive) editor.remove("active")
+        check(editor.commit()) { "Could not save challenge result" }
     }
 
     @Synchronized

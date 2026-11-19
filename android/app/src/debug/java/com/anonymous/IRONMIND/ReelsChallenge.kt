@@ -1,0 +1,52 @@
+package com.anonymous.IRONMIND
+
+internal class ReelsChallenge(private val startedAt: Long) {
+    enum class Screen { FEED, AWAY, UNKNOWN }
+
+    sealed interface Outcome {
+        data class Scored(val won: Boolean, val elapsedMs: Long) : Outcome
+        data object Canceled : Outcome
+    }
+
+    private var leftAt: Long? = null
+    private var uncertainSince: Long? = null
+    val isConfirmingExit: Boolean get() = leftAt != null
+
+    fun observe(screen: Screen, now: Long, swipedInFeed: Boolean = false): Outcome? {
+        val exit = leftAt
+        val deadline = if (exit == null) startedAt + EXIT_WINDOW_MS else exit + REENTRY_WINDOW_MS
+        val uncertain = uncertainSince
+        if (screen == Screen.UNKNOWN) {
+            if (uncertain == null) uncertainSince = now
+            return if (now >= deadline || (uncertain != null && now - uncertain >= UNKNOWN_GRACE_MS)) {
+                Outcome.Canceled
+            } else null
+        }
+        if (uncertain != null && now - uncertain >= UNKNOWN_GRACE_MS) return Outcome.Canceled
+        uncertainSince = null
+
+        if (exit == null) {
+            if (screen == Screen.AWAY) {
+                if (now > deadline) return Outcome.Canceled
+                leftAt = now
+            } else if (now >= deadline) {
+                return Outcome.Scored(won = false, elapsedMs = EXIT_WINDOW_MS)
+            }
+            return null
+        }
+
+        if (now <= deadline && screen == Screen.FEED && swipedInFeed) {
+            return Outcome.Scored(won = false, elapsedMs = now - startedAt)
+        }
+        if (now < deadline) return null
+        return if (screen == Screen.AWAY) {
+            Outcome.Scored(won = true, elapsedMs = exit - startedAt)
+        } else Outcome.Canceled
+    }
+
+    companion object {
+        const val EXIT_WINDOW_MS = 15_000L
+        const val REENTRY_WINDOW_MS = 20_000L
+        private const val UNKNOWN_GRACE_MS = 2_500L
+    }
+}

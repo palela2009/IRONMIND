@@ -176,6 +176,7 @@ class UsageMonitorService : Service() {
 
         val foreground = getForegroundPackage() ?: return
         lastKnownForeground = foreground
+        if (BuildConfig.DEBUG) debugForegroundPackage = foreground
         val now = System.currentTimeMillis()
 
         pendingWin?.let { win ->
@@ -215,6 +216,7 @@ class UsageMonitorService : Service() {
             return
         }
 
+        if (BuildConfig.DEBUG && reelsChallengeInProgress) return
         for ((appName, pkg) in monitoredPackages) {
             if (foreground == pkg) {
                 if (BuildConfig.DEBUG && pkg == "com.instagram.android") return
@@ -443,6 +445,7 @@ class UsageMonitorService : Service() {
 
     override fun onDestroy() {
         running = false
+        if (BuildConfig.DEBUG) debugForegroundPackage = null
         super.onDestroy()
         handler.removeCallbacks(pollRunnable)
     }
@@ -451,6 +454,8 @@ class UsageMonitorService : Service() {
 
     companion object {
         @Volatile var running = false
+        @Volatile internal var debugForegroundPackage: String? = null
+        @Volatile internal var reelsChallengeInProgress = false
         const val FOREGROUND_ID = 1001
         const val CHALLENGE_ID = 1002
         const val WARNING_ID = 1003

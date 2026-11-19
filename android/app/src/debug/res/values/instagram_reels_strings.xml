@@ -1,4 +1,4 @@
 <resources>
     <string name="instagram_reels_service_title">IRONMIND Reels test</string>
-    <string name="instagram_reels_service_description">Optional emulator test. IRONMIND checks Instagram screen identifiers and swipe events on this device to send a reminder while you watch Reels. It does not read message text, take screenshots, or send screen information to a server.</string>
+    <string name="instagram_reels_service_description">Optional Android test. IRONMIND checks Instagram screen identifiers and swipe events on this device to start Reels challenges and record wins or misses in your streak. Message text and screenshots are never read. Only the same challenge result data as other IRONMIND challenges is synced.</string>
 </resources>
