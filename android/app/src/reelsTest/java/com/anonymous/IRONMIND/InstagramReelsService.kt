@@ -106,12 +106,27 @@ class InstagramReelsService : AccessibilityService() {
         if (event.eventType != AccessibilityEvent.TYPE_VIEW_SCROLLED) return
 
         val source = event.source
-        val fromPager = source != null && source.packageName?.toString() == INSTAGRAM && source.viewIdResourceName in PAGER_IDS
+        val fromPager = isPagerScroll(source)
         traceScroll(event, fromPager)
-        if (!fromPager || event.fromIndex < 0) return
+        if (!fromPager) return
+        if (attempt?.challenge?.isConfirmingExit == true &&
+            Build.VERSION.SDK_INT >= 28 &&
+            ReelsChallenge.hasVerticalScroll(event.scrollDeltaX, event.scrollDeltaY)
+        ) {
+            updateAttempt(uid, surface, now, swipedInFeed = true)
+            return
+        }
+        if (event.fromIndex < 0) return
         pendingPage = event.fromIndex
         handler.removeCallbacks(settlePage)
         handler.postDelayed(settlePage, 350L)
+    }
+
+    private fun isPagerScroll(source: AccessibilityNodeInfo?): Boolean {
+        if (source == null || source.packageName?.toString() != INSTAGRAM) return false
+        if (source.viewIdResourceName in PAGER_IDS) return true
+        return source.className?.toString()?.endsWith("RecyclerView") == true &&
+            source.parent?.viewIdResourceName in PAGER_IDS
     }
 
     private fun classifySurface(root: AccessibilityNodeInfo?, now: Long): Surface {

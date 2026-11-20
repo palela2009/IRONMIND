@@ -3,6 +3,7 @@ package com.anonymous.IRONMIND
 import com.anonymous.IRONMIND.ReelsChallenge.Outcome
 import com.anonymous.IRONMIND.ReelsChallenge.Screen
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -23,6 +24,33 @@ class ReelsChallengeTest {
         assertNull(challenge.observe(Screen.AWAY, 4_000))
         assertNull(challenge.observe(Screen.FEED, 5_000))
         assertEquals(Outcome.Scored(false, 6_000), challenge.observe(Screen.FEED, 6_000, swipedInFeed = true))
+    }
+
+    @Test
+    fun firstVerticalPagerScrollAfterExitFailsWithoutASecondPageIndex() {
+        val challenge = ReelsChallenge(0)
+        challenge.observe(Screen.AWAY, 4_000)
+        assertFalse(ReelsChallenge.hasVerticalScroll(-1, -1))
+        assertFalse(ReelsChallenge.hasVerticalScroll(80, 20))
+        assertFalse(ReelsChallenge.hasVerticalScroll(0, 0))
+        val scrolled = ReelsChallenge.hasVerticalScroll(0, -180)
+        assertEquals(Outcome.Scored(false, 5_000), challenge.observe(Screen.FEED, 5_000, scrolled))
+    }
+
+    @Test
+    fun remainingInTheConfirmedFeedAtTheEndOfTheCheckRecordsAFailure() {
+        val challenge = ReelsChallenge(0)
+        challenge.observe(Screen.AWAY, 4_000)
+        assertNull(challenge.observe(Screen.FEED, 23_999))
+        assertEquals(Outcome.Scored(false, 24_000), challenge.observe(Screen.FEED, 24_000))
+    }
+
+    @Test
+    fun firstFeedObservationAfterTheCheckCannotProveAnEarlyReturn() {
+        val challenge = ReelsChallenge(0)
+        challenge.observe(Screen.AWAY, 4_000)
+        assertNull(challenge.observe(Screen.AWAY, 23_999))
+        assertEquals(Outcome.Canceled, challenge.observe(Screen.FEED, 24_001, swipedInFeed = true))
     }
 
     @Test

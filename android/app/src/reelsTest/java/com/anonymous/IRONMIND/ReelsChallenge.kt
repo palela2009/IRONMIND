@@ -1,5 +1,7 @@
 package com.anonymous.IRONMIND
 
+import kotlin.math.abs
+
 internal class ReelsChallenge(private val startedAt: Long) {
     enum class Screen { FEED, AWAY, UNKNOWN }
 
@@ -10,6 +12,7 @@ internal class ReelsChallenge(private val startedAt: Long) {
 
     private var leftAt: Long? = null
     private var uncertainSince: Long? = null
+    private var returnedBeforeDeadline = false
     val isConfirmingExit: Boolean get() = leftAt != null
 
     fun observe(screen: Screen, now: Long, swipedInFeed: Boolean = false): Outcome? {
@@ -38,15 +41,25 @@ internal class ReelsChallenge(private val startedAt: Long) {
         if (now <= deadline && screen == Screen.FEED && swipedInFeed) {
             return Outcome.Scored(won = false, elapsedMs = now - startedAt)
         }
-        if (now < deadline) return null
-        return if (screen == Screen.AWAY) {
-            Outcome.Scored(won = true, elapsedMs = exit - startedAt)
-        } else Outcome.Canceled
+        if (now < deadline) {
+            returnedBeforeDeadline = screen == Screen.FEED
+            return null
+        }
+        return when (screen) {
+            Screen.AWAY -> Outcome.Scored(won = true, elapsedMs = exit - startedAt)
+            Screen.FEED -> if (returnedBeforeDeadline) {
+                Outcome.Scored(won = false, elapsedMs = deadline - startedAt)
+            } else Outcome.Canceled
+            Screen.UNKNOWN -> Outcome.Canceled
+        }
     }
 
     companion object {
         const val EXIT_WINDOW_MS = 15_000L
         const val REENTRY_WINDOW_MS = 20_000L
         private const val UNKNOWN_GRACE_MS = 2_500L
+
+        fun hasVerticalScroll(deltaX: Int, deltaY: Int): Boolean =
+            abs(deltaY.toLong()) > maxOf(abs(deltaX.toLong()), 1L)
     }
 }
