@@ -6,6 +6,7 @@ import android.app.KeyguardManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.pm.PackageManager
+import android.graphics.Rect
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -18,6 +19,7 @@ import androidx.core.app.NotificationCompat
 import com.facebook.react.ReactApplication
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import java.util.UUID
+import kotlin.math.abs
 import org.json.JSONObject
 
 class InstagramReelsService : AccessibilityService() {
@@ -33,8 +35,6 @@ class InstagramReelsService : AccessibilityService() {
 
     private val handler = Handler(Looper.getMainLooper())
     private val session = ReelsReminderSession()
-    private var pendingPage = -1
-    private var previousPage: Int? = null
     private var lastTraceAt = -5_000L
     private var feedWindow = -1
     private var lastKnownSurface = Surface.UNKNOWN
@@ -54,12 +54,10 @@ class InstagramReelsService : AccessibilityService() {
             updateAttempt(uid, surface, now)
             clearFeed()
         } else {
-            val page = pendingPage
-            val earlier = previousPage
-            previousPage = page
+            val scroll = session.settleScroll(now)
             val wasInChallenge = attempt != null
-            updateAttempt(uid, surface, now, earlier != null && earlier != page)
-            if (!wasInChallenge && session.observePage(page, now) && startIfAllowed(uid, now)) {
+            updateAttempt(uid, surface, now, scroll.advanced)
+            if (!wasInChallenge && scroll.shouldRemind && startIfAllowed(uid, now)) {
                 session.markReminded()
             }
         }
@@ -105,13 +103,26 @@ class InstagramReelsService : AccessibilityService() {
         session.observeFeed(now)
         if (event.eventType != AccessibilityEvent.TYPE_VIEW_SCROLLED) return
 
-        val source = event.source
-        val fromPager = source != null && source.packageName?.toString() == INSTAGRAM && source.viewIdResourceName in PAGER_IDS
-        traceScroll(event, fromPager)
-        if (!fromPager || event.fromIndex < 0) return
-        pendingPage = event.fromIndex
+        val pager = reelsScrollPager(event.source)
+        traceScroll(event, pager != null)
+        if (pager == null) return
+        val verticalDelta = if (Build.VERSION.SDK_INT >= 28) {
+            val delta = event.scrollDeltaY
+            if (delta != -1 && abs(delta.toLong()) > abs(event.scrollDeltaX.toLong())) delta else 0
+        } else 0
+        if (event.fromIndex < 0 && verticalDelta == 0) return
+        val bounds = Rect()
+        pager.getBoundsInScreen(bounds)
+        session.queueScroll(event.fromIndex, verticalDelta, bounds.height())
         handler.removeCallbacks(settlePage)
         handler.postDelayed(settlePage, 350L)
+    }
+
+    private fun reelsScrollPager(source: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
+        if (source == null || source.packageName?.toString() != INSTAGRAM) return null
+        if (source.viewIdResourceName in PAGER_IDS) return source
+        if (source.className?.toString()?.endsWith("RecyclerView") != true) return null
+        return source.parent?.takeIf { it.viewIdResourceName in PAGER_IDS }
     }
 
     private fun classifySurface(root: AccessibilityNodeInfo?, now: Long): Surface {
@@ -285,8 +296,6 @@ class InstagramReelsService : AccessibilityService() {
     private fun clearFeed() {
         handler.removeCallbacks(settlePage)
         feedWindow = -1
-        pendingPage = -1
-        previousPage = null
         session.leaveFeed()
     }
 
