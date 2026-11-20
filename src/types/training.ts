@@ -3,6 +3,7 @@ export type TrainingState = 'HOME' | 'APPS' | 'FRIENDS' | 'PROFILE';
 export interface ChallengeItem {
   id: string;
   targetApp: string;
+  challengeKind?: 'instagram_reels';
   elapsedTime: number;
   timestamp: number;
   wasSuccessful: boolean;

@@ -19,6 +19,14 @@ class ReelsChallengeTest {
     }
 
     @Test
+    fun leavingAtFifteenSecondsCanStillWinAndReportsOnlyTheExitTime() {
+        val challenge = ReelsChallenge(1_000)
+        assertNull(challenge.observe(Screen.AWAY, 16_000))
+        assertNull(challenge.observe(Screen.AWAY, 35_999))
+        assertEquals(Outcome.Scored(true, 15_000), challenge.observe(Screen.AWAY, 36_000))
+    }
+
+    @Test
     fun confirmedSwipingAfterAShortExitMissesTheSameChallenge() {
         val challenge = ReelsChallenge(0)
         assertNull(challenge.observe(Screen.AWAY, 4_000))

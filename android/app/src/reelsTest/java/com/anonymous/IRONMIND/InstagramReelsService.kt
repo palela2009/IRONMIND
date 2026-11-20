@@ -260,6 +260,7 @@ class InstagramReelsService : AccessibilityService() {
             .put("id", current.id)
             .put("uid", current.uid)
             .put("targetApp", "Instagram")
+            .put("challengeKind", "instagram_reels")
             .put("elapsedTime", outcome.elapsedMs / 1000.0)
             .put("wasSuccessful", outcome.won)
             .put("timestamp", current.timestamp)
