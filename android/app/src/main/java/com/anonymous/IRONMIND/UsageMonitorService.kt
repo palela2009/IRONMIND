@@ -176,7 +176,7 @@ class UsageMonitorService : Service() {
 
         val foreground = getForegroundPackage() ?: return
         lastKnownForeground = foreground
-        if (BuildConfig.DEBUG) debugForegroundPackage = foreground
+        if (BuildConfig.IRONMIND_REELS_TEST) reelsForegroundPackage = foreground
         val now = System.currentTimeMillis()
 
         pendingWin?.let { win ->
@@ -216,10 +216,10 @@ class UsageMonitorService : Service() {
             return
         }
 
-        if (BuildConfig.DEBUG && reelsChallengeInProgress) return
+        if (BuildConfig.IRONMIND_REELS_TEST && reelsChallengeInProgress) return
         for ((appName, pkg) in monitoredPackages) {
             if (foreground == pkg) {
-                if (BuildConfig.DEBUG && pkg == "com.instagram.android") return
+                if (BuildConfig.IRONMIND_REELS_TEST && pkg == "com.instagram.android") return
                 val limit = appLimits[appName] ?: 0
                 val used = if (limit > 0) minutesUsedToday(pkg) else 0
                 val overBudget = limit > 0 && used >= limit
@@ -316,7 +316,7 @@ class UsageMonitorService : Service() {
 
     private fun restoreChallenge() {
         val state = ChallengeStore.active(this) ?: return
-        if (BuildConfig.DEBUG && state.optString("pkg") == "com.instagram.android") {
+        if (BuildConfig.IRONMIND_REELS_TEST && state.optString("pkg") == "com.instagram.android") {
             activeChallenge = null
             pendingWin = null
             ChallengeStore.saveActive(this, null)
@@ -445,7 +445,7 @@ class UsageMonitorService : Service() {
 
     override fun onDestroy() {
         running = false
-        if (BuildConfig.DEBUG) debugForegroundPackage = null
+        if (BuildConfig.IRONMIND_REELS_TEST) reelsForegroundPackage = null
         super.onDestroy()
         handler.removeCallbacks(pollRunnable)
     }
@@ -454,7 +454,8 @@ class UsageMonitorService : Service() {
 
     companion object {
         @Volatile var running = false
-        @Volatile internal var debugForegroundPackage: String? = null
+        @Volatile internal var reelsForegroundPackage: String? = null
+        internal const val REELS_CONSENT_UID = "instagramReelsConsentUid"
         @Volatile internal var reelsChallengeInProgress = false
         const val FOREGROUND_ID = 1001
         const val CHALLENGE_ID = 1002

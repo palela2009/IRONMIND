@@ -44,9 +44,13 @@ class InstagramReelsService : AccessibilityService() {
     private val settlePage = Runnable {
         val now = SystemClock.elapsedRealtime()
         val uid = monitoringAccount()
+        if (uid == null) {
+            reset()
+            return@Runnable
+        }
         val root = rootInActiveWindow
         val surface = classifySurface(root, now)
-        if (uid == null || surface != Surface.REELS || root?.windowId != feedWindow) {
+        if (surface != Surface.REELS || root?.windowId != feedWindow) {
             updateAttempt(uid, surface, now)
             clearFeed()
         } else {
@@ -65,6 +69,10 @@ class InstagramReelsService : AccessibilityService() {
         override fun run() {
             val now = SystemClock.elapsedRealtime()
             val uid = monitoringAccount()
+            if (uid == null) {
+                reset()
+                return
+            }
             val surface = classifySurface(rootInActiveWindow, now)
             updateAttempt(uid, surface, now)
             if (surface != Surface.REELS) clearFeed()
@@ -76,8 +84,7 @@ class InstagramReelsService : AccessibilityService() {
         if (event.packageName?.toString() != INSTAGRAM) return
         val uid = monitoringAccount()
         if (uid == null) {
-            stopAttempt()
-            clearFeed()
+            reset()
             return
         }
 
@@ -122,7 +129,7 @@ class InstagramReelsService : AccessibilityService() {
                 !hasPager && root.hasSelectedTab(OTHER_TAB_IDS) -> Surface.AWAY
                 else -> Surface.UNKNOWN
             }
-        } else if (pkg != "com.android.systemui" && pkg == UsageMonitorService.debugForegroundPackage) {
+        } else if (pkg != "com.android.systemui" && pkg == UsageMonitorService.reelsForegroundPackage) {
             Surface.AWAY
         } else {
             Surface.UNKNOWN
@@ -151,7 +158,8 @@ class InstagramReelsService : AccessibilityService() {
         val prefs = getSharedPreferences(UsageMonitorService.PREFS_NAME, MODE_PRIVATE)
         if ("Instagram" !in prefs.getStringSet("apps", emptySet()).orEmpty()) return null
         if (System.currentTimeMillis() < prefs.getLong("pausedUntil", 0L)) return null
-        return prefs.getString("uid", null)?.takeIf { it.isNotBlank() }
+        val uid = prefs.getString("uid", null)?.takeIf { it.isNotBlank() } ?: return null
+        return uid.takeIf { prefs.getString(UsageMonitorService.REELS_CONSENT_UID, null) == it }
     }
 
     private fun startIfAllowed(uid: String, now: Long): Boolean {
@@ -282,14 +290,16 @@ class InstagramReelsService : AccessibilityService() {
         session.leaveFeed()
     }
 
-    override fun onInterrupt() {
+    private fun reset() {
         stopAttempt()
         clearFeed()
         lastKnownSurface = Surface.UNKNOWN
     }
 
+    override fun onInterrupt() = reset()
+
     override fun onDestroy() {
-        onInterrupt()
+        reset()
         super.onDestroy()
     }
 

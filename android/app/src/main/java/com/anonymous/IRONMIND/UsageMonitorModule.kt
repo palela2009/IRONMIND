@@ -1,10 +1,13 @@
 package com.anonymous.IRONMIND
 
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.AppOpsManager
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.provider.Settings
+import android.view.accessibility.AccessibilityManager
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
@@ -41,6 +44,66 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun isMonitoring(promise: Promise) { promise.resolve(UsageMonitorService.running) }
+
+    @ReactMethod
+    fun getInstagramReelsTest(uid: String, promise: Promise) {
+        if (!BuildConfig.IRONMIND_REELS_TEST) {
+            promise.resolve(null)
+            return
+        }
+        try {
+            val prefs = reactContext.getSharedPreferences(UsageMonitorService.PREFS_NAME, Context.MODE_PRIVATE)
+            val accessibility = reactContext.getSystemService(AccessibilityManager::class.java)
+            val enabled = accessibility.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
+                .any {
+                    val service = it.resolveInfo.serviceInfo
+                    service.packageName == reactContext.packageName &&
+                        service.name == "com.anonymous.IRONMIND.InstagramReelsService"
+                }
+            promise.resolve(Arguments.createMap().apply {
+                putBoolean("consented", prefs.getString(UsageMonitorService.REELS_CONSENT_UID, null) == uid)
+                putBoolean("enabled", enabled)
+            })
+        } catch (error: Exception) {
+            promise.reject("REELS_TEST_SETTINGS", error)
+        }
+    }
+
+    @ReactMethod
+    fun setInstagramReelsTestConsent(uid: String, consented: Boolean, promise: Promise) {
+        if (!BuildConfig.IRONMIND_REELS_TEST || uid.isBlank()) {
+            promise.resolve(false)
+            return
+        }
+        try {
+            val prefs = reactContext.getSharedPreferences(UsageMonitorService.PREFS_NAME, Context.MODE_PRIVATE)
+            val editor = prefs.edit()
+            if (consented) editor.putString(UsageMonitorService.REELS_CONSENT_UID, uid)
+            else if (prefs.getString(UsageMonitorService.REELS_CONSENT_UID, null) == uid) {
+                editor.remove(UsageMonitorService.REELS_CONSENT_UID)
+            }
+            promise.resolve(editor.commit())
+        } catch (error: Exception) {
+            promise.reject("REELS_TEST_CONSENT", error)
+        }
+    }
+
+    @ReactMethod
+    fun openInstagramReelsTestSettings(uid: String, promise: Promise) {
+        val prefs = reactContext.getSharedPreferences(UsageMonitorService.PREFS_NAME, Context.MODE_PRIVATE)
+        if (!BuildConfig.IRONMIND_REELS_TEST ||
+            prefs.getString(UsageMonitorService.REELS_CONSENT_UID, null) != uid
+        ) {
+            promise.resolve(false)
+            return
+        }
+        try {
+            reactContext.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            promise.resolve(true)
+        } catch (error: Exception) {
+            promise.reject("REELS_TEST_SETTINGS", error)
+        }
+    }
 
     @ReactMethod
     fun setChallengeTimeZone(timeZoneId: String) {

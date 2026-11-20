@@ -35,6 +35,7 @@ interface ProfileProps {
   onRetrySync: () => Promise<void>;
   onSettingsChanged?: () => void;
   onNavigate: (state: any) => void;
+  reelsTest?: { status: string; open: () => void } | null;
 }
 
 const ONBOARDING_URL = `${API_BASE_URL}/api/user/onboarding`;
@@ -86,7 +87,8 @@ const getAchievements = (s: UserStats, history: ChallengeItem[], dailyLimit: num
   { id: '08', title: 'CENTURY', desc: '100 challenges completed', done: s.totalChallenges >= 100 },
 ];
 
-export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettingsChanged, syncStatus, syncMessage, pendingCount, onRetrySync }) => {  const styles = useThemedStyles(makeStyles);
+export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettingsChanged, syncStatus, syncMessage, pendingCount, onRetrySync, reelsTest }) => {
+  const styles = useThemedStyles(makeStyles);
   const scrollRef = useRef<any>(null);
   useTabScrollReset('PROFILE', scrollRef);
   const palette = useTheme();
@@ -501,6 +503,15 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
       <StatusCard />
 
       <Text style={styles.settingsSection}>SETTINGS</Text>
+
+      {reelsTest && (
+        <TouchableOpacity style={styles.settingRow} onPress={reelsTest.open} accessibilityRole="button">
+          <View style={{ flex: 1, marginRight: spacing.md }}>
+            <Text style={styles.settingLabel}>INSTAGRAM REELS TEST</Text>
+          </View>
+          <Text style={styles.pauseSub}>{reelsTest.status}</Text>
+        </TouchableOpacity>
+      )}
 
       {paused ? (
         <TouchableOpacity style={[styles.settingRow, styles.pauseRowActive]} onPress={resumeMonitoring} activeOpacity={0.8}>

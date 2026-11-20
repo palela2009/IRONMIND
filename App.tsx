@@ -18,6 +18,7 @@ import { AppDialogHost } from './src/components/AppDialog';
 import { PermissionGate } from './src/components/PermissionGate';
 import { WelcomeGiftScreen } from './src/screens/WelcomeGiftScreen';
 import { useStats } from './src/hooks/useStats';
+import { useInstagramReelsTest } from './src/hooks/useInstagramReelsTest';
 import { useNotifications } from './src/hooks/useNotifications';
 import { useAppMonitor, syncAppMonitor } from './src/hooks/useAppMonitor';
 import { useScreenTimeSync } from './src/hooks/useScreenTime';
@@ -100,7 +101,7 @@ function RootNavigator() {
   const nav = useThemedStyles(makeNav);
   const palette = useTheme();
   const { fbUser, loading } = useAuth();
-  const { stats, history, challengeTimeZone, syncStatus, syncMessage, pendingCount, retrySync, DAILY_CHALLENGE_LIMIT, refreshSettings, lostStreak, reclaimStreak, dismissLostStreak, savedStreak, dismissSavedStreak } = useStats();
+  const { stats, history, monitoredApps, challengeTimeZone, syncStatus, syncMessage, pendingCount, retrySync, DAILY_CHALLENGE_LIMIT, refreshSettings, lostStreak, reclaimStreak, dismissLostStreak, savedStreak, dismissSavedStreak } = useStats();
   const [showPro, setShowPro] = useState<boolean>(false);
   const { refresh: refreshEntitlement } = usePro();
   const [notificationTarget, setNotificationTarget] = useState<TrainingState | null>(null);
@@ -148,6 +149,10 @@ function RootNavigator() {
   const [screen, setScreen] = useState<TrainingState>('HOME');
   const [isOnboarded, setIsOnboarded] = useState<boolean>(false);
   const [checkingOnboarding, setCheckingOnboarding] = useState<boolean>(true);
+  const reelsTest = useInstagramReelsTest(
+    fbUser?.uid,
+    !loading && isOnboarded && !checkingOnboarding && monitoredApps.includes('Instagram'),
+  );
 
   useAppMonitor(fbUser?.uid);
   useScreenTimeSync(fbUser?.uid);
@@ -291,7 +296,7 @@ function RootNavigator() {
       case 'FRIENDS':
         return <FriendsScreen stats={stats} onNavigate={goToTab} />;
       case 'PROFILE':
-        return <ProfileScreen stats={stats} history={history} onSettingsChanged={refreshSettings} syncStatus={syncStatus} syncMessage={syncMessage} pendingCount={pendingCount} onRetrySync={retrySync} onNavigate={goToTab} />;
+        return <ProfileScreen stats={stats} history={history} onSettingsChanged={refreshSettings} syncStatus={syncStatus} syncMessage={syncMessage} pendingCount={pendingCount} onRetrySync={retrySync} onNavigate={goToTab} reelsTest={reelsTest} />;
       default:
         return <HomeScreen stats={stats} history={history} dailyChallengeLimit={DAILY_CHALLENGE_LIMIT} challengeTimeZone={challengeTimeZone} onNavigate={goToTab} />;
     }

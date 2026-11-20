@@ -8,6 +8,16 @@
       "developmentClient": true,
       "distribution": "internal"
     },
+    "play-reels-test": {
+      "distribution": "store",
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "env": {
+        "IRONMIND_REELS_INTERNAL_TEST": "1",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+      }
+    },
     "production": {
       "android": {
         "buildType": "app-bundle"
