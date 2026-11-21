@@ -12,7 +12,7 @@ internal class ReelsChallenge(private val startedAt: Long) {
 
     private var leftAt: Long? = null
     private var uncertainSince: Long? = null
-    private var returnedBeforeDeadline = false
+    private var lastClearScreen: Screen? = null
     val isConfirmingExit: Boolean get() = leftAt != null
 
     fun observe(screen: Screen, now: Long, swipedInFeed: Boolean = false): Outcome? {
@@ -21,21 +21,25 @@ internal class ReelsChallenge(private val startedAt: Long) {
         val uncertain = uncertainSince
         if (screen == Screen.UNKNOWN) {
             if (uncertain == null) uncertainSince = now
-            val canWaitForConfirmedExit = exit != null && !returnedBeforeDeadline
             val graceExpired = uncertain != null && now - uncertain >= UNKNOWN_GRACE_MS
-            return if (graceExpired || (now >= deadline && !canWaitForConfirmedExit)) {
+            return if (graceExpired || (now >= deadline && lastClearScreen == null)) {
                 Outcome.Canceled
             } else null
         }
-        if (uncertain != null && now - uncertain >= UNKNOWN_GRACE_MS) return Outcome.Canceled
+        if (uncertain != null && (now - uncertain >= UNKNOWN_GRACE_MS ||
+                (now > deadline && screen != lastClearScreen))
+        ) return Outcome.Canceled
         uncertainSince = null
 
         if (exit == null) {
             if (screen == Screen.AWAY) {
                 if (now > deadline) return Outcome.Canceled
                 leftAt = now
+                lastClearScreen = Screen.AWAY
             } else if (now >= deadline) {
                 return Outcome.Scored(won = false, elapsedMs = EXIT_WINDOW_MS)
+            } else {
+                lastClearScreen = Screen.FEED
             }
             return null
         }
@@ -44,12 +48,12 @@ internal class ReelsChallenge(private val startedAt: Long) {
             return Outcome.Scored(won = false, elapsedMs = now - startedAt)
         }
         if (now < deadline) {
-            returnedBeforeDeadline = screen == Screen.FEED
+            lastClearScreen = screen
             return null
         }
         return when (screen) {
             Screen.AWAY -> Outcome.Scored(won = true, elapsedMs = exit - startedAt)
-            Screen.FEED -> if (returnedBeforeDeadline) {
+            Screen.FEED -> if (lastClearScreen == Screen.FEED) {
                 Outcome.Scored(won = false, elapsedMs = deadline - startedAt)
             } else Outcome.Canceled
             Screen.UNKNOWN -> Outcome.Canceled

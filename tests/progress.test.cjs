@@ -27,6 +27,19 @@ test('server acknowledgement and remaining offline events do not double count', 
   assert.equal(mergeHistory([event(1)], [{ ...event(1), id: 'server-id' }]).length, 1);
 });
 
+test('Recent Challenges includes a Reels failure before and after sync', () => {
+  const failure = {
+    ...event(1, false), targetApp: 'Instagram', challengeKind: 'instagram_reels', elapsedTime: 15,
+  };
+  const offline = projectProgress({ stats: INITIAL_STATS, history: [], pending: [failure], streakFreezes: 0 }, 5);
+  assert.deepEqual(offline.history.map(({ targetApp, elapsedTime, wasSuccessful }) => ({ targetApp, elapsedTime, wasSuccessful })), [
+    { targetApp: 'Instagram', elapsedTime: 15, wasSuccessful: false },
+  ]);
+  const cloudResult = { ...failure, counted: true, freezeUsed: false };
+  const synced = projectProgress({ stats: offline.stats, history: mergeHistory(offline.history, [cloudResult]), pending: [], streakFreezes: 0 }, 5);
+  assert.deepEqual(synced.history, [cloudResult]);
+});
+
 test('offline freeze is only projected once and remaining losses break streak', () => {
   const view = projectProgress({ stats: { ...INITIAL_STATS, currentStreak: 4 }, history: [], pending: [event(1, false), event(2, false)], streakFreezes: 1 }, 5);
   assert.equal(view.streakFreezes, 0);

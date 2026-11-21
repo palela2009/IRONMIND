@@ -96,6 +96,31 @@ class ReelsChallengeTest {
     }
 
     @Test
+    fun aBriefGapAtTheCountdownDoesNotHideAConfirmedFailure() {
+        val challenge = ReelsChallenge(1_000)
+        assertNull(challenge.observe(Screen.FEED, 15_800))
+        assertNull(challenge.observe(Screen.UNKNOWN, 16_000))
+        assertEquals(Outcome.Scored(false, 15_000), challenge.observe(Screen.FEED, 16_300))
+    }
+
+    @Test
+    fun aBriefGapAtTheEndOfTheReturnCheckDoesNotHideAConfirmedFailure() {
+        val challenge = ReelsChallenge(0)
+        assertNull(challenge.observe(Screen.AWAY, 3_000))
+        assertNull(challenge.observe(Screen.FEED, 22_800))
+        assertNull(challenge.observe(Screen.UNKNOWN, 23_000))
+        assertEquals(Outcome.Scored(false, 23_000), challenge.observe(Screen.FEED, 23_300))
+    }
+
+    @Test
+    fun aGapFromReelsToAnotherScreenAcrossTheDeadlineIsUnclear() {
+        val challenge = ReelsChallenge(0)
+        assertNull(challenge.observe(Screen.FEED, 14_800))
+        assertNull(challenge.observe(Screen.UNKNOWN, 15_000))
+        assertEquals(Outcome.Canceled, challenge.observe(Screen.AWAY, 15_300))
+    }
+
+    @Test
     fun anUnclearScreenAtTheDeadlineCancelsWithoutScoring() {
         val challenge = ReelsChallenge(0)
         assertNull(challenge.observe(Screen.UNKNOWN, 14_999))
