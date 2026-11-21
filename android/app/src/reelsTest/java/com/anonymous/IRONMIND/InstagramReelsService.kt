@@ -138,13 +138,15 @@ class InstagramReelsService : AccessibilityService() {
             when {
                 hasConversation -> Surface.CHAT
                 reelsTabSelected && hasPager -> Surface.REELS
+                !reelsTabSelected && root.hasSelectedTab(OTHER_TAB_IDS) -> Surface.AWAY
                 hasPager && !reelsTabSelected &&
                     (lastKnownSurface == Surface.CHAT || lastKnownSurface == Surface.SHARED_REEL) &&
                     now - lastKnownAt <= 2_500L -> Surface.SHARED_REEL
-                !hasPager && root.hasSelectedTab(OTHER_TAB_IDS) -> Surface.AWAY
                 else -> Surface.UNKNOWN
             }
-        } else if (pkg != "com.android.systemui" && pkg == UsageMonitorService.reelsForegroundPackage) {
+        } else if (pkg == packageName ||
+            (pkg != "com.android.systemui" && pkg == UsageMonitorService.reelsForegroundPackage)
+        ) {
             Surface.AWAY
         } else {
             Surface.UNKNOWN

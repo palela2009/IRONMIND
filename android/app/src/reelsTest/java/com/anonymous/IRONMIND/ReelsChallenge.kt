@@ -21,7 +21,9 @@ internal class ReelsChallenge(private val startedAt: Long) {
         val uncertain = uncertainSince
         if (screen == Screen.UNKNOWN) {
             if (uncertain == null) uncertainSince = now
-            return if (now >= deadline || (uncertain != null && now - uncertain >= UNKNOWN_GRACE_MS)) {
+            val canWaitForConfirmedExit = exit != null && !returnedBeforeDeadline
+            val graceExpired = uncertain != null && now - uncertain >= UNKNOWN_GRACE_MS
+            return if (graceExpired || (now >= deadline && !canWaitForConfirmedExit)) {
                 Outcome.Canceled
             } else null
         }

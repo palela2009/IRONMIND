@@ -27,6 +27,24 @@ class ReelsChallengeTest {
     }
 
     @Test
+    fun openingIronmindAtTheConfirmationDeadlineCanStillSaveAWin() {
+        val challenge = ReelsChallenge(0)
+        assertNull(challenge.observe(Screen.AWAY, 3_100))
+        assertNull(challenge.observe(Screen.AWAY, 22_900))
+        assertNull(challenge.observe(Screen.UNKNOWN, 23_100))
+        assertNull(challenge.observe(Screen.UNKNOWN, 24_000))
+        assertEquals(Outcome.Scored(true, 3_100), challenge.observe(Screen.AWAY, 24_600))
+    }
+
+    @Test
+    fun anUnclearScreenAtTheDeadlineNeverAwardsAWinWithoutResolvingAway() {
+        val challenge = ReelsChallenge(0)
+        assertNull(challenge.observe(Screen.AWAY, 3_000))
+        assertNull(challenge.observe(Screen.UNKNOWN, 23_000))
+        assertEquals(Outcome.Canceled, challenge.observe(Screen.FEED, 23_300))
+    }
+
+    @Test
     fun confirmedSwipingAfterAShortExitMissesTheSameChallenge() {
         val challenge = ReelsChallenge(0)
         assertNull(challenge.observe(Screen.AWAY, 4_000))
