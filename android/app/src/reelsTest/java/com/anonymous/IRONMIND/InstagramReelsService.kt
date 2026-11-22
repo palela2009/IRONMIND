@@ -7,6 +7,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.pm.PackageManager
 import android.content.SharedPreferences
+import android.graphics.Rect
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -19,7 +20,6 @@ import androidx.core.app.NotificationCompat
 import com.facebook.react.ReactApplication
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import java.util.UUID
-import kotlin.math.abs
 import org.json.JSONObject
 
 class InstagramReelsService : AccessibilityService() {
@@ -40,12 +40,6 @@ class InstagramReelsService : AccessibilityService() {
     private val settingsChanged = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key == null || key in EVENT_FILTER_KEYS) updateEventPackages()
     }
-    private var pendingPage = -1
-    private var previousPage: Int? = null
-    private var pendingDelta = 0L
-    private var pendingPagerHeight = 0
-    private var pendingScrollY: Int? = null
-    private var previousScrollY: Int? = null
     private var lastTraceAt = -5_000L
     private var feedTarget: ShortVideoTarget? = null
     private var feedWindow = -1
@@ -67,22 +61,10 @@ class InstagramReelsService : AccessibilityService() {
             updateAttempt(uid, surface, now)
             clearFeed()
         } else {
-            val page = pendingPage
-            val earlier = previousPage
-            if (page >= 0) previousPage = page
-            val changedPage = page >= 0 && earlier != null && earlier != page
-            val scrollY = pendingScrollY
-            val offsetChange = if (scrollY != null) previousScrollY?.let { abs(scrollY.toLong() - it) } ?: 0 else 0
-            if (scrollY != null) previousScrollY = scrollY
-            val swiped = changedPage || (pendingPagerHeight > 0 &&
-                maxOf(abs(pendingDelta), offsetChange) >= pendingPagerHeight * .45)
-            clearPendingPage()
+            val scroll = session.settleScroll(now)
             val wasInChallenge = attempt != null
-            updateAttempt(uid, surface, now, swiped)
-            if (wasInChallenge) return@Runnable
-            val shouldRemind = if (target == ShortVideoTarget.INSTAGRAM) session.observePage(page, now)
-                else swiped && session.observeSwipe(now)
-            if (shouldRemind && startIfAllowed(uid, target, now)) {
+            updateAttempt(uid, surface, now, scroll.advanced)
+            if (!wasInChallenge && scroll.shouldRemind && startIfAllowed(uid, target, now)) {
                 session.markReminded()
             }
         }
@@ -150,38 +132,34 @@ class InstagramReelsService : AccessibilityService() {
         if (event.eventType != AccessibilityEvent.TYPE_VIEW_SCROLLED) return
 
         val source = event.source
-        val vertical = Build.VERSION.SDK_INT >= 28 && ReelsChallenge.hasVerticalScroll(event.scrollDeltaX, event.scrollDeltaY)
-        if (target == ShortVideoTarget.INSTAGRAM) {
-            val fromPager = isPagerScroll(source)
-            traceScroll(event, fromPager)
-            if (!fromPager) return
+        val deltaX = if (Build.VERSION.SDK_INT >= 28) event.scrollDeltaX else -1
+        val deltaY = if (Build.VERSION.SDK_INT >= 28) event.scrollDeltaY else -1
+        val vertical = ReelsChallenge.hasVerticalScroll(deltaX, deltaY)
+        val height = if (target == ShortVideoTarget.INSTAGRAM) {
+            val pager = reelsScrollPager(source)
+            traceScroll(event, pager != null)
+            if (pager == null) return
             if (attempt?.challenge?.isConfirmingExit == true && vertical) {
                 updateAttempt(uid, surface, now, swipedInFeed = true)
                 return
             }
-            if (event.fromIndex < 0) return
+            Rect().also(pager::getBoundsInScreen).height()
         } else {
             if (source?.packageName?.toString() != target.packageId) return
-            val height = target.navigation()?.pagerHeight(source, root) ?: return
-            if (Build.VERSION.SDK_INT >= 28 && event.scrollDeltaX != 0 && !vertical) return
-            pendingPagerHeight = height
-            if (vertical) {
-                val delta = event.scrollDeltaY.toLong()
-                pendingDelta = if (pendingDelta * delta < 0) delta else pendingDelta + delta
-            }
-            if (event.maxScrollY > 0 && event.scrollY >= 0) pendingScrollY = event.scrollY
-            if (!vertical && pendingScrollY == null && event.fromIndex < 0) return
+            target.navigation()?.pagerHeight(source, root) ?: return
         }
-        if (event.fromIndex >= 0) pendingPage = event.fromIndex
+        if (deltaX != -1 && deltaX != 0 && !vertical) return
+        val offset = event.scrollY.takeIf { it >= 0 && event.maxScrollY > 0 }
+        if (!session.queueScroll(event.fromIndex, if (vertical) deltaY else 0, offset, height)) return
         handler.removeCallbacks(settlePage)
         handler.postDelayed(settlePage, 350L)
     }
 
-    private fun isPagerScroll(source: AccessibilityNodeInfo?): Boolean {
-        if (source == null || source.packageName?.toString() != INSTAGRAM) return false
-        if (source.viewIdResourceName in PAGER_IDS) return true
-        return source.className?.toString()?.endsWith("RecyclerView") == true &&
-            source.parent?.viewIdResourceName in PAGER_IDS
+    private fun reelsScrollPager(source: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
+        if (source == null || source.packageName?.toString() != INSTAGRAM) return null
+        if (source.viewIdResourceName in PAGER_IDS) return source
+        if (source.className?.toString()?.endsWith("RecyclerView") != true) return null
+        return source.parent?.takeIf { it.viewIdResourceName in PAGER_IDS }
     }
 
     private fun classifySurface(root: AccessibilityNodeInfo?, target: ShortVideoTarget, now: Long): Surface {
@@ -380,17 +358,7 @@ class InstagramReelsService : AccessibilityService() {
         handler.removeCallbacks(settlePage)
         feedTarget = null
         feedWindow = -1
-        previousPage = null
-        previousScrollY = null
-        clearPendingPage()
         session.leaveFeed()
-    }
-
-    private fun clearPendingPage() {
-        pendingPage = -1
-        pendingDelta = 0
-        pendingPagerHeight = 0
-        pendingScrollY = null
     }
 
     private fun reset() {
