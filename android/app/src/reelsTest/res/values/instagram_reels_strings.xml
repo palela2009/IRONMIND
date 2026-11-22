@@ -1,4 +1,4 @@
 <resources>
-    <string name="instagram_reels_service_title">IRONMIND Reels test</string>
-    <string name="instagram_reels_service_description">Optional Android test. IRONMIND checks Instagram screen identifiers and swipe events on this device to start Reels challenges and record wins or misses in your streak. Message text and screenshots are never read. Only the same challenge result data as other IRONMIND challenges is synced.</string>
+    <string name="instagram_reels_service_title">IRONMIND Short Video Test</string>
+    <string name="instagram_reels_service_description">Optional Android test. In the apps you select, IRONMIND uses screen identifiers, navigation labels and swipes on this device to recognize Instagram Reels, Facebook Reels, TikTok feeds and YouTube Shorts. Message text, captions and screenshots are never read. Only challenge results are synced.</string>
 </resources>

@@ -23,6 +23,12 @@ internal class ReelsReminderSession {
         val lastPage = previousPage
         previousPage = page
         if (lastPage == null || lastPage == page) return false
+        return observeSwipe(now)
+    }
+
+    fun observeSwipe(now: Long): Boolean {
+        if (reminded) return false
+        observeFeed(now)
         pageChanges++
         return pageChanges >= 3 && now - checkNotNull(firstSeenAt) >= 15_000L
     }

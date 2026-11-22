@@ -151,7 +151,8 @@ function RootNavigator() {
   const [checkingOnboarding, setCheckingOnboarding] = useState<boolean>(true);
   const reelsTest = useInstagramReelsTest(
     fbUser?.uid,
-    !loading && isOnboarded && !checkingOnboarding && monitoredApps.includes('Instagram'),
+    !loading && isOnboarded && !checkingOnboarding &&
+      monitoredApps.some((app) => app === 'Instagram' || app === 'Facebook' || app === 'TikTok' || app === 'YouTube'),
   );
 
   useAppMonitor(fbUser?.uid);

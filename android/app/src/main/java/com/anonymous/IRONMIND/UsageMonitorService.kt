@@ -219,7 +219,7 @@ class UsageMonitorService : Service() {
         if (BuildConfig.IRONMIND_REELS_TEST && reelsChallengeInProgress) return
         for ((appName, pkg) in monitoredPackages) {
             if (foreground == pkg) {
-                if (BuildConfig.IRONMIND_REELS_TEST && pkg == "com.instagram.android") return
+                if (usesShortVideoChallenges(pkg)) return
                 val limit = appLimits[appName] ?: 0
                 val used = if (limit > 0) minutesUsedToday(pkg) else 0
                 val overBudget = limit > 0 && used >= limit
@@ -316,7 +316,7 @@ class UsageMonitorService : Service() {
 
     private fun restoreChallenge() {
         val state = ChallengeStore.active(this) ?: return
-        if (BuildConfig.IRONMIND_REELS_TEST && state.optString("pkg") == "com.instagram.android") {
+        if (usesShortVideoChallenges(state.optString("pkg"))) {
             activeChallenge = null
             pendingWin = null
             ChallengeStore.saveActive(this, null)
@@ -452,10 +452,12 @@ class UsageMonitorService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    private fun usesShortVideoChallenges(pkg: String): Boolean = BuildConfig.IRONMIND_REELS_TEST &&
+        ShortVideoTarget.replacesAppReminder(pkg, getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE))
+
     companion object {
         @Volatile var running = false
         @Volatile internal var reelsForegroundPackage: String? = null
-        internal const val REELS_CONSENT_UID = "instagramReelsConsentUid"
         @Volatile internal var reelsChallengeInProgress = false
         const val FOREGROUND_ID = 1001
         const val CHALLENGE_ID = 1002

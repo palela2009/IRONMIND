@@ -61,7 +61,8 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
                         service.name == "com.anonymous.IRONMIND.InstagramReelsService"
                 }
             promise.resolve(Arguments.createMap().apply {
-                putBoolean("consented", prefs.getString(UsageMonitorService.REELS_CONSENT_UID, null) == uid)
+                putBoolean("consented", ShortVideoTarget.INSTAGRAM.hasConsent(prefs, uid))
+                putBoolean("expandedConsented", prefs.getString(ShortVideoTarget.EXPANDED_CONSENT_UID, null) == uid)
                 putBoolean("enabled", enabled)
             })
         } catch (error: Exception) {
@@ -71,6 +72,15 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun setInstagramReelsTestConsent(uid: String, consented: Boolean, promise: Promise) {
+        saveScrollConsent(uid, consented, expand = false, promise)
+    }
+
+    @ReactMethod
+    fun setShortVideoTestConsent(uid: String, consented: Boolean, promise: Promise) {
+        saveScrollConsent(uid, consented, expand = true, promise)
+    }
+
+    private fun saveScrollConsent(uid: String, consented: Boolean, expand: Boolean, promise: Promise) {
         if (!BuildConfig.IRONMIND_REELS_TEST || uid.isBlank()) {
             promise.resolve(false)
             return
@@ -78,9 +88,13 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
         try {
             val prefs = reactContext.getSharedPreferences(UsageMonitorService.PREFS_NAME, Context.MODE_PRIVATE)
             val editor = prefs.edit()
-            if (consented) editor.putString(UsageMonitorService.REELS_CONSENT_UID, uid)
-            else if (prefs.getString(UsageMonitorService.REELS_CONSENT_UID, null) == uid) {
-                editor.remove(UsageMonitorService.REELS_CONSENT_UID)
+            if (consented) {
+                editor.putString(ShortVideoTarget.INSTAGRAM_CONSENT_UID, uid)
+                if (expand) editor.putString(ShortVideoTarget.EXPANDED_CONSENT_UID, uid)
+            } else {
+                for (key in listOf(ShortVideoTarget.INSTAGRAM_CONSENT_UID, ShortVideoTarget.EXPANDED_CONSENT_UID)) {
+                    if (prefs.getString(key, null) == uid) editor.remove(key)
+                }
             }
             promise.resolve(editor.commit())
         } catch (error: Exception) {
@@ -92,7 +106,7 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
     fun openInstagramReelsTestSettings(uid: String, promise: Promise) {
         val prefs = reactContext.getSharedPreferences(UsageMonitorService.PREFS_NAME, Context.MODE_PRIVATE)
         if (!BuildConfig.IRONMIND_REELS_TEST ||
-            prefs.getString(UsageMonitorService.REELS_CONSENT_UID, null) != uid
+            !ShortVideoTarget.INSTAGRAM.hasConsent(prefs, uid)
         ) {
             promise.resolve(false)
             return

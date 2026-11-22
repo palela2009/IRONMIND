@@ -507,7 +507,7 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
       {reelsTest && (
         <TouchableOpacity style={styles.settingRow} onPress={reelsTest.open} accessibilityRole="button">
           <View style={{ flex: 1, marginRight: spacing.md }}>
-            <Text style={styles.settingLabel}>INSTAGRAM REELS TEST</Text>
+            <Text style={styles.settingLabel}>SHORT VIDEO TEST</Text>
           </View>
           <Text style={styles.pauseSub}>{reelsTest.status}</Text>
         </TouchableOpacity>

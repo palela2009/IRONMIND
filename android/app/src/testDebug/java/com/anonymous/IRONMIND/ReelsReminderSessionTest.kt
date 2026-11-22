@@ -34,4 +34,20 @@ class ReelsReminderSessionTest {
         assertFalse(session.observePage(2, 1_225_000))
         assertTrue(session.observePage(3, 1_230_000))
     }
+
+    @Test
+    fun confirmedSwipesWorkWithoutPageIndicesAndResetOnExit() {
+        val session = ReelsReminderSession()
+        session.observeFeed(0)
+        assertFalse(session.observeSwipe(3_000))
+        assertFalse(session.observeSwipe(7_000))
+        session.leaveFeed()
+
+        session.observeFeed(20_000)
+        assertFalse(session.observeSwipe(36_000))
+        assertFalse(session.observeSwipe(38_000))
+        assertTrue(session.observeSwipe(40_000))
+        session.markReminded()
+        assertFalse(session.observeSwipe(65_000))
+    }
 }
