@@ -2,19 +2,14 @@ import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Animated, Easing, Share } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemedStyles } from '../context/ThemeContext';
-import { Palette, radius, spacing, glowFor } from '../theme';
+import { Palette, radius, spacing, cardShadow } from '../theme';
 import { usePro } from '../context/ProContext';
+import { PRO_FEATURES, PRO_COMPARISON } from '../constants/pro';
 import { purchasesAvailable } from '../config/purchases';
 import { PRO_WEEK_PRICE } from '../constants/cosmetics';
 import { fetchInviteCode, inviteMessage, useInvites } from '../hooks/useInvites';
 
-const PERKS = [
-  { icon: '❄', title: '20 streak freezes a month', body: 'One slip never wipes out your streak.' },
-  { icon: '◉', title: 'Double coins (2×)', body: 'Every challenge win and perfect day pays twice as much.' },
-  { icon: '◑', title: 'All 9 themes + Aurora frame', body: 'Every dark palette plus the exclusive prism frame.' },
-  { icon: '⚔', title: 'High-stakes duels (◉ 100 & ◉ 250)', body: 'Play friends for up to ◉ 500 pots.' },
-  { icon: '✦', title: '7 pinnable elite badges & 30-day charts', body: 'Pin your earned trophy next to your name on Friends.' },
-];
+const STREAK_TRIAL_TARGET = 7;
 
 export const ProIntroScreen: React.FC = () => {
   const styles = useThemedStyles(makeStyles);
@@ -22,29 +17,20 @@ export const ProIntroScreen: React.FC = () => {
   const { progress: invites } = useInvites();
   const visible = welcomeOffer && !welcomeGiftAvailable && !isPro && !purchasesAvailable();
 
-  const pulse = useRef(new Animated.Value(1)).current;
   const items = useRef([0, 1, 2, 3].map(() => new Animated.Value(0))).current;
 
   useEffect(() => {
     if (!visible) return;
     items.forEach((v) => v.setValue(0));
     Animated.stagger(
-      140,
-      items.map((v) => Animated.timing(v, { toValue: 1, duration: 420, easing: Easing.out(Easing.cubic), useNativeDriver: true }))
+      110,
+      items.map((v) => Animated.timing(v, { toValue: 1, duration: 380, easing: Easing.out(Easing.cubic), useNativeDriver: true }))
     ).start();
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1.08, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 1, duration: 900, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
   }, [visible]);
 
   const enter = (i: number) => ({
     opacity: items[i],
-    transform: [{ translateY: items[i].interpolate({ inputRange: [0, 1], outputRange: [24, 0] }) }],
+    transform: [{ translateY: items[i].interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }],
   });
 
   const shareCode = async () => {
@@ -58,80 +44,115 @@ export const ProIntroScreen: React.FC = () => {
   const inviteTarget = invites?.next?.at ?? 3;
   const inviteActive = Math.min(invites?.active ?? 0, inviteTarget);
   const invitePct = Math.min((inviteActive / inviteTarget) * 100, 100);
-  const coinProgress = Math.min(coins / PRO_WEEK_PRICE, 1);
+  const coinPct = Math.min((coins / PRO_WEEK_PRICE) * 100, 100);
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={closeWelcomeOffer}>
       <SafeAreaView style={styles.root}>
+        <View style={styles.topBar}>
+          <Text style={styles.brandInline}>IRONMIND <Text style={styles.brandInlinePro}>PRO</Text></Text>
+          <TouchableOpacity style={styles.close} onPress={closeWelcomeOffer} activeOpacity={0.8}>
+            <Text style={styles.closeText}>✕</Text>
+          </TouchableOpacity>
+        </View>
+
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          <Animated.View style={[styles.header, enter(0)]}>
-            <Animated.View style={[styles.badge, { transform: [{ scale: pulse }] }]}>
-              <Text style={styles.badgeText}>PRO</Text>
-            </Animated.View>
-            <Text style={styles.title}>Unlock IronMind Pro</Text>
-            <Text style={styles.sub}>No payment required. Earn it by winning challenges or bringing friends.</Text>
-          </Animated.View>
-
-          <Animated.View style={[styles.perks, enter(1)]}>
-            {PERKS.map((p) => (
-              <View key={p.title} style={styles.perkRow}>
-                <Text style={styles.perkIcon}>{p.icon}</Text>
-                <View style={styles.perkBody}>
-                  <Text style={styles.perkTitle}>{p.title}</Text>
-                  <Text style={styles.perkText}>{p.body}</Text>
-                </View>
-              </View>
-            ))}
-          </Animated.View>
-
-          <Animated.View style={enter(2)}>
-            <Text style={styles.section}>THREE WAYS TO EARN IT</Text>
-
-            <View style={styles.way}>
-              <View style={styles.wayHead}>
-                <Text style={styles.wayTitle}>🔥 HIT A 7-WIN STREAK</Text>
-                <Text style={styles.wayReward}>3 DAYS FREE</Text>
-              </View>
-              <Text style={styles.wayText}>
-                Win 7 scroll challenges in a row and 3 days of IronMind Pro unlock automatically.
-              </Text>
+          <Animated.View style={[styles.heroCard, enter(0)]}>
+            <View style={styles.heroAccentBar} />
+            <View style={styles.heroBadge}>
+              <Text style={styles.heroBadgeText}>★ EARN PRO FREE</Text>
             </View>
+            <Text style={styles.heroTitle}>Lock in every streak. Raise the stakes.</Text>
+            <Text style={styles.heroSub}>
+              No payment required — unlock IronMind Pro free through a 7-win streak, inviting friends, or spending coins you earn.
+            </Text>
+          </Animated.View>
+
+          <Animated.View style={enter(1)}>
+            <Text style={styles.section}>3 WAYS TO UNLOCK PRO FREE</Text>
 
             <View style={[styles.way, styles.wayFeatured]}>
               <View style={styles.wayHead}>
-                <Text style={styles.wayTitle}>INVITE {inviteTarget} FRIENDS</Text>
-                <Text style={styles.wayReward}>7 DAYS PRO</Text>
+                <Text style={styles.wayTitle}>🔥 7-WIN STREAK TRIAL</Text>
+                <Text style={styles.wayReward}>3 DAYS FREE</Text>
               </View>
               <Text style={styles.wayText}>
-                Share your code. Every friend who joins with it counts right away. 10 friends unlock a month, 25 unlock three.
+                Win {STREAK_TRIAL_TARGET} scroll challenges in a row and 3 days of IronMind Pro unlock automatically.
+              </Text>
+              <View style={styles.barBg}>
+                <View style={[styles.barFill, { width: '0%' }]} />
+              </View>
+              <Text style={styles.barLabel}>0 / {STREAK_TRIAL_TARGET} wins in a row</Text>
+            </View>
+
+            <View style={styles.way}>
+              <View style={styles.wayHead}>
+                <Text style={styles.wayTitle}>🤝 INVITE {inviteTarget} FRIENDS</Text>
+                <Text style={styles.wayReward}>UP TO 3 MONTHS</Text>
+              </View>
+              <Text style={styles.wayText}>
+                3 friends → 7 days · 10 friends → 1 month · 25 friends → 3 months of Pro.
               </Text>
               <View style={styles.barBg}>
                 <View style={[styles.barFill, { width: `${invitePct}%` }]} />
               </View>
-              <Text style={styles.barLabel}>{inviteActive} / {inviteTarget} friends</Text>
+              <Text style={styles.barLabel}>{inviteActive} / {inviteTarget} friends joined</Text>
               <TouchableOpacity style={styles.primaryBtn} onPress={shareCode} activeOpacity={0.88}>
-                <Text style={styles.primaryText}>SHARE MY CODE →</Text>
+                <Text style={styles.primaryText}>SHARE MY INVITE CODE →</Text>
               </TouchableOpacity>
             </View>
 
             <View style={styles.way}>
               <View style={styles.wayHead}>
-                <Text style={styles.wayTitle}>EARN {PRO_WEEK_PRICE.toLocaleString()} COINS</Text>
+                <Text style={styles.wayTitle}>◉ SPEND {PRO_WEEK_PRICE.toLocaleString()} COINS</Text>
                 <Text style={styles.wayReward}>7 DAYS PRO</Text>
               </View>
               <Text style={styles.wayText}>
-                +10 for every challenge win, +50 for a perfect day. Redeem in the Shop on Home once a month.
+                Win scroll challenges (+10), perfect days (+50), and duels. Redeem in the Shop once a month.
               </Text>
               <View style={styles.barBg}>
-                <View style={[styles.barFill, { width: `${coinProgress * 100}%` }]} />
+                <View style={[styles.barFill, { width: `${coinPct}%` }]} />
               </View>
-              <Text style={styles.barLabel}>◉ {coins} / {PRO_WEEK_PRICE.toLocaleString()}</Text>
+              <Text style={styles.barLabel}>◉ {coins.toLocaleString()} / {PRO_WEEK_PRICE.toLocaleString()}</Text>
+            </View>
+          </Animated.View>
+
+          <Animated.View style={enter(2)}>
+            <Text style={styles.section}>FREE VS PRO</Text>
+            <View style={styles.compareCard}>
+              <View style={styles.compareHeaderRow}>
+                <Text style={[styles.compareColLabel, styles.comparePerkCol]}>FEATURE</Text>
+                <Text style={[styles.compareColLabel, styles.compareValCol]}>FREE</Text>
+                <Text style={[styles.compareColLabel, styles.compareValCol, styles.compareProHead]}>PRO</Text>
+              </View>
+              {PRO_COMPARISON.map((row, idx) => (
+                <View key={row.label} style={[styles.compareRow, idx > 0 && styles.compareRowBorder]}>
+                  <Text style={[styles.comparePerkText, styles.comparePerkCol]}>{row.label}</Text>
+                  <Text style={[styles.compareFreeText, styles.compareValCol]}>{row.free}</Text>
+                  <Text style={[styles.compareProText, styles.compareValCol]}>{row.pro}</Text>
+                </View>
+              ))}
+            </View>
+
+            <Text style={styles.section}>WHAT YOU UNLOCK</Text>
+            <View style={styles.perks}>
+              {PRO_FEATURES.map((p) => (
+                <View key={p.title} style={styles.perkRow}>
+                  <View style={styles.perkIconBox}>
+                    <Text style={styles.perkIcon}>{p.icon}</Text>
+                  </View>
+                  <View style={styles.perkBody}>
+                    <Text style={styles.perkTitle}>{p.title}</Text>
+                    <Text style={styles.perkText}>{p.body}</Text>
+                  </View>
+                </View>
+              ))}
             </View>
           </Animated.View>
 
           <Animated.View style={enter(3)}>
             <TouchableOpacity style={styles.goBtn} onPress={closeWelcomeOffer} activeOpacity={0.85}>
-              <Text style={styles.goText}>LET'S GO</Text>
+              <Text style={styles.goText}>START TRAINING →</Text>
             </TouchableOpacity>
           </Animated.View>
         </ScrollView>
@@ -142,20 +163,87 @@ export const ProIntroScreen: React.FC = () => {
 
 const makeStyles = (c: Palette) => StyleSheet.create({
   root: { flex: 1, backgroundColor: c.bg },
-  content: { padding: spacing.xl, paddingTop: spacing.xl, paddingBottom: 48 },
-
-  header: { alignItems: 'center', marginBottom: spacing.xl },
-  badge: {
-    backgroundColor: c.accent,
-    borderRadius: 18,
-    paddingHorizontal: 22,
-    paddingVertical: 10,
-    marginBottom: spacing.lg,
-    ...glowFor(c),
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
   },
-  badgeText: { color: c.accentContrast, fontSize: 28, fontWeight: '900', letterSpacing: 2 },
-  title: { color: c.textPrimary, fontSize: 26, fontWeight: '900', letterSpacing: -0.5, textAlign: 'center' },
-  sub: { color: c.textSecondary, fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: spacing.sm },
+  brandInline: { color: c.textPrimary, fontSize: 22, fontWeight: '900', letterSpacing: -0.4 },
+  brandInlinePro: { color: c.accent },
+  close: { width: 36, height: 36, borderRadius: 18, backgroundColor: c.surfaceRaised, justifyContent: 'center', alignItems: 'center' },
+  closeText: { color: c.textSecondary, fontSize: 14, fontWeight: '900' },
+
+  content: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: 48 },
+
+  heroCard: {
+    backgroundColor: c.surface,
+    borderRadius: radius.xl,
+    borderWidth: 1.5,
+    borderColor: c.accent,
+    padding: spacing.xl,
+    marginBottom: spacing.xl,
+    overflow: 'hidden',
+    ...cardShadow,
+  },
+  heroAccentBar: { position: 'absolute', top: 0, left: 0, right: 0, height: 3, backgroundColor: c.accent },
+  heroBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: c.accentMuted,
+    borderWidth: 1,
+    borderColor: c.accentDim,
+    borderRadius: radius.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginBottom: spacing.md,
+  },
+  heroBadgeText: { color: c.accent, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
+  heroTitle: { color: c.textPrimary, fontSize: 22, fontWeight: '900', letterSpacing: -0.5, lineHeight: 28, marginBottom: spacing.sm },
+  heroSub: { color: c.textSecondary, fontSize: 13, lineHeight: 19 },
+
+  section: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 1, marginBottom: spacing.md },
+
+  way: {
+    backgroundColor: c.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: c.border,
+    padding: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  wayFeatured: { borderColor: c.accentDim, backgroundColor: c.accentMuted },
+  wayHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 6 },
+  wayTitle: { color: c.textPrimary, fontSize: 13, fontWeight: '900', letterSpacing: 0.3 },
+  wayReward: { color: c.accent, fontSize: 10, fontWeight: '900', letterSpacing: 0.6 },
+  wayText: { color: c.textSecondary, fontSize: 12, lineHeight: 17, marginBottom: spacing.sm },
+  barBg: { height: 7, borderRadius: 4, backgroundColor: c.surfaceRaised, overflow: 'hidden' },
+  barFill: { height: 7, borderRadius: 4, backgroundColor: c.accent },
+  barLabel: { color: c.textTertiary, fontSize: 11, fontWeight: '800', marginTop: 6 },
+  primaryBtn: { backgroundColor: c.accent, borderRadius: radius.md, paddingVertical: 13, alignItems: 'center', marginTop: spacing.md },
+  primaryText: { color: c.accentContrast, fontSize: 12, fontWeight: '900', letterSpacing: 0.5 },
+
+  compareCard: {
+    backgroundColor: c.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: c.border,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginTop: 2,
+    marginBottom: spacing.xl,
+  },
+  compareHeaderRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderColor: c.border },
+  compareColLabel: { color: c.textTertiary, fontSize: 9, fontWeight: '900', letterSpacing: 0.8 },
+  compareProHead: { color: c.accent },
+  compareRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
+  compareRowBorder: { borderTopWidth: 1, borderColor: c.borderSubtle },
+  comparePerkCol: { flex: 1.5, paddingRight: 6 },
+  compareValCol: { flex: 0.9, textAlign: 'right' },
+  comparePerkText: { color: c.textPrimary, fontSize: 12, fontWeight: '700' },
+  compareFreeText: { color: c.textTertiary, fontSize: 11, fontWeight: '700' },
+  compareProText: { color: c.accent, fontSize: 11, fontWeight: '900' },
 
   perks: {
     backgroundColor: c.surface,
@@ -166,32 +254,22 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     gap: spacing.md,
     marginBottom: spacing.xl,
   },
-  perkRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  perkIcon: { color: c.accent, fontSize: 18, width: 24, textAlign: 'center' },
-  perkBody: { flex: 1 },
-  perkTitle: { color: c.textPrimary, fontSize: 13, fontWeight: '800' },
-  perkText: { color: c.textTertiary, fontSize: 11, marginTop: 2 },
-
-  section: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 1, marginBottom: spacing.md },
-  way: {
-    backgroundColor: c.surface,
-    borderRadius: radius.lg,
+  perkRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  perkIconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: c.accentMuted,
     borderWidth: 1,
-    borderColor: c.border,
-    padding: spacing.lg,
-    marginBottom: spacing.md,
+    borderColor: c.accentDim,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  wayFeatured: { borderColor: c.accentDim, backgroundColor: c.accentMuted },
-  wayHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
-  wayTitle: { color: c.textPrimary, fontSize: 14, fontWeight: '900', letterSpacing: 0.4 },
-  wayReward: { color: c.accent, fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
-  wayText: { color: c.textSecondary, fontSize: 12, lineHeight: 17, marginBottom: spacing.md },
-  barBg: { height: 8, borderRadius: 4, backgroundColor: c.surfaceRaised, overflow: 'hidden' },
-  barFill: { height: 8, borderRadius: 4, backgroundColor: c.accent },
-  barLabel: { color: c.textTertiary, fontSize: 11, fontWeight: '800', marginTop: 6 },
-  primaryBtn: { backgroundColor: c.accent, borderRadius: radius.md, paddingVertical: 14, alignItems: 'center', marginTop: spacing.md },
-  primaryText: { color: c.accentContrast, fontSize: 13, fontWeight: '900', letterSpacing: 0.5 },
+  perkIcon: { color: c.accent, fontSize: 16 },
+  perkBody: { flex: 1 },
+  perkTitle: { color: c.textPrimary, fontSize: 13, fontWeight: '900' },
+  perkText: { color: c.textTertiary, fontSize: 12, lineHeight: 17, marginTop: 2 },
 
-  goBtn: { borderRadius: radius.md, paddingVertical: 16, alignItems: 'center', marginTop: spacing.md, borderWidth: 1, borderColor: c.border },
-  goText: { color: c.textPrimary, fontSize: 14, fontWeight: '900', letterSpacing: 1 },
+  goBtn: { backgroundColor: c.accent, borderRadius: radius.md, paddingVertical: 16, alignItems: 'center' },
+  goText: { color: c.accentContrast, fontSize: 13, fontWeight: '900', letterSpacing: 0.8 },
 });

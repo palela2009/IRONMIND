@@ -88,10 +88,6 @@ export const InviteRewardOverlay: React.FC = () => {
                 <Text style={styles.perkText}>{f.title}</Text>
               </View>
             ))}
-            <View style={styles.perkRow}>
-              <Text style={styles.perkIcon}>◉</Text>
-              <Text style={styles.perkText}>Double coins on every win</Text>
-            </View>
           </View>
 
           <TouchableOpacity style={styles.btn} onPress={close} activeOpacity={0.88}>
