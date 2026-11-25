@@ -184,6 +184,20 @@ function RootNavigator() {
     [position, pageWidth]
   );
 
+  const resetToHome = () => {
+    position.stopAnimation();
+    position.setValue(0);
+    screenRef.current = 'HOME';
+    setScreen('HOME');
+  };
+
+  useEffect(() => {
+    resetToHome();
+    setShowPro(false);
+    setShowFreeze(false);
+    setNotificationTarget(null);
+  }, [fbUser?.uid]);
+
   const slideTo = (nextIndex: number) => {
     if (SCREEN_ORDER[nextIndex] !== screenRef.current) notifyTabChange(SCREEN_ORDER[nextIndex]);
     setScreen(SCREEN_ORDER[nextIndex]);
@@ -287,6 +301,7 @@ function RootNavigator() {
     await AsyncStorage.setItem('@ironmind_onboarded', 'true');
     await refreshEntitlement();
     await refreshSettings();
+    resetToHome();
     setIsOnboarded(true);
   };
 
