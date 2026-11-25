@@ -223,14 +223,21 @@ export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged, re
       )}
 
       <View style={styles.sectionRow}>
-        <Text style={styles.sectionLabel}>TRACKED APPS</Text>
-        <TouchableOpacity onPress={openEditor} activeOpacity={0.8}>
-          <Text style={styles.editLink}>{editing ? 'CLOSE' : 'EDIT APPS'}</Text>
+        <Text style={styles.sectionLabel}>TRACKED APPS ({monitoredApps.length})</Text>
+        <TouchableOpacity
+          style={[styles.editPill, editing && styles.editPillActive]}
+          onPress={openEditor}
+          activeOpacity={0.85}
+        >
+          <Text style={[styles.editPillText, editing && styles.editPillTextActive]}>
+            {editing ? '✕ CLOSE' : '＋ ADD / REMOVE'}
+          </Text>
         </TouchableOpacity>
       </View>
 
       {editing && (
         <View style={styles.editor}>
+          <Text style={styles.editorHeader}>SELECT APPS TO TRACK · {pending.length} / {APPS_LIST.length}</Text>
           {APPS_LIST.map((app) => {
             const on = pending.includes(app);
             return (
@@ -253,7 +260,7 @@ export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged, re
               <Text style={styles.cancelText}>CANCEL</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.saveBtn} onPress={save} disabled={saving} activeOpacity={0.85}>
-              {saving ? <ActivityIndicator color={palette.accentContrast} size="small" /> : <Text style={styles.saveText}>SAVE</Text>}
+              {saving ? <ActivityIndicator color={palette.accentContrast} size="small" /> : <Text style={styles.saveText}>SAVE APPS ({pending.length})</Text>}
             </TouchableOpacity>
           </View>
         </View>
@@ -381,6 +388,12 @@ export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged, re
           );
         })}
 
+      {!editing && monitoredApps.length > 0 && (
+        <TouchableOpacity style={styles.manageAppsBtn} onPress={openEditor} activeOpacity={0.85}>
+          <Text style={styles.manageAppsBtnText}>＋ ADD OR REMOVE TRACKED APPS</Text>
+        </TouchableOpacity>
+      )}
+
       {!editing && screenTime.length > 0 && (
         <>
           <Text style={styles.sectionLabelAlone}>ALL APPS TODAY</Text>
@@ -465,7 +478,29 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     marginTop: spacing.md,
     marginBottom: spacing.md,
   },
-  editLink: { color: c.accent, fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
+  editPill: {
+    backgroundColor: c.accentMuted,
+    borderWidth: 1,
+    borderColor: c.accentDim,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+  },
+  editPillActive: { backgroundColor: c.surfaceRaised, borderColor: c.border },
+  editPillText: { color: c.accent, fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
+  editPillTextActive: { color: c.textSecondary },
+  editorHeader: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 0.9, marginBottom: spacing.sm, paddingHorizontal: spacing.sm },
+  manageAppsBtn: {
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+    paddingVertical: 14,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: c.accentDim,
+    backgroundColor: c.accentMuted,
+    alignItems: 'center',
+  },
+  manageAppsBtnText: { color: c.accent, fontSize: 12, fontWeight: '900', letterSpacing: 0.6 },
 
   editor: {
     backgroundColor: c.surface,

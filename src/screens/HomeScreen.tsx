@@ -184,8 +184,8 @@ export const HomeScreen: React.FC<HomeProps> = ({
       : { text: `▼ ${formatMinutes(Math.max(0, average - totalToday))} under avg (${formatMinutes(average)})`, better: true, worse: false };
 
   const reclaimedMins =
-    reportedHours && reportedHours > 0 && !screenTimeLoading && trackedToday < reportedHours * 60
-      ? Math.round(reportedHours * 60 - trackedToday)
+    reportedHours && reportedHours > 0 && !screenTimeLoading && totalToday < reportedHours * 60
+      ? Math.round(reportedHours * 60 - totalToday)
       : 0;
 
   const rank = rankForLevel(stats.level);

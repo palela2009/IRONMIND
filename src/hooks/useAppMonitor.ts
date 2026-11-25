@@ -11,11 +11,12 @@ import { authedFetch } from '../utils/authFetch';
 const { UsageMonitor } = NativeModules;
 
 const GOAL_COPY: Record<string, string> = {
-  doomscroll: 'Break the endless feed loop',
-  focus: 'Protect your deep focus',
+  doomscroll: 'Kill the autopilot scroll loop',
+  focus: 'Protect your study & work focus',
+  morning: 'Start your mornings clean',
   habit: 'Rewire automatic checking',
   sleep: 'Protect your sleep tonight',
-  time: 'Reclaim your hours back',
+  time: 'Reclaim your free time',
 };
 
 let currentUid = '';

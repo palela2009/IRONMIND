@@ -9,7 +9,7 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { UserStats, ChallengeItem } from '../types/training';
 import { AnalyticsScreen } from './AnalyticsScreen';
 import { HistoryScreen } from './HistoryScreen';
-import { usePause, pauseMonitoring, resumeMonitoring, resetPauseCache, PAUSE_OPTIONS } from '../hooks/usePause';
+import { usePause, resumeMonitoring, resetPauseCache } from '../hooks/usePause';
 import { syncAppMonitor, revokeBackgroundSync } from '../hooks/useAppMonitor';
 import { useAuth } from '../context/AuthContext';
 import { usePro } from '../context/ProContext';
@@ -116,7 +116,6 @@ export const ProfileScreen: React.FC<ProfileProps> = ({
   const [showAnalytics, setShowAnalytics] = useState<boolean>(false);
   const [showHistory, setShowHistory] = useState<boolean>(false);
   const { paused, remaining } = usePause();
-  const [choosingPause, setChoosingPause] = useState<boolean>(false);
   const [monitoredApps, setMonitoredApps] = useState<string[]>([]);
 
   const [difficulty, setDifficulty] = useState<DifficultyLevel>(DEFAULT_DIFFICULTY);
@@ -604,7 +603,7 @@ export const ProfileScreen: React.FC<ProfileProps> = ({
         </TouchableOpacity>
       )}
 
-      {paused ? (
+      {paused && (
         <TouchableOpacity style={[styles.settingRow, styles.pauseRowActive]} onPress={resumeMonitoring} activeOpacity={0.8}>
           <View style={styles.settingCol}>
             <Text style={styles.pauseActiveLabel}>RESUME MONITORING</Text>
@@ -612,36 +611,6 @@ export const ProfileScreen: React.FC<ProfileProps> = ({
           </View>
           <Text style={styles.pauseActiveLabel}>▶</Text>
         </TouchableOpacity>
-      ) : (
-        <TouchableOpacity
-          style={styles.settingRow}
-          onPress={() => setChoosingPause((v) => !v)}
-          activeOpacity={0.8}
-        >
-          <View style={styles.settingCol}>
-            <Text style={styles.settingLabel}>PAUSE MONITORING</Text>
-            <Text style={styles.pauseSub}>For exams, deep work, or anything urgent</Text>
-          </View>
-          <Text style={styles.settingValue}>{choosingPause ? '×' : '❚❚'}</Text>
-        </TouchableOpacity>
-      )}
-
-      {!paused && choosingPause && (
-        <View style={styles.pauseChoices}>
-          {PAUSE_OPTIONS.map((o) => (
-            <TouchableOpacity
-              key={o.id}
-              style={styles.pauseChip}
-              onPress={async () => {
-                await pauseMonitoring(o.id);
-                setChoosingPause(false);
-              }}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.pauseChipText}>{o.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
       )}
 
       <TouchableOpacity style={styles.settingRow} onPress={openDifficultyEditor} activeOpacity={0.7}>

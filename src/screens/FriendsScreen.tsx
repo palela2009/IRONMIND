@@ -6,7 +6,8 @@ import { useThemedStyles, useTheme } from '../context/ThemeContext';
 import { Palette, radius, spacing } from '../theme';
 import { useFriends } from '../hooks/useFriends';
 import { useDuels, Duel, formatTimeLeft, formatAgo, DUEL_REACTIONS, reactionText, appsOf } from '../hooks/useDuels';
-import { useScreenTime, formatMinutes, trackedTotal, todayKey } from '../hooks/useScreenTime';
+import { useScreenTime, formatMinutes, todayKey } from '../hooks/useScreenTime';
+import { totalUsageMinutes } from '../utils/screenTime';
 import { AppIcon } from '../components/AppIcon';
 import { SwordsClash } from '../components/SwordsClash';
 import { useInvites, daysLabel, inviteMessage } from '../hooks/useInvites';
@@ -145,11 +146,11 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats, isActive = true, 
   const [adding, setAdding] = useState(false);
   const [addResult, setAddResult] = useState<'idle' | 'accepted' | 'pending' | 'err'>('idle');
 
-  const { tracked: monitoredApps, trackedToday, week } = useScreenTime();
+  const { tracked: monitoredApps, totalToday, week } = useScreenTime();
   const myWeekAvg = useMemo(() => {
-    const past = week.filter((w) => w.date < todayKey()).slice(-7).map((w) => trackedTotal(w.apps, monitoredApps));
-    return past.length ? past.reduce((a, b) => a + b, 0) / past.length : trackedToday;
-  }, [week, monitoredApps, trackedToday]);
+    const past = week.filter((w) => w.date < todayKey()).slice(-7).map((w) => totalUsageMinutes(w.apps));
+    return past.length ? past.reduce((a, b) => a + b, 0) / past.length : totalToday;
+  }, [week, totalToday]);
 
   const [profile, setProfile] = useState<Entry | null>(null);
   const [duelTarget, setDuelTarget] = useState<Entry | null>(null);
@@ -173,7 +174,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats, isActive = true, 
       badge: topBadgeFor(stats, isPro, isOwner),
       frame: equippedFrame,
       nameEffect: equippedNameEffect,
-      todayMinutes: trackedToday,
+      todayMinutes: totalToday,
       hasTodayData: true,
       weekAvgMinutes: myWeekAvg,
       trackedApps: monitoredApps,
@@ -227,7 +228,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats, isActive = true, 
       if (a.hasTodayData !== b.hasTodayData) return a.hasTodayData ? -1 : 1;
       return a.todayMinutes - b.todayMinutes || b.currentStreak - a.currentStreak || b.level - a.level;
     });
-  }, [fbUser?.uid, fbUser?.displayName, fbUser?.photoURL, stats, friends, isPro, isOwner, equippedFrame, equippedNameEffect, trackedToday, myWeekAvg, monitoredApps, sortLane]);
+  }, [fbUser?.uid, fbUser?.displayName, fbUser?.photoURL, stats, friends, isPro, isOwner, equippedFrame, equippedNameEffect, totalToday, myWeekAvg, monitoredApps, sortLane]);
 
   const handleCopy = async () => {
     if (!code) return;
@@ -393,7 +394,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats, isActive = true, 
       ? 'LONGEST ACTIVE STREAK WINS'
       : sortLane === 'SPEED'
       ? 'FASTEST CHALLENGE EXIT WINS'
-      : 'LEAST TRACKED TIME TODAY WINS';
+      : 'LEAST TOTAL SCREEN TIME TODAY WINS';
 
   return (
     <ScrollView
