@@ -20,7 +20,8 @@ const publish = (next: Partial<Store>) => { store = { ...store, ...next }; liste
 export const refreshScreenTime = (upload = true): Promise<void> => {
   const uid = auth.currentUser?.uid;
   if (!uid) return Promise.resolve();
-  const existing = inFlight.get(uid);
+  const flightKey = `${uid}:${upload ? 'up' : 'local'}`;
+  const existing = inFlight.get(flightKey);
   if (existing) return existing;
   const run = async () => {
     const current = () => auth.currentUser?.uid === uid;
@@ -45,6 +46,11 @@ export const refreshScreenTime = (upload = true): Promise<void> => {
       publish({ week: cache.week });
       for (const date of Object.keys(cache.pending).sort()) {
         const res = await authedFetch(`${API_BASE_URL}/api/screentime`, { method: 'POST', body: JSON.stringify({ date, apps: cache.pending[date] }) }, uid);
+        if (res.status === 400 || res.status === 422) {
+          delete cache.pending[date];
+          await AsyncStorage.setItem(key, JSON.stringify(cache));
+          continue;
+        }
         if (!res.ok) throw new Error('Screen time sync failed');
         if (!current()) return;
         delete cache.pending[date];
@@ -61,8 +67,8 @@ export const refreshScreenTime = (upload = true): Promise<void> => {
       if (current()) publish({ week: cache.week, syncError: false });
     } catch { if (current()) publish({ loading: false, syncError: true }); }
   };
-  const promise = run().finally(() => inFlight.delete(uid));
-  inFlight.set(uid, promise);
+  const promise = run().finally(() => inFlight.delete(flightKey));
+  inFlight.set(flightKey, promise);
   return promise;
 };
 

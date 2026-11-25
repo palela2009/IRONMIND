@@ -1,7 +1,13 @@
 package com.anonymous.IRONMIND
 
+import org.json.JSONArray
 import org.json.JSONObject
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.UUID
+import java.util.concurrent.Executors
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -28,6 +34,7 @@ class UsageMonitorService : Service() {
     private var pendingWin: PendingWin? = null
 
     private val handler = Handler(Looper.getMainLooper())
+    private val syncExecutor = Executors.newSingleThreadExecutor()
     private var monitoredPackages: List<Pair<String, String>> = emptyList()
     private var lastChallengedApp: String? = null
     private var lastChallengeTime: Long = 0
@@ -39,20 +46,12 @@ class UsageMonitorService : Service() {
     private var appLimits: Map<String, Int> = emptyMap()
     private var warnedToday: MutableSet<String> = mutableSetOf()
     private var warnedDate: String = ""
-
-    private val APP_PACKAGES = mapOf(
-        "Instagram" to "com.instagram.android",
-        "YouTube" to "com.google.android.youtube",
-        "TikTok" to "com.zhiliaoapp.musically",
-        "Facebook" to "com.facebook.katana",
-        "X (Twitter)" to "com.twitter.android",
-        "Reddit" to "com.reddit.frontpage",
-        "Snapchat" to "com.snapchat.android"
-    )
+    private var lastBackgroundSyncAt: Long = 0L
 
     private val pollRunnable = object : Runnable {
         override fun run() {
             try { checkForegroundApp() } catch (e: Exception) { android.util.Log.e("IRONMIND", "Monitor tick failed", e) }
+            try { maybeRunBackgroundSync() } catch (_: Exception) {}
             handler.postDelayed(this, 2000)
         }
     }
@@ -85,8 +84,8 @@ class UsageMonitorService : Service() {
         appLimits = loadLimits()
 
         val config = loadConfig()
-        monitoredPackages = config.first.mapNotNull { appName ->
-            APP_PACKAGES[appName]?.let { pkg -> Pair(appName, pkg) }
+        monitoredPackages = config.first.flatMap { appName ->
+            packagesForApp(appName).map { pkg -> Pair(appName, pkg) }
         }
         challengeWindowMs = (config.second * 1000).toLong()
         maxDailyChallenges = config.third.toInt()
@@ -114,45 +113,152 @@ class UsageMonitorService : Service() {
         val raw = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString("appLimits", null)
             ?: return emptyMap()
         return try {
-            val obj = org.json.JSONObject(raw)
+            val obj = JSONObject(raw)
             obj.keys().asSequence().associateWith { obj.getInt(it) }
         } catch (_: Exception) {
             emptyMap()
         }
     }
 
-    private fun minutesUsedToday(pkg: String): Int {
-        val usm = getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager ?: return 0
+    private fun foregroundTimesForRange(startMs: Long, endMs: Long): Map<String, Long> {
+        val usm = getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager ?: return emptyMap()
+        val cutoff = minOf(endMs, System.currentTimeMillis())
+        if (cutoff <= startMs) return emptyMap()
+        val events = usm.queryEvents(maxOf(0L, startMs - 86_400_000L), cutoff) ?: return emptyMap()
+        val timeline = UsageTimeline(startMs, cutoff)
+        val event = android.app.usage.UsageEvents.Event()
+        while (events.hasNextEvent()) {
+            events.getNextEvent(event)
+            timeline.onEvent(event.packageName, event.eventType, event.timeStamp)
+        }
+        return timeline.totals()
+    }
+
+    private fun minutesUsedToday(appName: String): Int {
         val cal = java.util.Calendar.getInstance()
         cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
         cal.set(java.util.Calendar.MINUTE, 0)
         cal.set(java.util.Calendar.SECOND, 0)
         cal.set(java.util.Calendar.MILLISECOND, 0)
+        val totals = foregroundTimesForRange(cal.timeInMillis, System.currentTimeMillis())
+        val totalMs = packagesForApp(appName).sumOf { totals[it] ?: 0L }
+        return (totalMs / 60_000L).toInt()
+    }
+
+    private fun maybeRunBackgroundSync() {
         val now = System.currentTimeMillis()
+        if (now - lastBackgroundSyncAt < BACKGROUND_SYNC_INTERVAL_MS) return
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val uid = prefs.getString("uid", null)?.takeIf { it.isNotBlank() } ?: return
+        val token = prefs.getString("syncToken", null)?.takeIf { it.isNotBlank() } ?: return
+        val apiBase = prefs.getString("apiBaseUrl", null)?.takeIf { it.startsWith("http") } ?: return
+        lastBackgroundSyncAt = now
+        syncExecutor.execute {
+            runBackgroundSync(apiBase.trimEnd('/'), uid, token)
+        }
+    }
 
-        val events = usm.queryEvents(cal.timeInMillis, now) ?: return 0
-        val event = android.app.usage.UsageEvents.Event()
-        var total = 0L
-        var openedAt = 0L
+    private fun runBackgroundSync(apiBase: String, uid: String, token: String) {
+        try {
+            val authHeader = "Sync $uid:$token"
+            val cal = java.util.Calendar.getInstance()
+            cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+            cal.set(java.util.Calendar.MINUTE, 0)
+            cal.set(java.util.Calendar.SECOND, 0)
+            cal.set(java.util.Calendar.MILLISECOND, 0)
+            val now = System.currentTimeMillis()
+            val todayTotals = foregroundTimesForRange(cal.timeInMillis, now)
+            val pm = packageManager
+            val homeIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+            val launcherPkg = pm.resolveActivity(homeIntent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
+                ?.activityInfo?.packageName
+            val skip = setOf("android", "com.android.systemui", launcherPkg)
 
-        while (events.hasNextEvent()) {
-            events.getNextEvent(event)
-            if (event.packageName != pkg) continue
-            when (event.eventType) {
-                android.app.usage.UsageEvents.Event.MOVE_TO_FOREGROUND,
-                android.app.usage.UsageEvents.Event.ACTIVITY_RESUMED -> openedAt = event.timeStamp
-                android.app.usage.UsageEvents.Event.MOVE_TO_BACKGROUND,
-                android.app.usage.UsageEvents.Event.ACTIVITY_PAUSED -> {
-                    if (openedAt > 0L) {
-                        total += event.timeStamp - openedAt
-                        openedAt = 0L
+            val appsArray = JSONArray()
+            val byName = mutableMapOf<String, Double>()
+            for ((pkg, ms) in todayTotals) {
+                if (ms <= 0L || pkg in skip) continue
+                if (pm.getLaunchIntentForPackage(pkg) == null) continue
+                val friendly = appNameForPackage(pkg) ?: try {
+                    pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+                } catch (_: Exception) { continue }
+                byName[friendly] = (byName[friendly] ?: 0.0) + (ms / 60_000.0)
+            }
+            for ((name, mins) in byName.entries.sortedByDescending { it.value }.take(60)) {
+                appsArray.put(JSONObject().put("app", name).put("minutes", mins.coerceIn(0.0, 1440.0)))
+            }
+
+            val duelReports = JSONArray()
+            val duelsResp = httpGetJson("$apiBase/api/sync/duels", authHeader)
+            val duels = duelsResp?.optJSONArray("duels")
+            if (duels != null) {
+                for (i in 0 until duels.length()) {
+                    val d = duels.optJSONObject(i) ?: continue
+                    val id = d.optString("id", "")
+                    val startAt = d.optLong("startAt", 0L)
+                    val endAt = d.optLong("endAt", 0L)
+                    if (id.isEmpty() || startAt <= 0L) continue
+                    val rangeEnd = if (endAt > 0L) minOf(now, endAt) else now
+                    if (rangeEnd <= startAt) continue
+                    val targetApps = mutableSetOf<String>()
+                    val arr = d.optJSONArray("apps")
+                    if (arr != null) {
+                        for (j in 0 until arr.length()) {
+                            arr.optString(j)?.takeIf { it.isNotBlank() }?.let { targetApps.add(it) }
+                        }
                     }
+                    if (targetApps.isEmpty()) continue
+                    val rangeTotals = foregroundTimesForRange(startAt, rangeEnd)
+                    var duelMs = 0L
+                    for ((pkg, ms) in rangeTotals) {
+                        val friendly = appNameForPackage(pkg) ?: try {
+                            pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+                        } catch (_: Exception) { null }
+                        if (friendly != null && friendly in targetApps) duelMs += ms
+                    }
+                    duelReports.put(JSONObject().put("id", id).put("minutes", (duelMs / 60_000.0).coerceIn(0.0, 1440.0)))
                 }
             }
-        }
-        if (openedAt > 0L) total += now - openedAt
 
-        return (total / 60000L).toInt()
+            val payload = JSONObject()
+                .put("date", TrustedClock.dayKey(this))
+                .put("apps", appsArray)
+                .put("duelReports", duelReports)
+            httpPostJson("$apiBase/api/sync/usage", authHeader, payload.toString())
+        } catch (_: Exception) {}
+    }
+
+    private fun httpGetJson(urlStr: String, authHeader: String): JSONObject? {
+        val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = 8_000
+            readTimeout = 8_000
+            setRequestProperty("Authorization", authHeader)
+        }
+        return try {
+            if (conn.responseCode !in 200..299) return null
+            val text = BufferedReader(InputStreamReader(conn.inputStream)).use { it.readText() }
+            JSONObject(text)
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    private fun httpPostJson(urlStr: String, authHeader: String, body: String): Boolean {
+        val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            connectTimeout = 8_000
+            readTimeout = 8_000
+            doOutput = true
+            setRequestProperty("Authorization", authHeader)
+            setRequestProperty("Content-Type", "application/json")
+        }
+        return try {
+            conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+            conn.responseCode in 200..299
+        } finally {
+            conn.disconnect()
+        }
     }
 
     private fun loadConfig(): Triple<List<String>, Double, Double> {
@@ -219,14 +325,15 @@ class UsageMonitorService : Service() {
         if (BuildConfig.IRONMIND_REELS_TEST && reelsChallengeInProgress) return
         for ((appName, pkg) in monitoredPackages) {
             if (foreground == pkg) {
-                if (usesShortVideoChallenges(pkg)) return
                 val limit = appLimits[appName] ?: 0
-                val used = if (limit > 0) minutesUsedToday(pkg) else 0
+                val used = if (limit > 0) minutesUsedToday(appName) else 0
                 val overBudget = limit > 0 && used >= limit
 
                 if (limit > 0 && !overBudget && used >= (limit * 8 / 10)) {
                     maybeWarn(appName, limit - used)
                 }
+
+                if (usesShortVideoChallenges(pkg) && !overBudget) return
 
                 val inCooldown = lastChallengeTime > 0L && (now - lastChallengeTime) < cooldownMs
                 val allowed = overBudget || (!inCooldown && getFiredCountToday() < maxDailyChallenges)
@@ -399,12 +506,16 @@ class UsageMonitorService : Service() {
     private fun fireChallengeNotification(appName: String, overBudget: Boolean = false) {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val windowSeconds = challengeWindowMs / 1000
+        val goal = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString("userGoal", null)?.takeIf { it.isNotBlank() }
+        val body = when {
+            overBudget -> "$appName is past its daily limit — exit in $windowSeconds seconds."
+            goal != null -> "Exit $appName in $windowSeconds seconds · Remember why: $goal"
+            else -> "You opened $appName — exit in $windowSeconds seconds."
+        }
         val notification = NotificationCompat.Builder(this, CHALLENGE_CHANNEL)
             .setContentTitle(if (overBudget) "OVER YOUR LIMIT" else "IRONMIND CHALLENGE")
-            .setContentText(
-                if (overBudget) "$appName is past its daily limit — exit in $windowSeconds seconds."
-                else "You opened $appName — exit in $windowSeconds seconds."
-            )
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setSmallIcon(R.drawable.notification_icon)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
@@ -448,6 +559,7 @@ class UsageMonitorService : Service() {
         if (BuildConfig.IRONMIND_REELS_TEST) reelsForegroundPackage = null
         super.onDestroy()
         handler.removeCallbacks(pollRunnable)
+        syncExecutor.shutdownNow()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -468,5 +580,21 @@ class UsageMonitorService : Service() {
         const val FOREGROUND_LOOKBACK_MS = 60_000L
         const val STUCK_CHALLENGE_MS = 10 * 60 * 1000L
         const val REENTRY_MS = 20_000L
+        const val BACKGROUND_SYNC_INTERVAL_MS = 15 * 60 * 1000L
+
+        private val APP_PACKAGE_MAP = mapOf(
+            "Instagram" to listOf("com.instagram.android"),
+            "YouTube" to listOf("com.google.android.youtube"),
+            "TikTok" to listOf("com.zhiliaoapp.musically", "com.ss.android.ugc.trill"),
+            "Facebook" to listOf("com.facebook.katana"),
+            "X (Twitter)" to listOf("com.twitter.android"),
+            "Reddit" to listOf("com.reddit.frontpage"),
+            "Snapchat" to listOf("com.snapchat.android")
+        )
+
+        fun packagesForApp(appName: String): List<String> = APP_PACKAGE_MAP[appName] ?: emptyList()
+
+        fun appNameForPackage(pkg: String): String? =
+            APP_PACKAGE_MAP.entries.firstOrNull { pkg in it.value }?.key
     }
 }

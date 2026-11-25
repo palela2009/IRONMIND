@@ -29,7 +29,7 @@ export const appAlert = (title: string, message?: string, buttons?: DialogButton
 
 export const AppDialogHost: React.FC = () => {
   const styles = useThemedStyles(makeStyles);
-  const [items, setItems] = useState<DialogRequest[]>([]);
+  const [items, setItems] = useState<DialogRequest[]>(() => [...queue]);
   const fade = useRef(new Animated.Value(0)).current;
   const pop = useRef(new Animated.Value(0.92)).current;
 

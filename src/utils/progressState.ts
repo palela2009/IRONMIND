@@ -16,9 +16,18 @@ export interface ProgressSnapshot {
 export const EMPTY_PROGRESS: ProgressSnapshot = { stats: INITIAL_STATS, history: [], streakFreezes: 0, pending: [] };
 
 export function mergeHistory(local: ChallengeItem[], cloud: ChallengeItem[]): ChallengeItem[] {
-  const items = new Map(local.map((item) => [`${item.targetApp}:${item.timestamp}`, item]));
-  for (const item of cloud) items.set(`${item.targetApp}:${item.timestamp}`, item);
-  return [...items.values()].sort((a, b) => b.timestamp - a.timestamp);
+  const byStamp = new Map<string, ChallengeItem>();
+  const byId = new Map<string, string>();
+  const upsert = (item: ChallengeItem) => {
+    const stampKey = `${item.targetApp}:${item.timestamp}`;
+    const existingStamp = item.id ? byId.get(item.id) : undefined;
+    if (existingStamp && existingStamp !== stampKey) byStamp.delete(existingStamp);
+    byStamp.set(stampKey, item);
+    if (item.id) byId.set(item.id, stampKey);
+  };
+  for (const item of local) upsert(item);
+  for (const item of cloud) upsert(item);
+  return [...byStamp.values()].sort((a, b) => b.timestamp - a.timestamp);
 }
 
 export function projectProgress(snapshot: ProgressSnapshot, dailyLimit: number) {
@@ -31,7 +40,10 @@ export function projectProgress(snapshot: ProgressSnapshot, dailyLimit: number) 
     const day = challengeDay(item.timestamp, timeZone);
     counts.set(day, (counts.get(day) ?? 0) + 1);
   }
-  const pending = snapshot.pending.filter((item) => Number.isFinite(item.timestamp) && Number.isFinite(new Date(item.timestamp).getTime())).map((item) => {
+  const sortedPending = [...snapshot.pending]
+    .filter((item) => Number.isFinite(item.timestamp) && Number.isFinite(new Date(item.timestamp).getTime()))
+    .sort((a, b) => a.timestamp - b.timestamp);
+  const pending = sortedPending.map((item) => {
     const day = challengeDay(item.timestamp, timeZone);
     const count = counts.get(day) ?? 0;
     counts.set(day, count + 1);

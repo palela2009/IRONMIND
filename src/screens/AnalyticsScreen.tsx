@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemedStyles, useTheme } from '../context/ThemeContext';
 import { Palette, radius, spacing, cardShadow } from '../theme';
 import { useAnalytics, dayLabel, trendFor } from '../hooks/useAnalytics';
-import { formatMinutes } from '../hooks/useScreenTime';
+import { formatMinutes, todayKey } from '../hooks/useScreenTime';
 import { colorForApp } from '../constants/apps';
 import { AppIcon } from '../components/AppIcon';
 import { ChallengeItem, UserStats } from '../types/training';
@@ -21,7 +22,7 @@ export const AnalyticsScreen: React.FC<Props> = ({ visible, onClose, history, st
   const styles = useThemedStyles(makeStyles);
   const palette = useTheme();
   const [days, setDays] = useState<number>(14);
-  const { history: usage, loading } = useAnalytics(30);
+  const { history: usage, loading } = useAnalytics(30, visible);
 
   const window = useMemo(() => usage.slice(-days), [usage, days]);
 
@@ -78,7 +79,7 @@ export const AnalyticsScreen: React.FC<Props> = ({ visible, onClose, history, st
 
     const byDay = new Map<string, number[]>();
     for (const h of wins) {
-      const key = new Date(h.timestamp).toISOString().slice(0, 10);
+      const key = todayKey(new Date(h.timestamp));
       byDay.set(key, [...(byDay.get(key) ?? []), h.elapsedTime]);
     }
 
@@ -99,14 +100,15 @@ export const AnalyticsScreen: React.FC<Props> = ({ visible, onClose, history, st
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View style={styles.root}>
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <SafeAreaView style={styles.root}>
+        <View style={styles.topBar}>
+          <Text style={styles.title}>ANALYTICS</Text>
           <TouchableOpacity style={styles.close} onPress={onClose} activeOpacity={0.8}>
             <Text style={styles.closeText}>✕</Text>
           </TouchableOpacity>
+        </View>
 
-          <Text style={styles.title}>ANALYTICS</Text>
-
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.rangeRow}>
             {RANGES.map((r) => (
               <TouchableOpacity
@@ -124,10 +126,9 @@ export const AnalyticsScreen: React.FC<Props> = ({ visible, onClose, history, st
             <ActivityIndicator color={palette.accent} style={styles.loader} />
           ) : window.length === 0 ? (
             <View style={styles.empty}>
-              <Text style={styles.emptyTitle}>NO DATA YET</Text>
+              <Text style={styles.emptyTitle}>SCREEN TIME COLLECTING</Text>
               <Text style={styles.emptySub}>
-                Screen time is recorded each day you use IRONMIND. Come back tomorrow to see your
-                first trend.
+                Daily screen-time bars appear as IRONMIND logs your usage. Your challenge and escape-speed stats are already live below.
               </Text>
             </View>
           ) : (
@@ -221,187 +222,195 @@ export const AnalyticsScreen: React.FC<Props> = ({ visible, onClose, history, st
                   ))
                 )}
               </View>
-
-              <Text style={styles.section}>REACTION TREND</Text>
-              <View style={styles.card}>
-                {reaction.count < 2 ? (
-                  <Text style={styles.cardSub}>
-                    Win a few challenges and your escape times will show up here.
-                  </Text>
-                ) : (
-                  <>
-                    <View style={styles.heroRow}>
-                      <Text style={styles.hero}>{reaction.lastAvg.toFixed(2)}s</Text>
-                      {reaction.trend.hasData && (
-                        <View
-                          style={[
-                            styles.trendPill,
-                            { backgroundColor: reaction.trend.change <= 0 ? palette.accentMuted : palette.dangerMuted },
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.trendText,
-                              { color: reaction.trend.change <= 0 ? palette.accent : palette.danger },
-                            ]}
-                          >
-                            {reaction.trend.change <= 0 ? '▼' : '▲'} {Math.abs(Math.round(reaction.trend.change))}%
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                    <Text style={styles.cardSub}>
-                      {reaction.trend.hasData
-                        ? reaction.trend.change <= 0
-                          ? `You are ${Math.abs(reaction.firstAvg - reaction.lastAvg).toFixed(2)}s faster than at the start of this period.`
-                          : `You are ${Math.abs(reaction.lastAvg - reaction.firstAvg).toFixed(2)}s slower than at the start of this period.`
-                        : 'A few more days of challenges and a trend will appear.'}
-                    </Text>
-
-                    <View style={styles.chart}>
-                      {reaction.daily.map((d) => {
-                        const worst = Math.max(...reaction.daily.map((x) => x.avg), 0.01);
-                        return (
-                          <View key={d.date} style={styles.chartCol}>
-                            <View style={styles.chartBarTrack}>
-                              <View
-                                style={[
-                                  styles.chartBar,
-                                  {
-                                    height: `${Math.max((d.avg / worst) * 100, 3)}%`,
-                                    backgroundColor: d.avg <= reaction.firstAvg ? palette.accent : palette.danger,
-                                  },
-                                ]}
-                              />
-                            </View>
-                            <Text style={styles.chartLabel}>{dayLabel(d.date)}</Text>
-                          </View>
-                        );
-                      })}
-                    </View>
-
-                    <View style={styles.statRow}>
-                      <View style={styles.statCell}>
-                        <Text style={[styles.statVal, styles.accentVal]}>{reaction.best.toFixed(2)}s</Text>
-                        <Text style={styles.statLabel}>FASTEST</Text>
-                      </View>
-                      <View style={styles.statDivider} />
-                      <View style={styles.statCell}>
-                        <Text style={styles.statVal}>{reaction.firstAvg.toFixed(2)}s</Text>
-                        <Text style={styles.statLabel}>WHERE YOU STARTED</Text>
-                      </View>
-                      <View style={styles.statDivider} />
-                      <View style={styles.statCell}>
-                        <Text style={styles.statVal}>{reaction.count}</Text>
-                        <Text style={styles.statLabel}>ESCAPES</Text>
-                      </View>
-                    </View>
-                  </>
-                )}
-              </View>
-
-              <Text style={styles.section}>CHALLENGE PERFORMANCE</Text>
-              <View style={styles.card}>
-                <View style={styles.statRow}>
-                  <View style={styles.statCell}>
-                    <Text style={[styles.statVal, styles.accentVal]}>{challengeStats.rate}%</Text>
-                    <Text style={styles.statLabel}>SUCCESS</Text>
-                  </View>
-                  <View style={styles.statDivider} />
-                  <View style={styles.statCell}>
-                    <Text style={styles.statVal}>{challengeStats.total}</Text>
-                    <Text style={styles.statLabel}>CHALLENGES</Text>
-                  </View>
-                  <View style={styles.statDivider} />
-                  <View style={styles.statCell}>
-                    <Text style={styles.statVal}>
-                      {challengeStats.avgTime > 0 ? `${challengeStats.avgTime.toFixed(2)}s` : '—'}
-                    </Text>
-                    <Text style={styles.statLabel}>AVG EXIT</Text>
-                  </View>
-                </View>
-
-                {challengeStats.byApp.length > 0 && <View style={styles.hairline} />}
-
-                {challengeStats.byApp.map((a) => (
-                  <View key={a.app} style={styles.perfRow}>
-                    <Text style={styles.perfApp} numberOfLines={1}>{a.app}</Text>
-                    <View style={styles.appBarTrack}>
-                      <View
-                        style={[
-                          styles.appBar,
-                          {
-                            width: `${Math.max(a.rate, 3)}%`,
-                            backgroundColor: a.rate >= 50 ? palette.accent : palette.danger,
-                          },
-                        ]}
-                      />
-                    </View>
-                    <Text style={styles.perfRate}>{a.rate}%</Text>
-                    <Text style={styles.perfCount}>{a.won}/{a.total}</Text>
-                  </View>
-                ))}
-              </View>
-
-              <Text style={styles.section}>RECORDS</Text>
-              <View style={styles.card}>
-                <View style={styles.recordRow}>
-                  <Text style={styles.recordLabel}>Best exit</Text>
-                  <Text style={styles.recordVal}>
-                    {stats.bestReactionTime > 0 ? `${stats.bestReactionTime.toFixed(2)}s` : '—'}
-                  </Text>
-                </View>
-                <View style={styles.hairline} />
-                <View style={styles.recordRow}>
-                  <Text style={styles.recordLabel}>Longest run</Text>
-                  <Text style={styles.recordVal}>{stats.longestStreak}</Text>
-                </View>
-                <View style={styles.hairline} />
-                <View style={styles.recordRow}>
-                  <Text style={styles.recordLabel}>Lifetime challenges</Text>
-                  <Text style={styles.recordVal}>{stats.totalChallenges}</Text>
-                </View>
-                <View style={styles.hairline} />
-                <View style={styles.recordRow}>
-                  <Text style={styles.recordLabel}>Lifetime success</Text>
-                  <Text style={styles.recordVal}>
-                    {stats.totalChallenges > 0
-                      ? `${Math.round((stats.successCount / stats.totalChallenges) * 100)}%`
-                      : '—'}
-                  </Text>
-                </View>
-              </View>
             </>
           )}
+
+          <Text style={styles.section}>REACTION TREND</Text>
+          <View style={styles.card}>
+            {reaction.count < 2 ? (
+              <Text style={styles.cardSub}>
+                Win a couple of challenges and your escape-speed trend will appear here.
+              </Text>
+            ) : (
+              <>
+                <View style={styles.heroRow}>
+                  <Text style={styles.hero}>{reaction.lastAvg.toFixed(2)}s</Text>
+                  {reaction.trend.hasData && (
+                    <View
+                      style={[
+                        styles.trendPill,
+                        { backgroundColor: reaction.trend.change <= 0 ? palette.accentMuted : palette.dangerMuted },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.trendText,
+                          { color: reaction.trend.change <= 0 ? palette.accent : palette.danger },
+                        ]}
+                      >
+                        {reaction.trend.change <= 0 ? '▼' : '▲'} {Math.abs(Math.round(reaction.trend.change))}%
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                <Text style={styles.cardSub}>
+                  {reaction.trend.hasData
+                    ? reaction.trend.change <= 0
+                      ? `You are ${Math.abs(reaction.firstAvg - reaction.lastAvg).toFixed(2)}s faster than at the start of this period.`
+                      : `You are ${Math.abs(reaction.lastAvg - reaction.firstAvg).toFixed(2)}s slower than at the start of this period.`
+                    : 'A few more days of challenges and a trend will appear.'}
+                </Text>
+
+                <View style={styles.chart}>
+                  {reaction.daily.map((d) => {
+                    const worst = Math.max(...reaction.daily.map((x) => x.avg), 0.01);
+                    return (
+                      <View key={d.date} style={styles.chartCol}>
+                        <View style={styles.chartBarTrack}>
+                          <View
+                            style={[
+                              styles.chartBar,
+                              {
+                                height: `${Math.max((d.avg / worst) * 100, 3)}%`,
+                                backgroundColor: d.avg <= reaction.firstAvg ? palette.accent : palette.danger,
+                              },
+                            ]}
+                          />
+                        </View>
+                        <Text style={styles.chartLabel}>{dayLabel(d.date)}</Text>
+                      </View>
+                    );
+                  })}
+                </View>
+
+                <View style={styles.statRow}>
+                  <View style={styles.statCell}>
+                    <Text style={[styles.statVal, styles.accentVal]}>{reaction.best.toFixed(2)}s</Text>
+                    <Text style={styles.statLabel}>FASTEST</Text>
+                  </View>
+                  <View style={styles.statDivider} />
+                  <View style={styles.statCell}>
+                    <Text style={styles.statVal}>{reaction.firstAvg.toFixed(2)}s</Text>
+                    <Text style={styles.statLabel}>START AVG</Text>
+                  </View>
+                  <View style={styles.statDivider} />
+                  <View style={styles.statCell}>
+                    <Text style={styles.statVal}>{reaction.count}</Text>
+                    <Text style={styles.statLabel}>ESCAPES</Text>
+                  </View>
+                </View>
+              </>
+            )}
+          </View>
+
+          <Text style={styles.section}>CHALLENGE PERFORMANCE</Text>
+          <View style={styles.card}>
+            <View style={styles.statRowTop}>
+              <View style={styles.statCell}>
+                <Text style={[styles.statVal, styles.accentVal]}>{challengeStats.rate}%</Text>
+                <Text style={styles.statLabel}>SUCCESS</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statCell}>
+                <Text style={styles.statVal}>{challengeStats.total}</Text>
+                <Text style={styles.statLabel}>CHALLENGES</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statCell}>
+                <Text style={styles.statVal}>
+                  {challengeStats.avgTime > 0 ? `${challengeStats.avgTime.toFixed(2)}s` : '—'}
+                </Text>
+                <Text style={styles.statLabel}>AVG EXIT</Text>
+              </View>
+            </View>
+
+            {challengeStats.byApp.length > 0 && <View style={styles.hairline} />}
+
+            {challengeStats.byApp.map((a) => (
+              <View key={a.app} style={styles.perfRow}>
+                <Text style={styles.perfApp} numberOfLines={1}>{a.app}</Text>
+                <View style={styles.appBarTrack}>
+                  <View
+                    style={[
+                      styles.appBar,
+                      {
+                        width: `${Math.max(a.rate, 3)}%`,
+                        backgroundColor: a.rate >= 50 ? palette.accent : palette.danger,
+                      },
+                    ]}
+                  />
+                </View>
+                <Text style={styles.perfRate}>{a.rate}%</Text>
+                <Text style={styles.perfCount}>{a.won}/{a.total}</Text>
+              </View>
+            ))}
+          </View>
+
+          <Text style={styles.section}>RECORDS</Text>
+          <View style={styles.card}>
+            <View style={styles.recordRow}>
+              <Text style={styles.recordLabel}>Best exit</Text>
+              <Text style={styles.recordVal}>
+                {stats.bestReactionTime > 0 ? `${stats.bestReactionTime.toFixed(2)}s` : '—'}
+              </Text>
+            </View>
+            <View style={styles.hairline} />
+            <View style={styles.recordRow}>
+              <Text style={styles.recordLabel}>Longest streak</Text>
+              <Text style={styles.recordVal}>{stats.longestStreak}</Text>
+            </View>
+            <View style={styles.hairline} />
+            <View style={styles.recordRow}>
+              <Text style={styles.recordLabel}>Lifetime challenges</Text>
+              <Text style={styles.recordVal}>{stats.totalChallenges}</Text>
+            </View>
+            <View style={styles.hairline} />
+            <View style={styles.recordRow}>
+              <Text style={styles.recordLabel}>Lifetime win rate</Text>
+              <Text style={styles.recordVal}>
+                {stats.totalChallenges > 0
+                  ? `${Math.round((stats.successCount / stats.totalChallenges) * 100)}%`
+                  : '—'}
+              </Text>
+            </View>
+          </View>
         </ScrollView>
-      </View>
+      </SafeAreaView>
     </Modal>
   );
 };
 
 const makeStyles = (c: Palette) => StyleSheet.create({
   root: { flex: 1, backgroundColor: c.bg },
-  content: { padding: spacing.lg, paddingTop: 56, paddingBottom: 48 },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
+  },
+  content: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: 48 },
 
-  close: { position: 'absolute', top: 52, right: spacing.lg, width: 36, height: 36, borderRadius: 18, backgroundColor: c.surfaceRaised, justifyContent: 'center', alignItems: 'center', zIndex: 2 },
+  close: { width: 36, height: 36, borderRadius: 18, backgroundColor: c.surfaceRaised, justifyContent: 'center', alignItems: 'center' },
   closeText: { color: c.textSecondary, fontSize: 14, fontWeight: '900' },
 
-  title: { color: c.textPrimary, fontSize: 26, fontWeight: '900', letterSpacing: -0.5, marginBottom: spacing.lg },
+  title: { color: c.textPrimary, fontSize: 24, fontWeight: '900', letterSpacing: -0.5 },
 
-  rangeRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.xl },
+  rangeRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.lg },
   rangeChip: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radius.pill, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border },
   rangeChipOn: { backgroundColor: c.accent, borderColor: c.accent },
   rangeText: { color: c.textSecondary, fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
   rangeTextOn: { color: c.accentContrast },
 
-  loader: { marginTop: spacing.xxxl },
-  empty: { backgroundColor: c.surface, borderRadius: radius.md, padding: spacing.xxl, alignItems: 'center', borderWidth: 1, borderColor: c.border },
-  emptyTitle: { color: c.textSecondary, fontSize: 13, fontWeight: '900', letterSpacing: 0.5, marginBottom: spacing.sm },
-  emptySub: { color: c.textFaint, fontSize: 12, lineHeight: 17, textAlign: 'center' },
+  loader: { marginVertical: spacing.xl },
+  empty: { backgroundColor: c.surface, borderRadius: radius.md, padding: spacing.xl, alignItems: 'center', borderWidth: 1, borderColor: c.border, marginBottom: spacing.lg },
+  emptyTitle: { color: c.textSecondary, fontSize: 13, fontWeight: '900', letterSpacing: 0.5, marginBottom: spacing.xs },
+  emptySub: { color: c.textTertiary, fontSize: 12, lineHeight: 18, textAlign: 'center' },
 
   card: { backgroundColor: c.surface, borderRadius: radius.md, padding: spacing.lg, borderWidth: 1, borderColor: c.border, marginBottom: spacing.lg, ...cardShadow },
   cardLabel: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
-  cardSub: { color: c.textTertiary, fontSize: 11, lineHeight: 16, marginTop: 4 },
+  cardSub: { color: c.textTertiary, fontSize: 12, lineHeight: 17, marginTop: 4 },
 
   heroRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: 4 },
   hero: { color: c.textPrimary, fontSize: 34, fontWeight: '900', letterSpacing: -1 },
@@ -412,21 +421,22 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   chartCol: { flex: 1, alignItems: 'center', height: '100%', justifyContent: 'flex-end' },
   chartBarTrack: { width: '100%', flex: 1, justifyContent: 'flex-end' },
   chartBar: { width: '100%', borderRadius: 3, minHeight: 2 },
-  chartLabel: { color: c.textFaint, fontSize: 8, fontWeight: '800', marginTop: 4 },
+  chartLabel: { color: c.textTertiary, fontSize: 9, fontWeight: '800', marginTop: 4 },
 
   statRow: { flexDirection: 'row', marginTop: spacing.lg, paddingTop: spacing.md, borderTopWidth: 1, borderColor: c.borderSubtle },
+  statRowTop: { flexDirection: 'row' },
   statCell: { flex: 1, alignItems: 'center' },
-  statVal: { color: c.textPrimary, fontSize: 15, fontWeight: '900' },
+  statVal: { color: c.textPrimary, fontSize: 16, fontWeight: '900' },
   accentVal: { color: c.accent },
-  statLabel: { color: c.textFaint, fontSize: 8, fontWeight: '900', letterSpacing: 0.5, marginTop: 3 },
+  statLabel: { color: c.textTertiary, fontSize: 9, fontWeight: '900', letterSpacing: 0.5, marginTop: 3 },
   statDivider: { width: 1, backgroundColor: c.borderSubtle },
 
   section: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 1, marginBottom: spacing.md, marginTop: spacing.xs },
 
   appRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
   appIcon: { width: 28, height: 28, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
-  appIconText: { color: '#FFFFFF', fontSize: 9, fontWeight: '900' },
-  appName: { color: c.textSecondary, fontSize: 12, fontWeight: '700', width: 72 },
+  appIconText: { fontSize: 9, fontWeight: '900' },
+  appName: { color: c.textSecondary, fontSize: 12, fontWeight: '700', width: 76 },
   appBarTrack: { flex: 1, height: 6, backgroundColor: c.surfaceRaised, borderRadius: 3, overflow: 'hidden' },
   appBar: { height: '100%', borderRadius: 3 },
   appMins: { color: c.textPrimary, fontSize: 11, fontWeight: '900', width: 52, textAlign: 'right' },
@@ -434,9 +444,9 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   hairline: { height: 1, backgroundColor: c.borderSubtle, marginVertical: spacing.md },
 
   perfRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
-  perfApp: { color: c.textSecondary, fontSize: 12, fontWeight: '700', width: 72 },
+  perfApp: { color: c.textSecondary, fontSize: 12, fontWeight: '700', width: 76 },
   perfRate: { color: c.textPrimary, fontSize: 11, fontWeight: '900', width: 34, textAlign: 'right' },
-  perfCount: { color: c.textFaint, fontSize: 10, fontWeight: '700', width: 42, textAlign: 'right' },
+  perfCount: { color: c.textTertiary, fontSize: 10, fontWeight: '700', width: 42, textAlign: 'right' },
 
   recordRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   recordLabel: { color: c.textSecondary, fontSize: 13, fontWeight: '600' },

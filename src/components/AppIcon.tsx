@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, Image, StyleSheet, StyleProp, ViewStyle, TextStyle } from 'react-native';
 import { useAppIcon } from '../hooks/useAppIcons';
-import { colorForApp, abbrForApp } from '../constants/apps';
+import { colorForApp, textColorForApp, abbrForApp } from '../constants/apps';
 
 interface Props {
   app: string;
@@ -24,7 +24,7 @@ export const AppIcon: React.FC<Props> = ({ app, style, textStyle }) => {
 
   return (
     <View style={[style, { backgroundColor: colorForApp(app) }]}>
-      <Text style={textStyle}>{abbrForApp(app)}</Text>
+      <Text style={[textStyle, { color: textColorForApp(app) }]}>{abbrForApp(app)}</Text>
     </View>
   );
 };

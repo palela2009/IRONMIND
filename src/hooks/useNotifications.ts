@@ -34,10 +34,15 @@ export const useNotifications = (userId?: string, onNavigate?: (screen: Training
         if (!projectId) return;
         const { data } = await Notifications.getExpoPushTokenAsync({ projectId });
         if (cancelled) return;
-        const res = await authedFetch(`${API_BASE_URL}/api/save-token`, { method: 'POST', body: JSON.stringify({ pushToken: data }) }, userId);
-        if (!res.ok) throw new Error(`Push registration failed (${res.status})`);
-        if (cancelled) return;
-        await AsyncStorage.setItem('@ironmind_push_token', data);
+        const syncedKey = `${userId}:${data}`;
+        const prevSynced = await AsyncStorage.getItem('@ironmind_push_token_synced').catch(() => null);
+        if (prevSynced !== syncedKey) {
+          const res = await authedFetch(`${API_BASE_URL}/api/save-token`, { method: 'POST', body: JSON.stringify({ pushToken: data }) }, userId);
+          if (!res.ok) throw new Error(`Push registration failed (${res.status})`);
+          if (cancelled) return;
+          await AsyncStorage.setItem('@ironmind_push_token', data);
+          await AsyncStorage.setItem('@ironmind_push_token_synced', syncedKey);
+        }
         setToken(data);
       } catch (error) { reportHandledError(error, { operation: 'register_push' }); }
       finally { registering = false; }

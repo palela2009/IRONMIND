@@ -1,16 +1,42 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AppState, NativeModules, Platform } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { appAlert } from '../components/AppDialog';
 import { auth } from '../config/firebase';
 
-type ReelsSettings = { consented: boolean; enabled: boolean; expandedConsented: boolean };
+export type ReelsSettings = {
+  consented: boolean;
+  enabled: boolean;
+  expandedConsented: boolean;
+  connected?: boolean;
+  countToday?: number;
+  maxPerDay?: number;
+  cooldownRemainingMs?: number;
+};
+
+export type ShortVideoController = {
+  open: () => void;
+  openGuide: () => void;
+  closeGuide: () => void;
+  acceptAndOpenSettings: () => Promise<void>;
+  openSettingsOnly: () => Promise<void>;
+  turnOff: () => Promise<void>;
+  guideVisible: boolean;
+  status: 'ON' | 'FINISH SETUP' | 'INSTAGRAM ONLY' | 'OFF';
+  isActive: boolean;
+  needsSetup: boolean;
+  connected: boolean;
+  countToday: number;
+  maxPerDay: number;
+  cooldownRemainingMs: number;
+  settings: ReelsSettings;
+};
+
 const monitor = Platform.OS === 'android' ? NativeModules.UsageMonitor : null;
 
-export function useInstagramReelsTest(uid: string | undefined, showDuringSetup: boolean) {
+export function useInstagramReelsTest(uid: string | undefined, _showDuringSetup = false): ShortVideoController | null {
   const [loaded, setLoaded] = useState<{ uid: string; settings: ReelsSettings | null } | null>(null);
+  const [guideVisible, setGuideVisible] = useState(false);
   const settings = loaded?.uid === uid ? loaded?.settings ?? null : null;
-  const needsConsent = settings !== null && !settings.expandedConsented;
 
   const refresh = useCallback(async () => {
     if (!uid || !monitor?.getInstagramReelsTest) return;
@@ -21,6 +47,7 @@ export function useInstagramReelsTest(uid: string | undefined, showDuringSetup: 
   }, [uid]);
 
   useEffect(() => {
+    setGuideVisible(false);
     void refresh();
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active') void refresh();
@@ -28,85 +55,90 @@ export function useInstagramReelsTest(uid: string | undefined, showDuringSetup: 
     return () => sub.remove();
   }, [refresh]);
 
-  const openSettings = useCallback(async () => {
-    if (!uid || auth.currentUser?.uid !== uid) return;
+  const openSettingsOnly = useCallback(async () => {
+    if (!uid || auth.currentUser?.uid !== uid || !monitor?.openInstagramReelsTestSettings) return;
     try {
-      if (!await monitor.openInstagramReelsTestSettings(uid)) throw new Error();
+      if (!(await monitor.openInstagramReelsTestSettings(uid))) throw new Error();
     } catch {
-      appAlert('Could not open Accessibility settings', 'Try again from the Short Video Test setting.');
+      appAlert('Could not open Accessibility settings', 'Open Android Settings → Accessibility → Installed/Downloaded apps → IRONMIND — Scroll Detection.');
     }
   }, [uid]);
 
-  const showDisclosure = useCallback(() => {
-    if (!uid) return;
-    const markSeen = () => void AsyncStorage.setItem(`@ironmind_short_video_disclosure:${uid}`, 'seen').catch(() => {});
-    appAlert(
-      'Try short-video challenges',
-      'IRONMIND uses Android Accessibility to recognize Instagram Reels, Facebook Reels, TikTok video feeds and YouTube Shorts in the apps you select for tracking. Screen identifiers, navigation labels and swipe activity stay on this device. IRONMIND does not read message text, captions or screenshots. Challenge results sync with your IRONMIND account.\n\nThis is optional. You can turn it off in your profile.',
-      [
-        {
-          text: settings?.enabled ? 'Agree and turn on' : 'Agree and open Settings',
-          onPress: () => {
-            markSeen();
-            if (auth.currentUser?.uid !== uid) return;
-            void (async () => {
-              try {
-                if (!await monitor.setShortVideoTestConsent(uid, true)) throw new Error();
-                await refresh();
-                if (!settings?.enabled) await openSettings();
-              } catch {
-                appAlert('Could not save your choice', 'Please try again.');
-              }
-            })();
-          },
-        },
-        { text: 'Not now', style: 'cancel', onPress: markSeen },
-      ],
-    );
-  }, [openSettings, refresh, settings?.enabled, uid]);
-
-  useEffect(() => {
-    if (!uid || !showDuringSetup || !needsConsent) return;
-    let active = true;
-    void AsyncStorage.getItem(`@ironmind_short_video_disclosure:${uid}`).then((seen) => {
-      if (active && !seen) showDisclosure();
-    }).catch(() => {});
-    return () => { active = false; };
-  }, [uid, showDuringSetup, needsConsent, showDisclosure]);
-
-  const open = () => {
-    if (!uid || !settings) return;
-    const turnOff = () => {
-      if (auth.currentUser?.uid !== uid) return;
-      void monitor.setShortVideoTestConsent(uid, false).then((saved: boolean) => {
-        if (!saved) throw new Error();
-        return refresh();
-      }).catch(() => appAlert('Could not turn off short-video challenges', 'Please try again.'));
-    };
-    if (!settings.consented) {
-      showDisclosure();
-    } else if (!settings.expandedConsented) {
-      appAlert('Instagram-only consent', 'Add Facebook Reels, TikTok and YouTube Shorts to the test, or turn off short-video challenges.', [
-        { text: 'Add more apps', onPress: showDisclosure },
-        { text: 'Turn off', style: 'destructive', onPress: turnOff },
-        { text: 'Keep Instagram', style: 'cancel', onPress: () => { if (!settings.enabled) void openSettings(); } },
-      ]);
-    } else if (!settings.enabled) {
-      void openSettings();
-    } else {
-      appAlert('Short Video Test is on', 'You can stop short-video challenges whenever you want.', [
-        { text: 'Keep on', style: 'cancel' },
-        {
-          text: 'Turn off',
-          style: 'destructive',
-          onPress: turnOff,
-        },
-      ]);
+  const acceptAndOpenSettings = useCallback(async () => {
+    if (!uid || auth.currentUser?.uid !== uid || !monitor?.setShortVideoTestConsent) return;
+    try {
+      if (!(await monitor.setShortVideoTestConsent(uid, true))) throw new Error();
+      await refresh();
+      if (!settings?.enabled) {
+        await openSettingsOnly();
+      } else {
+        setGuideVisible(false);
+      }
+    } catch {
+      appAlert('Could not save your choice', 'Please try again.');
     }
-  };
+  }, [openSettingsOnly, refresh, settings?.enabled, uid]);
 
-  return settings ? {
+  const turnOff = useCallback(async () => {
+    if (!uid || auth.currentUser?.uid !== uid || !monitor?.setShortVideoTestConsent) return;
+    try {
+      if (!(await monitor.setShortVideoTestConsent(uid, false))) throw new Error();
+      setGuideVisible(false);
+      await refresh();
+    } catch {
+      appAlert('Could not turn off scroll detection', 'Please try again.');
+    }
+  }, [refresh, uid]);
+
+  const openGuide = useCallback(() => {
+    if (!uid || !settings) return;
+    setGuideVisible(true);
+  }, [uid, settings]);
+
+  const closeGuide = useCallback(() => setGuideVisible(false), []);
+
+  const open = useCallback(() => {
+    if (!uid || !settings) return;
+    if (settings.consented && settings.expandedConsented && settings.enabled) {
+      appAlert(
+        'Scroll Detection is active',
+        'Challenges fire only when you actively scroll Instagram Reels, Facebook Reels, TikTok, or YouTube Shorts — never while messaging or watching a single shared video.',
+        [
+          { text: 'Keep on', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => void openSettingsOnly() },
+          { text: 'Turn off', style: 'destructive', onPress: () => void turnOff() },
+        ]
+      );
+      return;
+    }
+    setGuideVisible(true);
+  }, [openSettingsOnly, settings, turnOff, uid]);
+
+  if (!settings) return null;
+
+  const status: ShortVideoController['status'] = settings.consented
+    ? settings.enabled
+      ? settings.expandedConsented
+        ? 'ON'
+        : 'INSTAGRAM ONLY'
+      : 'FINISH SETUP'
+    : 'OFF';
+
+  return {
     open,
-    status: settings.consented ? settings.enabled ? settings.expandedConsented ? 'ON' : 'INSTAGRAM ONLY' : 'FINISH SETUP' : 'OFF',
-  } : null;
+    openGuide,
+    closeGuide,
+    acceptAndOpenSettings,
+    openSettingsOnly,
+    turnOff,
+    guideVisible,
+    status,
+    isActive: settings.consented && settings.enabled,
+    needsSetup: settings.consented && !settings.enabled,
+    connected: Boolean(settings.connected ?? settings.enabled),
+    countToday: Number(settings.countToday ?? 0),
+    maxPerDay: Number(settings.maxPerDay ?? 3),
+    cooldownRemainingMs: Number(settings.cooldownRemainingMs ?? 0),
+    settings,
+  };
 }

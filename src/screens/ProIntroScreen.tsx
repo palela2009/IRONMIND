@@ -1,23 +1,25 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Animated, Easing, Share } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemedStyles } from '../context/ThemeContext';
 import { Palette, radius, spacing, glowFor } from '../theme';
 import { usePro } from '../context/ProContext';
 import { purchasesAvailable } from '../config/purchases';
 import { PRO_WEEK_PRICE } from '../constants/cosmetics';
-import { fetchInviteCode, inviteMessage } from '../hooks/useInvites';
+import { fetchInviteCode, inviteMessage, useInvites } from '../hooks/useInvites';
 
 const PERKS = [
   { icon: '❄', title: '20 streak freezes a month', body: 'One slip never wipes out your run.' },
   { icon: '✦', title: '7 elite badges', body: 'Shown next to your name on the leaderboard.' },
   { icon: '◑', title: 'Exclusive themes', body: 'Cyberpunk, Blood, Matrix and more.' },
-  { icon: '◈', title: 'Advanced analytics', body: 'Trends, history and reaction-time charts.' },
-  { icon: '◉', title: 'Double coins', body: 'Every win pays twice as much.' },
+  { icon: '◈', title: 'Advanced analytics', body: '30-day trends, history and escape speed charts.' },
+  { icon: '◉', title: 'Double coins', body: 'Every challenge win pays twice as much.' },
 ];
 
 export const ProIntroScreen: React.FC = () => {
   const styles = useThemedStyles(makeStyles);
   const { welcomeOffer, welcomeGiftAvailable, isPro, coins, closeWelcomeOffer } = usePro();
+  const { progress: invites } = useInvites();
   const visible = welcomeOffer && !welcomeGiftAvailable && !isPro && !purchasesAvailable();
 
   const pulse = useRef(new Animated.Value(1)).current;
@@ -53,18 +55,21 @@ export const ProIntroScreen: React.FC = () => {
     } catch {}
   };
 
+  const inviteTarget = invites?.next?.at ?? 3;
+  const inviteActive = Math.min(invites?.active ?? 0, inviteTarget);
+  const invitePct = Math.min((inviteActive / inviteTarget) * 100, 100);
   const coinProgress = Math.min(coins / PRO_WEEK_PRICE, 1);
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={closeWelcomeOffer}>
-      <View style={styles.root}>
+      <SafeAreaView style={styles.root}>
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <Animated.View style={[styles.header, enter(0)]}>
             <Animated.View style={[styles.badge, { transform: [{ scale: pulse }] }]}>
               <Text style={styles.badgeText}>PRO</Text>
             </Animated.View>
             <Text style={styles.title}>Unlock IronMind Pro</Text>
-            <Text style={styles.sub}>No payment. You earn it, by playing and by bringing friends.</Text>
+            <Text style={styles.sub}>No payment required. Earn it by winning challenges or bringing friends.</Text>
           </Animated.View>
 
           <Animated.View style={[styles.perks, enter(1)]}>
@@ -80,21 +85,20 @@ export const ProIntroScreen: React.FC = () => {
           </Animated.View>
 
           <Animated.View style={enter(2)}>
-            <Text style={styles.section}>TWO WAYS TO GET IT</Text>
+            <Text style={styles.section}>TWO WAYS TO EARN IT</Text>
 
             <View style={[styles.way, styles.wayFeatured]}>
               <View style={styles.wayHead}>
-                <Text style={styles.wayTitle}>INVITE 3 FRIENDS</Text>
+                <Text style={styles.wayTitle}>INVITE {inviteTarget} FRIENDS</Text>
                 <Text style={styles.wayReward}>7 DAYS PRO</Text>
               </View>
               <Text style={styles.wayText}>
-                Share your code. Every friend who joins with it counts straight away. 10 friends unlock a month,
-                25 unlock three.
+                Share your code. Every friend who joins with it counts right away. 10 friends unlock a month, 25 unlock three.
               </Text>
               <View style={styles.barBg}>
-                <View style={[styles.barFill, { width: '0%' }]} />
+                <View style={[styles.barFill, { width: `${invitePct}%` }]} />
               </View>
-              <Text style={styles.barLabel}>0 / 3 friends</Text>
+              <Text style={styles.barLabel}>{inviteActive} / {inviteTarget} friends</Text>
               <TouchableOpacity style={styles.primaryBtn} onPress={shareCode} activeOpacity={0.88}>
                 <Text style={styles.primaryText}>SHARE MY CODE →</Text>
               </TouchableOpacity>
@@ -106,7 +110,7 @@ export const ProIntroScreen: React.FC = () => {
                 <Text style={styles.wayReward}>7 DAYS PRO</Text>
               </View>
               <Text style={styles.wayText}>
-                +10 for every challenge you win, +50 for a perfect day. Spend them in the Shop on Home, once a month.
+                +10 for every challenge win, +50 for a perfect day. Redeem in the Shop on Home once a month.
               </Text>
               <View style={styles.barBg}>
                 <View style={[styles.barFill, { width: `${coinProgress * 100}%` }]} />
@@ -121,14 +125,14 @@ export const ProIntroScreen: React.FC = () => {
             </TouchableOpacity>
           </Animated.View>
         </ScrollView>
-      </View>
+      </SafeAreaView>
     </Modal>
   );
 };
 
 const makeStyles = (c: Palette) => StyleSheet.create({
   root: { flex: 1, backgroundColor: c.bg },
-  content: { padding: spacing.xl, paddingTop: 64, paddingBottom: 48 },
+  content: { padding: spacing.xl, paddingTop: spacing.xl, paddingBottom: 48 },
 
   header: { alignItems: 'center', marginBottom: spacing.xl },
   badge: {

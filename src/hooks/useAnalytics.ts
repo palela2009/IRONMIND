@@ -10,14 +10,14 @@ export interface DayUsage {
   apps: AppUsage[];
 }
 
-export const useAnalytics = (days = 30) => {
+export const useAnalytics = (days = 30, enabled = true) => {
   const { fbUser } = useAuth();
   const [history, setHistory] = useState<DayUsage[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   const load = useCallback(async () => {
-    if (!fbUser?.uid) {
-      setHistory([]);
+    if (!enabled || !fbUser?.uid) {
+      if (!fbUser?.uid) setHistory([]);
       setLoading(false);
       return;
     }
@@ -27,11 +27,11 @@ export const useAnalytics = (days = 30) => {
       if (res.ok) setHistory(await res.json());
     } catch {}
     setLoading(false);
-  }, [fbUser?.uid, days]);
+  }, [fbUser?.uid, days, enabled]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    if (enabled) void load();
+  }, [enabled, load]);
 
   return { history, loading, refresh: load };
 };

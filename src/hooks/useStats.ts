@@ -27,6 +27,7 @@ export const useStats = () => {
   const [snapshot, setSnapshot] = useState<ProgressSnapshot>(EMPTY_PROGRESS);
   const [dailyChallengeLimit, setDailyLimit] = useState(5);
   const [monitoredApps, setMonitoredApps] = useState<string[]>([]);
+  const [reportedHours, setReportedHours] = useState<number | null>(null);
   const [syncStatus, setSyncStatus] = useState<'syncing' | 'saved' | 'offline' | 'error'>('saved');
   const [syncMessage, setSyncMessage] = useState('');
   const [dismissedLoss, setDismissedLoss] = useState<string | null>(null);
@@ -40,6 +41,7 @@ export const useStats = () => {
     const data = raw ? JSON.parse(raw) : {};
     setDailyLimit(data.dailyChallengeLimit ?? 5);
     setMonitoredApps(data.targetApps ?? []);
+    setReportedHours(typeof data.reportedHours === 'number' ? data.reportedHours : null);
     if (data.timeZone && stateRef.current.timeZone !== data.timeZone) {
       const next = { ...stateRef.current, timeZone: data.timeZone };
       stateRef.current = next;
@@ -182,7 +184,7 @@ export const useStats = () => {
   const today = new Date().setHours(0, 0, 0, 0);
   return {
     challengeTimeZone: snapshot.timeZone ?? deviceTimeZone(),
-    stats: projected.stats, history: projected.history, monitoredApps,
+    stats: projected.stats, history: projected.history, monitoredApps, reportedHours,
     challengesToday: projected.history.filter((item) => item.timestamp >= today && item.counted !== false).length,
     lostStreak: lossId !== dismissedLoss ? projected.stats.lostStreak ?? 0 : 0,
     reclaimStreak, dismissLostStreak: () => setDismissedLoss(lossId), savedStreak,

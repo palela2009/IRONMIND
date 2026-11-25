@@ -9,33 +9,34 @@ type Perms = ReturnType<typeof usePermissions>;
 
 interface Props {
   perms: Perms;
+  showOptionalTips?: boolean;
 }
 
-export const PermissionSteps: React.FC<Props> = ({ perms }) => {
+export const PermissionSteps: React.FC<Props> = ({ perms, showOptionalTips = true }) => {
   const styles = useThemedStyles(makeStyles);
   const { status, requestNotifications, openUsageAccess, requestBatteryExemption, openAutostart } = perms;
   const xiaomi = isXiaomiFamily();
 
   const startUsageAccess = () => {
     appAlert(
-      xiaomi ? 'Your phone will show a red warning' : 'Before you switch it on',
+      xiaomi ? 'Your phone will show a red warning' : 'Quick tip before Settings opens',
       xiaomi
-        ? 'Xiaomi, Redmi and POCO show a red "Danger" screen for every app that asks for Usage access. It is a standard system message, not a virus alert.\n\n1. Find IRONMIND and switch it on\n2. Wait for the 10 second timer\n3. Tick "I\'m aware of the possible risks"\n4. Tap OK\n\nIRONMIND only reads which app is open and for how many minutes. It never sees your messages, photos, passwords or anything you type.'
-        : 'IRONMIND only reads which app is open and for how many minutes. It never sees your messages, photos, passwords or anything you type.\n\nFind IRONMIND in the list and switch it on.',
+        ? 'Xiaomi, Redmi and POCO show a red "Danger" screen for every app asking for Usage Access. That is a normal Android prompt.\n\n1. Find IRONMIND and switch it ON\n2. Wait for the 10-second timer\n3. Tick "I\'m aware of the possible risks"\n4. Tap OK\n\nIRONMIND only sees which app is open and for how long — never your messages, photos, or passwords.'
+        : 'Find IRONMIND in the list and switch it ON.\n\nIRONMIND only reads which app is open and for how many minutes — never your messages, photos, passwords, or anything you type.',
       [
         { text: 'Not now', style: 'cancel' },
-        { text: 'Open settings', onPress: openUsageAccess },
+        { text: 'Open Settings', onPress: openUsageAccess },
       ]
     );
   };
 
-  const steps = [
+  const coreSteps = [
     {
       key: 'notifications',
       title: 'NOTIFICATIONS',
       done: status.notifications,
-      desc: 'Challenges arrive as alerts. Without this you will never see one.',
-      doneDesc: 'Allowed. Challenges will reach you.',
+      desc: 'One tap. Lets IRONMIND send you timed challenges and duel updates.',
+      doneDesc: 'Ready. Challenges will reach you instantly.',
       action: 'ALLOW NOTIFICATIONS →',
       onPress: requestNotifications,
     },
@@ -44,33 +45,28 @@ export const PermissionSteps: React.FC<Props> = ({ perms }) => {
       title: 'USAGE ACCESS',
       done: status.usage,
       desc: xiaomi
-        ? 'Lets IRONMIND see which app is open. Your phone will show a red warning screen: that is normal for this setting, wait 10 seconds, tick the box and tap OK.'
-        : 'Lets IRONMIND see which app is open so it knows when to fire. Find IRONMIND in the list and switch it on.',
-      doneDesc: 'On. IRONMIND can see when you open a tracked app.',
+        ? 'Lets IRONMIND see when a tracked app opens and auto-sync duels in the background. (Wait 10s on Xiaomi prompt & tap OK.)'
+        : 'Lets IRONMIND see when a tracked app opens and auto-sync screen time & duels in the background.',
+      doneDesc: 'Ready. App tracking & background duel sync are active.',
       action: 'OPEN USAGE ACCESS →',
       onPress: startUsageAccess,
-    },
-    {
-      key: 'battery',
-      title: 'BATTERY OPTIMIZATION OFF',
-      done: status.battery,
-      desc: 'Helps IRONMIND keep monitoring while you use other apps. Tap Allow on the next screen.',
-      doneDesc: 'Allowed. Background monitoring is less likely to be interrupted.',
-      action: 'TURN OFF OPTIMIZATION →',
-      onPress: requestBatteryExemption,
     },
   ];
 
   return (
     <View>
-      {steps.map((s, i) => (
+      {coreSteps.map((s, i) => (
         <View key={s.key} style={[styles.card, s.done && styles.cardDone]}>
           <View style={styles.head}>
             <View style={[styles.num, s.done && styles.numDone]}>
               <Text style={[styles.numText, s.done && styles.numTextDone]}>{s.done ? '✓' : String(i + 1)}</Text>
             </View>
             <Text style={styles.title}>{s.title}</Text>
-            <Text style={styles.on}>{s.done ? 'READY' : 'NEEDED'}</Text>
+            <View style={[styles.statusBadge, s.done ? styles.statusReady : styles.statusNeeded]}>
+              <Text style={[styles.statusText, s.done ? styles.statusTextReady : styles.statusTextNeeded]}>
+                {s.done ? 'READY' : 'NEEDED'}
+              </Text>
+            </View>
           </View>
           <Text style={styles.desc}>{s.done ? s.doneDesc : s.desc}</Text>
           {!s.done && (
@@ -81,26 +77,34 @@ export const PermissionSteps: React.FC<Props> = ({ perms }) => {
         </View>
       ))}
 
+      {showOptionalTips && !status.battery && (
+        <TouchableOpacity style={styles.optionalRow} onPress={requestBatteryExemption} activeOpacity={0.85}>
+          <View style={styles.optionalBody}>
+            <Text style={styles.optionalKicker}>OPTIONAL · 1-TAP BOOST</Text>
+            <Text style={styles.optionalTitle}>Unrestricted battery</Text>
+            <Text style={styles.optionalDesc}>Prevents Android from sleeping IRONMIND overnight. Skip if you prefer.</Text>
+          </View>
+          <Text style={styles.optionalCta}>ALLOW →</Text>
+        </TouchableOpacity>
+      )}
+
+      {showOptionalTips && xiaomi && (
+        <TouchableOpacity style={styles.optionalRow} onPress={openAutostart} activeOpacity={0.85}>
+          <View style={styles.optionalBody}>
+            <Text style={styles.optionalKicker}>OPTIONAL · XIAOMI / REDMI / POCO</Text>
+            <Text style={styles.optionalTitle}>Autostart</Text>
+            <Text style={styles.optionalDesc}>Keeps monitoring alive after a reboot on MIUI / HyperOS.</Text>
+          </View>
+          <Text style={styles.optionalCta}>OPEN →</Text>
+        </TouchableOpacity>
+      )}
+
       <View style={styles.privacy}>
-        <Text style={styles.privacyTitle}>🔒 WHAT IRONMIND CAN SEE</Text>
+        <Text style={styles.privacyTitle}>🔒 PRIVACY FIRST</Text>
         <Text style={styles.privacyText}>
-          Which app is open and how many minutes you spend in it. Never your messages, photos, passwords or
-          anything you type.
+          IRONMIND only sees which app is open and how many minutes you spend in it. Never your messages, photos, passwords, or anything you type.
         </Text>
       </View>
-
-      {xiaomi && (
-        <View style={[styles.card, styles.cardNote]}>
-          <Text style={styles.noteTitle}>XIAOMI · REDMI · POCO</Text>
-          <Text style={styles.desc}>
-            These phones also block apps from starting on their own. Open Autostart and switch IRONMIND on,
-            or challenges stop after a while.
-          </Text>
-          <TouchableOpacity style={styles.btn} onPress={openAutostart} activeOpacity={0.85}>
-            <Text style={styles.btnText}>OPEN AUTOSTART →</Text>
-          </TouchableOpacity>
-        </View>
-      )}
     </View>
   );
 };
@@ -114,20 +118,41 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     padding: spacing.lg,
     marginBottom: spacing.md,
   },
-  cardDone: { borderColor: c.accent, backgroundColor: c.accentMuted },
-  cardNote: { borderLeftWidth: 3, borderLeftColor: c.accent },
+  cardDone: { borderColor: c.accentDim, backgroundColor: c.accentMuted },
   head: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.sm },
   num: { width: 26, height: 26, borderRadius: 13, backgroundColor: c.surfaceRaised, justifyContent: 'center', alignItems: 'center' },
   numDone: { backgroundColor: c.accent },
   numText: { color: c.textSecondary, fontSize: 12, fontWeight: '900' },
   numTextDone: { color: c.accentContrast },
   title: { flex: 1, color: c.textPrimary, fontSize: 13, fontWeight: '900', letterSpacing: 0.5 },
-  on: { color: c.accent, fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
-  desc: { color: c.textTertiary, fontSize: 12, lineHeight: 17 },
+  statusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill },
+  statusReady: { backgroundColor: c.accentMuted },
+  statusNeeded: { backgroundColor: c.dangerMuted },
+  statusText: { fontSize: 10, fontWeight: '900', letterSpacing: 0.6 },
+  statusTextReady: { color: c.accent },
+  statusTextNeeded: { color: c.danger },
+  desc: { color: c.textSecondary, fontSize: 12, lineHeight: 18 },
   btn: { backgroundColor: c.accent, borderRadius: radius.sm, paddingVertical: 13, alignItems: 'center', marginTop: spacing.md },
-  btnText: { color: c.accentContrast, fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
-  privacy: { paddingHorizontal: spacing.sm, paddingVertical: spacing.md, marginBottom: spacing.md },
+  btnText: { color: c.accentContrast, fontSize: 11, fontWeight: '900', letterSpacing: 0.6 },
+
+  optionalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: c.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: c.borderSubtle,
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  optionalBody: { flex: 1 },
+  optionalKicker: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 0.8 },
+  optionalTitle: { color: c.textPrimary, fontSize: 13, fontWeight: '800', marginTop: 2 },
+  optionalDesc: { color: c.textTertiary, fontSize: 11, lineHeight: 16, marginTop: 2 },
+  optionalCta: { color: c.accent, fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
+
+  privacy: { paddingHorizontal: spacing.xs, paddingVertical: spacing.md, marginTop: spacing.xs },
   privacyTitle: { color: c.textSecondary, fontSize: 10, fontWeight: '900', letterSpacing: 1, marginBottom: 4 },
   privacyText: { color: c.textTertiary, fontSize: 11, lineHeight: 16 },
-  noteTitle: { color: c.accent, fontSize: 10, fontWeight: '900', letterSpacing: 1, marginBottom: spacing.sm },
 });

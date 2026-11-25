@@ -23,6 +23,7 @@ export interface Friend {
   frame: string | null;
   nameEffect: string | null;
   todayMinutes: number;
+  hasTodayData?: boolean;
   weekAvgMinutes: number;
   trackedApps: string[];
 }
@@ -37,7 +38,7 @@ export interface FriendRequestItem {
 
 export type AddOutcome = 'accepted' | 'pending' | 'error';
 
-export const useFriends = () => {
+export const useFriends = (pollEnabled = true) => {
   const { fbUser } = useAuth();
   const [code, setCode] = useState<string>('');
   const [friends, setFriends] = useState<Friend[]>([]);
@@ -70,7 +71,7 @@ export const useFriends = () => {
     load();
   }, [load]);
 
-  useLiveRefresh(load, !!fbUser?.uid);
+  useLiveRefresh(load, !!fbUser?.uid && pollEnabled);
 
   const addByCode = async (inputCode: string): Promise<AddOutcome> => {
     setError('');
@@ -92,41 +93,41 @@ export const useFriends = () => {
     }
   };
 
-  const acceptRequest = async (id: string): Promise<boolean> => {
+  const acceptRequest = async (id: string): Promise<string | null> => {
     setError('');
     try {
       const res = await authedFetch(`${API_URL}/requests/${id}/accept`, { method: 'POST' });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        console.error('[IRONMIND] Accept request failed:', res.status, body);
-        setError(body.message ?? 'Could not accept request');
-        return false;
+        const msg = body.message ?? 'Could not accept request';
+        setError(msg);
+        return msg;
       }
       await load();
-      return true;
-    } catch (e) {
-      console.error('[IRONMIND] Accept request error:', e);
-      setError('Network error — try again');
-      return false;
+      return null;
+    } catch {
+      const msg = 'Network error — try again';
+      setError(msg);
+      return msg;
     }
   };
 
-  const rejectRequest = async (id: string): Promise<boolean> => {
+  const rejectRequest = async (id: string): Promise<string | null> => {
     setError('');
     try {
       const res = await authedFetch(`${API_URL}/requests/${id}/reject`, { method: 'POST' });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        console.error('[IRONMIND] Reject request failed:', res.status, body);
-        setError(body.message ?? 'Could not reject request');
-        return false;
+        const msg = body.message ?? 'Could not reject request';
+        setError(msg);
+        return msg;
       }
       await load();
-      return true;
-    } catch (e) {
-      console.error('[IRONMIND] Reject request error:', e);
-      setError('Network error — try again');
-      return false;
+      return null;
+    } catch {
+      const msg = 'Network error — try again';
+      setError(msg);
+      return msg;
     }
   };
 
@@ -134,14 +135,10 @@ export const useFriends = () => {
     setError('');
     try {
       const res = await authedFetch(`${API_URL}/${uid}`, { method: 'DELETE' });
-      if (!res.ok) {
-        console.error('[IRONMIND] Remove friend failed:', res.status);
-        return false;
-      }
+      if (!res.ok) return false;
       await load();
       return true;
-    } catch (e) {
-      console.error('[IRONMIND] Remove friend error:', e);
+    } catch {
       return false;
     }
   };

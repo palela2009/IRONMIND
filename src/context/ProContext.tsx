@@ -113,6 +113,7 @@ export const ProProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   useEffect(() => {
     identifyPurchaser(fbUser?.uid ?? null);
+    setLoading(true);
     setEntitlement(FREE);
     refresh();
     setPurchasePending(false);
@@ -147,7 +148,7 @@ export const ProProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const body = await res.json();
       if (accountRef.current !== uid) return false;
       await persist(body);
-      return body.isPro === true && body.source === 'store';
+      return body.isPro === true && (body.source === 'store' || body.isOwner === true);
     } catch {
       return false;
     }

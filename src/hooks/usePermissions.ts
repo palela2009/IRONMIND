@@ -9,12 +9,46 @@ export interface PermissionStatus {
   battery: boolean;
 }
 
+export type DeviceBrand = 'samsung' | 'xiaomi' | 'oneplus' | 'pixel' | 'other';
+
 const native = NativeModules.UsageMonitor;
 
-export const isXiaomiFamily = (): boolean => {
-  if (Platform.OS !== 'android') return false;
+export const getDeviceBrand = (): DeviceBrand => {
+  if (Platform.OS !== 'android') return 'other';
   const maker = String((Platform.constants as any)?.Manufacturer ?? '').toLowerCase();
-  return ['xiaomi', 'redmi', 'poco'].some((m) => maker.includes(m));
+  const brand = String((Platform.constants as any)?.Brand ?? '').toLowerCase();
+  const combined = `${maker} ${brand}`;
+  if (combined.includes('samsung')) return 'samsung';
+  if (['xiaomi', 'redmi', 'poco'].some((m) => combined.includes(m))) return 'xiaomi';
+  if (['oneplus', 'oppo', 'realme'].some((m) => combined.includes(m))) return 'oneplus';
+  if (combined.includes('google') || combined.includes('pixel')) return 'pixel';
+  return 'other';
+};
+
+export const isXiaomiFamily = (): boolean => getDeviceBrand() === 'xiaomi';
+
+interface PermissionStore {
+  status: PermissionStatus;
+  monitoring: boolean;
+  checked: boolean;
+}
+
+const initialStore: PermissionStore = {
+  status: { notifications: false, usage: false, battery: false },
+  monitoring: false,
+  checked: false,
+};
+
+let store: PermissionStore = initialStore;
+const listeners = new Set<(state: PermissionStore) => void>();
+let activeSubscribers = 0;
+let appStateSub: { remove: () => void } | null = null;
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+let inFlight: Promise<void> | null = null;
+
+const publish = (next: PermissionStore) => {
+  store = next;
+  listeners.forEach((listener) => listener(store));
 };
 
 const readStatus = async (): Promise<PermissionStatus> => {
@@ -36,27 +70,56 @@ const readStatus = async (): Promise<PermissionStatus> => {
   return { notifications: status === 'granted', usage, battery };
 };
 
+export const refreshPermissions = (): Promise<void> => {
+  if (inFlight) return inFlight;
+  inFlight = (async () => {
+    const status = await readStatus();
+    const monitoring = !!(await native?.isMonitoring?.().catch(() => false));
+    publish({ status, monitoring, checked: true });
+  })().finally(() => {
+    inFlight = null;
+  });
+  return inFlight;
+};
+
+const startSharedWatch = () => {
+  activeSubscribers += 1;
+  if (activeSubscribers > 1) return;
+  void refreshPermissions();
+  appStateSub = AppState.addEventListener('change', (state) => {
+    if (state === 'active') void refreshPermissions();
+  });
+  pollTimer = setInterval(() => {
+    if (AppState.currentState === 'active') void refreshPermissions();
+  }, 5000);
+};
+
+const stopSharedWatch = () => {
+  activeSubscribers = Math.max(0, activeSubscribers - 1);
+  if (activeSubscribers > 0) return;
+  appStateSub?.remove();
+  appStateSub = null;
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+};
+
 export const usePermissions = () => {
-  const [status, setStatus] = useState<PermissionStatus>({ notifications: false, usage: false, battery: false });
-  const [monitoring, setMonitoring] = useState(false);
+  const [state, setState] = useState<PermissionStore>(store);
   const [recovering, setRecovering] = useState(false);
   const [recoveryError, setRecoveryError] = useState('');
-  const [checked, setChecked] = useState<boolean>(false);
-
-  const refresh = useCallback(async () => {
-    setStatus(await readStatus());
-    setMonitoring(!!(await native?.isMonitoring?.().catch(() => false)));
-    setChecked(true);
-  }, []);
 
   useEffect(() => {
-    refresh();
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') refresh();
-    });
-    const timer = setInterval(() => { if (AppState.currentState === 'active') void refresh(); }, 5000);
-    return () => { sub.remove(); clearInterval(timer); };
-  }, [refresh]);
+    listeners.add(setState);
+    startSharedWatch();
+    return () => {
+      listeners.delete(setState);
+      stopSharedWatch();
+    };
+  }, []);
+
+  const refresh = useCallback(() => refreshPermissions(), []);
 
   const requestNotifications = useCallback(async () => {
     const current = await Notifications.getPermissionsAsync();
@@ -65,8 +128,8 @@ export const usePermissions = () => {
       return;
     }
     await Notifications.requestPermissionsAsync();
-    refresh();
-  }, [refresh]);
+    await refreshPermissions();
+  }, []);
 
   const openUsageAccess = useCallback(async () => {
     try {
@@ -95,13 +158,37 @@ export const usePermissions = () => {
     try {
       await syncAppMonitor();
       await new Promise((resolve) => setTimeout(resolve, 500));
-      await refresh();
-      if (!(await native?.isMonitoring?.())) setRecoveryError('Monitoring has not started. Check usage access and your selected apps.');
-    } catch { setRecoveryError('Could not restart monitoring. Reopen IRONMIND and try again.'); }
-    finally { setRecovering(false); }
-  }, [refresh]);
+      await refreshPermissions();
+      if (!(await native?.isMonitoring?.())) {
+        setRecoveryError('Monitoring has not started. Check Usage Access and make sure at least one app is selected.');
+      }
+    } catch {
+      setRecoveryError('Could not restart monitoring. Reopen IRONMIND and try again.');
+    } finally {
+      setRecovering(false);
+    }
+  }, []);
 
-  const allGranted = status.notifications && status.usage && status.battery;
+  const coreGranted = state.status.notifications && state.status.usage;
+  const allGranted = coreGranted;
+  const allOptimal = coreGranted && state.status.battery;
+  const batteryRecommended = !state.status.battery;
 
-  return { status, checked, allGranted, monitoring, recovering, recoveryError, restartMonitoring, refresh, requestNotifications, openUsageAccess, requestBatteryExemption, openAutostart };
+  return {
+    status: state.status,
+    checked: state.checked,
+    coreGranted,
+    allGranted,
+    allOptimal,
+    batteryRecommended,
+    monitoring: state.monitoring,
+    recovering,
+    recoveryError,
+    restartMonitoring,
+    refresh,
+    requestNotifications,
+    openUsageAccess,
+    requestBatteryExemption,
+    openAutostart,
+  };
 };

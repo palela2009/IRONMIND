@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Modal, Linking } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { appAlert } from '../components/AppDialog';
 import { useThemedStyles, useTheme } from '../context/ThemeContext';
 import { Palette, PALETTES } from '../theme';
@@ -15,21 +16,24 @@ const REFERRAL_STEPS = '3 friends → 7 days · 10 → 1 month · 25 → 3 month
 interface ProScreenProps {
   visible: boolean;
   onClose: () => void;
+  onOpenFriends?: () => void;
+  onOpenHome?: () => void;
 }
 
-export const ProScreen: React.FC<ProScreenProps> = ({ visible, onClose }) => {
+export const ProScreen: React.FC<ProScreenProps> = ({ visible, onClose, onOpenFriends, onOpenHome }) => {
   const styles = useThemedStyles(makeStyles);
   const palette = useTheme();
-  const { isPro, plan, source, expiresAt, streakFreezes, themeId, setTheme, purchase, restore } = usePro();
+  const { isPro, plan, source, expiresAt, streakFreezes, themeId, unlockedThemes, setTheme, purchase, restore } = usePro();
   const [busy, setBusy] = useState<ProPlanId | 'restore' | null>(null);
   const { priceFor, productFor } = useStoreProducts(PRO_PLANS, visible && !isPro);
 
   const chooseTheme = (id: string, requiresPro: boolean) => {
-    if (requiresPro && !isPro) {
-      appAlert('Pro theme', 'Unlock this theme with IronMind Pro to use it.');
+    const owned = !requiresPro || isPro || unlockedThemes.includes(id);
+    if (!owned) {
+      appAlert('Locked theme', 'Unlock this theme with IronMind Pro or buy it with coins in the Shop.');
       return;
     }
-    setTheme(id);
+    void setTheme(id);
   };
 
   const handleSelect = async (p: ProPlan) => {
@@ -62,15 +66,15 @@ export const ProScreen: React.FC<ProScreenProps> = ({ visible, onClose }) => {
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View style={styles.root}>
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <SafeAreaView style={styles.root}>
+        <View style={styles.topBar}>
+          <Text style={styles.brandInline}>IRONMIND <Text style={styles.brandInlinePro}>PRO</Text></Text>
           <TouchableOpacity style={styles.close} onPress={onClose} activeOpacity={0.8}>
             <Text style={styles.closeText}>✕</Text>
           </TouchableOpacity>
+        </View>
 
-          <Text style={styles.brand}>IRONMIND</Text>
-          <Text style={styles.brandPro}>PRO</Text>
-
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           {isPro ? (
             <View style={styles.activeCard}>
               <Text style={styles.activeTitle}>PRO ACTIVE</Text>
@@ -87,7 +91,7 @@ export const ProScreen: React.FC<ProScreenProps> = ({ visible, onClose }) => {
             </View>
           ) : (
             <Text style={styles.tagline}>
-              Protect your streak. Unlock the full picture of your habits.
+              Protect your streak. Unlock all themes, elite badges, weekly fight grades, and 30-day analytics.
             </Text>
           )}
 
@@ -106,7 +110,8 @@ export const ProScreen: React.FC<ProScreenProps> = ({ visible, onClose }) => {
           <Text style={styles.sectionLabel}>THEMES</Text>
           <View style={styles.themeGrid}>
             {PALETTES.map((p) => {
-              const locked = p.pro && !isPro;
+              const owned = !p.pro || isPro || unlockedThemes.includes(p.id);
+              const locked = !owned;
               const active = themeId === p.id;
               return (
                 <TouchableOpacity
@@ -129,11 +134,11 @@ export const ProScreen: React.FC<ProScreenProps> = ({ visible, onClose }) => {
                     {p.tagline}
                   </Text>
                   {locked ? (
-                    <Text style={[styles.themeBadge, { color: p.textTertiary }]}>PRO</Text>
+                    <Text style={[styles.themeBadge, { color: p.textTertiary }]}>PRO / SHOP</Text>
                   ) : active ? (
                     <Text style={[styles.themeBadge, { color: p.accent }]}>ACTIVE</Text>
                   ) : (
-                    <Text style={styles.themeBadgeSpacer}> </Text>
+                    <Text style={[styles.themeBadge, { color: p.textSecondary }]}>OWNED</Text>
                   )}
                 </TouchableOpacity>
               );
@@ -142,24 +147,32 @@ export const ProScreen: React.FC<ProScreenProps> = ({ visible, onClose }) => {
 
           {!isPro && !purchasesAvailable() && (
             <>
-              <Text style={styles.sectionLabel}>HOW TO GET PRO</Text>
-              <View style={styles.planCard}>
+              <Text style={styles.sectionLabel}>HOW TO EARN PRO FREE</Text>
+              <TouchableOpacity
+                style={styles.planCard}
+                onPress={onOpenFriends ?? onClose}
+                activeOpacity={0.85}
+              >
                 <View style={styles.planLeft}>
                   <Text style={styles.planTitle}>INVITE FRIENDS</Text>
-                  <Text style={styles.planCadence}>
-                    {REFERRAL_STEPS} · Friends tab
-                  </Text>
+                  <Text style={styles.planCadence}>{REFERRAL_STEPS}</Text>
                 </View>
-              </View>
-              <View style={styles.planCard}>
+                <Text style={styles.planGo}>OPEN →</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.planCard}
+                onPress={onOpenHome ?? onClose}
+                activeOpacity={0.85}
+              >
                 <View style={styles.planLeft}>
-                  <Text style={styles.planTitle}>SPEND COINS</Text>
+                  <Text style={styles.planTitle}>SPEND COINS IN SHOP</Text>
                   <Text style={styles.planCadence}>
-                    ◉ {PRO_WEEK_PRICE.toLocaleString()} → 7 days, once a month · Shop on Home
+                    ◉ {PRO_WEEK_PRICE.toLocaleString()} → 7 days Pro, once a month
                   </Text>
                 </View>
-              </View>
-              <Text style={styles.legal}>{INVITE_RULES} Coins come from winning challenges.</Text>
+                <Text style={styles.planGo}>SHOP →</Text>
+              </TouchableOpacity>
+              <Text style={styles.legal}>{INVITE_RULES} Coins come from winning challenges and duels.</Text>
             </>
           )}
 
@@ -193,8 +206,7 @@ export const ProScreen: React.FC<ProScreenProps> = ({ visible, onClose }) => {
               ))}
 
               <Text style={styles.legal}>
-                Subscriptions renew automatically until cancelled. Manage or cancel any time in
-                Google Play. Lifetime is a single payment with no renewal.
+                Subscriptions renew automatically until cancelled. Manage or cancel any time in Google Play. Lifetime is a single payment with no renewal.
               </Text>
 
               <TouchableOpacity style={styles.cancelBtn} onPress={handleRestore} activeOpacity={0.8} disabled={busy !== null}>
@@ -213,37 +225,45 @@ export const ProScreen: React.FC<ProScreenProps> = ({ visible, onClose }) => {
             </TouchableOpacity>
           )}
         </ScrollView>
-      </View>
+      </SafeAreaView>
     </Modal>
   );
 };
 
 const makeStyles = (c: Palette) => StyleSheet.create({
   root: { flex: 1, backgroundColor: c.bg },
-  content: { padding: 20, paddingTop: 56, paddingBottom: 48 },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 10,
+  },
+  brandInline: { color: c.textPrimary, fontSize: 22, fontWeight: '900', letterSpacing: -0.4 },
+  brandInlinePro: { color: c.accent },
+  content: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 48 },
 
-  close: { position: 'absolute', top: 52, right: 16, width: 36, height: 36, borderRadius: 18, backgroundColor: c.surfaceRaised, justifyContent: 'center', alignItems: 'center', zIndex: 2 },
+  close: { width: 36, height: 36, borderRadius: 18, backgroundColor: c.surfaceRaised, justifyContent: 'center', alignItems: 'center' },
   closeText: { color: c.textSecondary, fontSize: 14, fontWeight: '900' },
 
-  brand: { color: c.textPrimary, fontSize: 26, fontWeight: '900', letterSpacing: -0.5 },
-  brandPro: { color: c.accent, fontSize: 46, fontWeight: '900', letterSpacing: -2, marginTop: -8, marginBottom: 12 },
-  tagline: { color: c.textSecondary, fontSize: 14, lineHeight: 20, marginBottom: 28 },
+  tagline: { color: c.textSecondary, fontSize: 14, lineHeight: 20, marginBottom: 24 },
 
-  activeCard: { backgroundColor: c.accentMuted, borderRadius: 16, padding: 18, borderWidth: 1, borderColor: c.accentDim, marginBottom: 28 },
+  activeCard: { backgroundColor: c.accentMuted, borderRadius: 16, padding: 18, borderWidth: 1, borderColor: c.accentDim, marginBottom: 24 },
   activeTitle: { color: c.accent, fontSize: 14, fontWeight: '900', letterSpacing: 0.5 },
   activeSub: { color: c.textSecondary, fontSize: 12, marginTop: 6 },
   activeFreezes: { color: c.textTertiary, fontSize: 11, marginTop: 10, fontWeight: '700' },
 
-  features: { gap: 18, marginBottom: 32 },
+  features: { gap: 16, marginBottom: 28 },
   featureRow: { flexDirection: 'row', gap: 14, alignItems: 'flex-start' },
   featureIcon: { color: c.accent, fontSize: 18, width: 24, textAlign: 'center', marginTop: 1 },
   featureBody: { flex: 1 },
-  featureTitle: { color: c.textPrimary, fontSize: 14, fontWeight: '800', marginBottom: 3 },
+  featureTitle: { color: c.textPrimary, fontSize: 14, fontWeight: '800', marginBottom: 2 },
   featureText: { color: c.textTertiary, fontSize: 12, lineHeight: 17 },
 
   sectionLabel: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 1, marginBottom: 12 },
 
-  themeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 32 },
+  themeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 28 },
   themeCard: {
     width: '47%',
     flexGrow: 1,
@@ -251,14 +271,13 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     borderWidth: 1.5,
     padding: 14,
   },
-  themeCardLocked: { opacity: 0.55 },
+  themeCardLocked: { opacity: 0.6 },
   swatchRow: { flexDirection: 'row', gap: 4, marginBottom: 10 },
   swatch: { width: 16, height: 16, borderRadius: 5 },
   swatchAccent: { width: 28, height: 16, borderRadius: 5 },
   themeName: { fontSize: 13, fontWeight: '900', letterSpacing: 0.4 },
-  themeTagline: { fontSize: 10, lineHeight: 14, marginTop: 3, minHeight: 28 },
-  themeBadge: { fontSize: 8, fontWeight: '900', letterSpacing: 0.8, marginTop: 4 },
-  themeBadgeSpacer: { fontSize: 8, marginTop: 4 },
+  themeTagline: { fontSize: 11, lineHeight: 15, marginTop: 3, minHeight: 30 },
+  themeBadge: { fontSize: 10, fontWeight: '900', letterSpacing: 0.6, marginTop: 4 },
 
   planCard: {
     flexDirection: 'row',
@@ -272,14 +291,15 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     borderColor: c.border,
   },
   planCardFeatured: { borderColor: c.accent, backgroundColor: c.accentMuted },
-  planLeft: { flex: 1 },
+  planLeft: { flex: 1, marginRight: 10 },
   planTitle: { color: c.textPrimary, fontSize: 15, fontWeight: '900', letterSpacing: 0.3 },
   planCadence: { color: c.textTertiary, fontSize: 11, marginTop: 3 },
+  planGo: { color: c.accent, fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
   planRight: { alignItems: 'flex-end' },
   planPrice: { color: c.accent, fontSize: 20, fontWeight: '900' },
-  planNote: { color: c.accentDim, fontSize: 9, fontWeight: '900', letterSpacing: 0.5, marginTop: 3 },
+  planNote: { color: c.accentDim, fontSize: 10, fontWeight: '900', letterSpacing: 0.5, marginTop: 3 },
 
-  legal: { color: c.textFaint, fontSize: 10, lineHeight: 15, marginTop: 14 },
+  legal: { color: c.textTertiary, fontSize: 11, lineHeight: 16, marginTop: 12 },
 
   cancelBtn: { alignItems: 'center', paddingVertical: 16, marginTop: 8 },
   cancelText: { color: c.textTertiary, fontSize: 12, fontWeight: '900', letterSpacing: 0.5 },

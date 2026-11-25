@@ -27,7 +27,7 @@ internal class ShortVideoNavigation private constructor(
             val node = queue.removeFirst()
             if (!node.isVisibleToUser) continue
             val id = node.resourceName()
-            if (id in awayPanelIds || (node.isEditable && node.isFocused)) return ReelsChallenge.Screen.AWAY
+            if (id in awayPanelIds || node.isEditable) return ReelsChallenge.Screen.AWAY
             node.getBoundsInScreen(bounds)
             val player = isDedicatedPager(node)
             if (isFullScreen(bounds, window)) {
@@ -38,7 +38,7 @@ internal class ShortVideoNavigation private constructor(
             if (inNavigationBand(bounds, window) && (node.isClickable || checked)) {
                 val description = node.contentDescription?.toString()?.lowercase(Locale.ROOT).orEmpty()
                 val label = description.substringBefore(',').trim()
-                val selected = checked || description.endsWith(", selected")
+                val selected = checked || description.endsWith(", selected") || description.contains("არჩეული")
                 if (selected && label in awayTabs) return ReelsChallenge.Screen.AWAY
                 if (selected && (label in feedTabs || id in feedTabIds)) selectedFeed = true
             }
@@ -85,14 +85,17 @@ internal class ShortVideoNavigation private constructor(
         (bounds.centerY() <= window.top + window.height() * .18 || bounds.centerY() >= window.bottom - window.height() * .16)
 
     private fun isFullScreen(bounds: Rect, window: Rect): Boolean =
-        bounds.height() >= window.height() * .60 && bounds.width() >= window.width() * .75
+        bounds.height() >= window.height() * .74 && bounds.width() >= window.width() * .80
 
     companion object {
-        private val scrollContainers = setOf("ViewPager", "ViewPager2", "VerticalViewPager", "RecyclerView", "ListView", "ViewGroup")
+        private val scrollContainers = setOf("ViewPager", "ViewPager2", "VerticalViewPager", "RecyclerView", "ListView")
 
         val facebook = ShortVideoNavigation(
-            feedTabs = setOf("reels", "reels tab", "რილსები"),
-            awayTabs = setOf("home", "friends", "groups", "marketplace", "notifications", "menu", "search", "messages", "profile"),
+            feedTabs = setOf("reels", "reels tab", "რილსები", "рилс"),
+            awayTabs = setOf(
+                "home", "friends", "groups", "marketplace", "notifications", "menu", "search", "messages", "profile",
+                "მთავარი", "მეგობრები", "ჯგუფები", "შეტყობინებები", "მენიუ", "ძებნა", "პროფილი"
+            ),
             feedTabIds = setOf("reels_tab", "reels_home_tab"),
             awayPanelIds = setOf("message_thread", "thread_view", "conversation_view", "comment_composer", "comments_sheet", "search_box", "profile_header"),
             playerIds = setOf("reels_view_pager", "reels_viewpager", "reels_pager", "reels_player_pager", "fullscreen_reels_pager"),
@@ -100,8 +103,11 @@ internal class ShortVideoNavigation private constructor(
         )
 
         val tiktok = ShortVideoNavigation(
-            feedTabs = setOf("for you", "following", "for you feed", "following feed", "შენთვის"),
-            awayTabs = setOf("inbox", "profile", "friends", "shop", "search", "messages", "live"),
+            feedTabs = setOf("for you", "following", "for you feed", "following feed", "შენთვის", "გამოწერილი", "рекомендации"),
+            awayTabs = setOf(
+                "inbox", "profile", "friends", "shop", "search", "messages", "live",
+                "შემოსულები", "პროფილი", "მეგობრები", "მაღაზია", "ძებნა", "შეტყობინებები"
+            ),
             feedTabIds = setOf("for_you_tab", "following_tab", "recommend_tab"),
             awayPanelIds = setOf("chat_room", "chat_container", "message_list", "message_composer", "inbox_container", "comment_panel", "comment_list", "search_box", "profile_header"),
             playerIds = setOf("for_you_pager", "following_pager", "main_feed_pager", "feed_view_pager", "feed_viewpager", "recommend_feed_pager"),
@@ -109,8 +115,11 @@ internal class ShortVideoNavigation private constructor(
         )
 
         val youtube = ShortVideoNavigation(
-            feedTabs = setOf("shorts"),
-            awayTabs = setOf("home", "subscriptions", "you", "library", "search"),
+            feedTabs = setOf("shorts", "შორტსი"),
+            awayTabs = setOf(
+                "home", "subscriptions", "you", "library", "search",
+                "მთავარი", "გამოწერები", "თქვენ", "ბიბლიოთეკა", "ძებნა"
+            ),
             feedTabIds = setOf("button_shorts_container"),
             awayPanelIds = setOf("comment_dialog_root", "engagement_panel_content", "shorts_creation_player_view", "watch_while_time_bar_view"),
             playerIds = setOf("reel_recycler", "reel_watch_pager_view_pager"),

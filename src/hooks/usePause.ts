@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { NativeModules, Platform } from 'react-native';
+import { AppState, NativeModules, Platform } from 'react-native';
 
 const { UsageMonitor } = NativeModules;
 
@@ -41,6 +41,8 @@ export const resumeMonitoring = async (): Promise<void> => {
   publish(0);
 };
 
+export const resetPauseCache = () => publish(0);
+
 export const refreshPause = async (): Promise<void> => {
   if (!nativeAvailable()) return;
   try {
@@ -63,9 +65,13 @@ export const usePause = () => {
 
   useEffect(() => {
     listeners.add(setUntil);
-    refreshPause();
+    void refreshPause();
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s === 'active') void refreshPause();
+    });
     return () => {
       listeners.delete(setUntil);
+      sub.remove();
     };
   }, []);
 

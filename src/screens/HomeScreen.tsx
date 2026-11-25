@@ -12,21 +12,30 @@ import { useScreenTime, formatMinutes, todayKey } from '../hooks/useScreenTime';
 import { totalUsageMinutes } from '../utils/screenTime';
 import { AppIcon } from '../components/AppIcon';
 import { challengeDay } from '../utils/challengeTime';
-import { spacing, radius, type, cardShadow, glowFor, Palette } from '../theme';
+import { colorForApp, SHORT_VIDEO_APPS } from '../constants/apps';
+import { rankForLevel } from '../constants/ranks';
+import { frameById } from '../constants/cosmetics';
+import { spacing, radius, cardShadow, Palette } from '../theme';
+import type { ShortVideoController } from '../hooks/useInstagramReelsTest';
 
 interface HomeProps {
   stats: UserStats;
   history: ChallengeItem[];
   dailyChallengeLimit: number;
   challengeTimeZone: string;
+  reportedHours?: number | null;
+  reelsTest?: ShortVideoController | null;
   onNavigate: (state: TrainingState) => void;
 }
 
 const DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 
-const getTodayCount = (history: ChallengeItem[], zone: string): number => history.filter((item) => item.counted !== false && challengeDay(item.timestamp, zone) === challengeDay(Date.now(), zone)).length;
-const getTodaySuccess = (history: ChallengeItem[], zone: string): number => history.filter((item) => item.counted !== false && item.wasSuccessful && challengeDay(item.timestamp, zone) === challengeDay(Date.now(), zone)).length;
+const getTodayCount = (history: ChallengeItem[], zone: string): number =>
+  history.filter((item) => item.counted !== false && challengeDay(item.timestamp, zone) === challengeDay(Date.now(), zone)).length;
+
+const getTodaySuccess = (history: ChallengeItem[], zone: string): number =>
+  history.filter((item) => item.counted !== false && item.wasSuccessful && challengeDay(item.timestamp, zone) === challengeDay(Date.now(), zone)).length;
 
 const getTodayBarIndex = (): number => {
   const day = new Date().getDay();
@@ -35,9 +44,55 @@ const getTodayBarIndex = (): number => {
 
 const timeAgo = (ts: number) => {
   const mins = Math.floor((Date.now() - ts) / 60000);
-  if (mins < 1) return 'JUST NOW';
+  if (mins < 1) return 'Just now';
   if (mins < 60) return `${mins}m ago`;
-  return `${Math.floor(mins / 60)}h ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return days === 1 ? 'Yesterday' : `${days}d ago`;
+};
+
+const kindBadgeFor = (kind?: ChallengeItem['challengeKind']): string | null => {
+  if (kind === 'instagram_reels') return 'REELS';
+  if (kind === 'facebook_reels') return 'FB REELS';
+  if (kind === 'tiktok_feed') return 'TIKTOK';
+  if (kind === 'youtube_shorts') return 'SHORTS';
+  return null;
+};
+
+const gradeForExit = (seconds: number): { label: string; hot: boolean } => {
+  if (seconds > 0 && seconds < 1.5) return { label: '⚡ GODLIKE', hot: true };
+  if (seconds > 0 && seconds < 2.5) return { label: 'SHARP', hot: true };
+  return { label: 'WIN', hot: false };
+};
+
+const coachLineFor = (
+  totalToday: number,
+  average: number | null,
+  streak: number,
+  bestRxn: number,
+  todaySuccess: number,
+  dailyLimit: number,
+): string => {
+  if (dailyLimit > 0 && todaySuccess >= dailyLimit) {
+    return 'Perfect day locked in. The feed took an L today.';
+  }
+  if (bestRxn > 0 && bestRxn < 1.5 && streak >= 3) {
+    return `${bestRxn.toFixed(2)}s record exit & ${streak} streak. Unreal reflexes.`;
+  }
+  if (average !== null && totalToday > 0 && totalToday < average * 0.8) {
+    return `${formatMinutes(average - totalToday)} under your daily average — protect that lead tonight.`;
+  }
+  if (average !== null && totalToday > average * 1.15) {
+    return 'Above your daily average today. Snap out fast on the very next challenge.';
+  }
+  if (streak >= 5) {
+    return `${streak} straight wins. Stay sharp — most streaks die on autopilot.`;
+  }
+  if (streak === 0) {
+    return 'One clean exit starts a new run. Next alert is yours.';
+  }
+  return 'Every quick exit rewires the reflex. Stack another win today.';
 };
 
 const useFiredToday = (refreshKey: number): number | null => {
@@ -68,16 +123,25 @@ const useFiredToday = (refreshKey: number): number | null => {
 const DOTS_PER_COLUMN = 5;
 const RECENT_PAGE = 5;
 
-export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallengeLimit, challengeTimeZone, onNavigate }) => {  const styles = useThemedStyles(makeStyles);
+export const HomeScreen: React.FC<HomeProps> = ({
+  stats,
+  history,
+  dailyChallengeLimit,
+  challengeTimeZone,
+  reportedHours,
+  reelsTest,
+  onNavigate,
+}) => {
+  const styles = useThemedStyles(makeStyles);
+  const palette = useTheme();
   const scrollRef = useRef<any>(null);
   useTabScrollReset('HOME', scrollRef);
-  const { coins, streakFreezes } = usePro();
+  const { coins, streakFreezes, equippedFrame } = usePro();
   const [showShop, setShowShop] = useState<boolean>(false);
   const [visibleCount, setVisibleCount] = useState<number>(RECENT_PAGE);
   const firedToday = useFiredToday(history.length + dailyChallengeLimit);
   const { paused, remaining } = usePause();
   const { screenTime, tracked, week, totalToday, trackedToday, limits, loading: screenTimeLoading } = useScreenTime();
-
   const { fbUser } = useAuth();
 
   const now = new Date();
@@ -93,6 +157,7 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallenge
   const todayCount = getTodayCount(history, challengeTimeZone);
   const todaySuccess = getTodaySuccess(history, challengeTimeZone);
   const firedRemaining = Math.max(dailyChallengeLimit - Math.max(firedToday ?? 0, todayCount), 0);
+  const isPerfectToday = dailyChallengeLimit > 0 && todaySuccess >= dailyChallengeLimit && todayCount === todaySuccess;
   const dotColumns = Array.from({ length: Math.ceil(dailyChallengeLimit / DOTS_PER_COLUMN) }, (_, col) =>
     Array.from({ length: Math.min(DOTS_PER_COLUMN, dailyChallengeLimit - col * DOTS_PER_COLUMN) }, (_, row) => col * DOTS_PER_COLUMN + row)
   );
@@ -109,17 +174,29 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallenge
     return totalUsageMinutes(week.find((w) => w.date === todayKey(d))?.apps ?? []);
   });
   const maxWeek = Math.max(...weekMinutes, 1);
-  const pastDays = week.filter((w) => w.date < todayKey()).map((w) => totalUsageMinutes(w.apps));
+  const pastDays = week.filter((w) => w.date < todayKey()).slice(-7).map((w) => totalUsageMinutes(w.apps));
   const average = pastDays.length ? pastDays.reduce((a, b) => a + b, 0) / pastDays.length : null;
   const compare =
     average === null
-      ? { text: 'Across all your apps today', better: false, worse: false }
+      ? { text: 'Across all apps today', better: false, worse: false }
       : totalToday > average
-      ? { text: `Above your daily average of ${formatMinutes(average)}`, better: false, worse: true }
-      : { text: `Under your daily average of ${formatMinutes(average)}`, better: true, worse: false };
+      ? { text: `▲ Above daily avg (${formatMinutes(average)})`, better: false, worse: true }
+      : { text: `▼ ${formatMinutes(Math.max(0, average - totalToday))} under avg (${formatMinutes(average)})`, better: true, worse: false };
+
+  const reclaimedMins =
+    reportedHours && reportedHours > 0 && !screenTimeLoading && trackedToday < reportedHours * 60
+      ? Math.round(reportedHours * 60 - trackedToday)
+      : 0;
+
+  const rank = rankForLevel(stats.level);
+  const frame = frameById(equippedFrame);
   const streakStr = String(stats.currentStreak);
   const rxnDisplay = stats.bestReactionTime > 0 ? `${stats.bestReactionTime.toFixed(2)}s` : '—';
+  const winRateDisplay = stats.totalChallenges > 0 ? `${Math.round((stats.successCount / stats.totalChallenges) * 100)}%` : '—';
   const xpPct = Math.min(((stats.currentXP % XP_PER_LEVEL) / XP_PER_LEVEL) * 100, 100);
+  const hasShortVideoTracked = tracked.some((a) => (SHORT_VIDEO_APPS as readonly string[]).includes(a));
+  const cooldownMins = reelsTest?.cooldownRemainingMs ? Math.ceil(reelsTest.cooldownRemainingMs / 60_000) : 0;
+  const coachLine = coachLineFor(totalToday, average, stats.currentStreak, stats.bestReactionTime, todaySuccess, dailyChallengeLimit);
 
   const getInitials = () => {
     if (fbUser?.displayName) {
@@ -130,198 +207,289 @@ export const HomeScreen: React.FC<HomeProps> = ({ stats, history, dailyChallenge
 
   return (
     <>
-    <FlatList
-      ref={scrollRef}
-      style={styles.root}
-      contentContainerStyle={styles.content}
-      showsVerticalScrollIndicator={false}
-      data={history.slice(0, visibleCount)}
-      keyExtractor={(item) => item.id}
-      ListHeaderComponent={(
-        <>
-          <View style={styles.header}>
-            <View style={styles.brand}>
-              <Image source={require('../../assets/icon.png')} style={styles.logoBox} />
-              <Text style={styles.brandName}>IRONMIND</Text>
+      <FlatList
+        ref={scrollRef}
+        style={styles.root}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        data={history.slice(0, visibleCount)}
+        keyExtractor={(item) => item.id}
+        ListHeaderComponent={(
+          <>
+            <View style={styles.header}>
+              <View style={styles.brand}>
+                <Image source={require('../../assets/icon.png')} style={styles.logoBox} />
+                <View>
+                  <Text style={styles.brandName}>IRONMIND</Text>
+                  <Text style={[styles.brandRank, { color: rank.color }]}>{rank.short} · LV {stats.level}</Text>
+                </View>
+              </View>
+              <View style={styles.headerRight}>
+                <TouchableOpacity style={styles.freezeChip} onPress={() => setShowShop(true)} activeOpacity={0.8}>
+                  <Text style={styles.freezeChipText}>❄ {streakFreezes}</Text>
+                </TouchableOpacity>
+                <Text style={styles.dateText}>{dateStr}</Text>
+                <TouchableOpacity
+                  style={[
+                    styles.avatarBtn,
+                    frame && { borderWidth: 2.5, borderColor: frame.ring },
+                  ]}
+                  onPress={() => onNavigate('PROFILE')}
+                  activeOpacity={0.8}
+                >
+                  {fbUser?.photoURL ? (
+                    <Image source={{ uri: fbUser.photoURL }} style={styles.avatarImg} />
+                  ) : (
+                    <Text style={styles.avatarBtnText}>{getInitials()}</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
-            <View style={styles.headerRight}>
-              <TouchableOpacity style={styles.freezeChip} onPress={() => setShowShop(true)} activeOpacity={0.8}>
-                <Text style={styles.freezeChipText}>❄ {streakFreezes}</Text>
-              </TouchableOpacity>
-              <Text style={styles.dateText}>{dateStr}</Text>
-              <TouchableOpacity style={styles.avatarBtn} onPress={() => onNavigate('PROFILE')} activeOpacity={0.8}>
-                {fbUser?.photoURL ? (
-                  <Image source={{ uri: fbUser.photoURL }} style={styles.avatarImg} />
-                ) : (
-                  <Text style={styles.avatarBtnText}>{getInitials()}</Text>
+
+            <View style={styles.heroCard}>
+              <View style={styles.heroAccentStrip} />
+              <View style={styles.heroTopRow}>
+                <Text style={styles.metaChipText}>SCREEN TIME TODAY</Text>
+                <View style={styles.weekPill}>
+                  <Text style={styles.weekPillText}>WK {weekNum}</Text>
+                </View>
+              </View>
+
+              <Text style={styles.stValue}>{screenTimeLoading ? '—' : formatMinutes(totalToday)}</Text>
+
+              <View style={styles.compareRow}>
+                <View style={[styles.comparePill, compare.better && styles.compareBetterBg, compare.worse && styles.compareWorseBg]}>
+                  <Text style={[styles.stCompare, compare.better && styles.stBetter, compare.worse && styles.stWorse]}>
+                    {compare.text}
+                  </Text>
+                </View>
+                {reclaimedMins >= 15 && (
+                  <View style={styles.reclaimPill}>
+                    <Text style={styles.reclaimText}>⚡ {formatMinutes(reclaimedMins)} saved</Text>
+                  </View>
                 )}
-              </TouchableOpacity>
-            </View>
-          </View>
+              </View>
 
-          <View style={styles.heroCard}>
-            <View style={styles.heroGlow} />
-            <View style={styles.heroTopRow}>
-              <Text style={styles.metaChipText}>SCREEN TIME TODAY</Text>
-              <Text style={styles.metaChipText}>WK {weekNum}</Text>
-            </View>
+              {trackedRows.length > 0 && (
+                <View style={styles.stApps}>
+                  <View style={styles.trackedHeaderRow}>
+                    <Text style={styles.trackedSummary}>TRACKED APPS</Text>
+                    <Text style={styles.trackedSummaryVal}>{formatMinutes(trackedToday)}</Text>
+                  </View>
+                  {trackedRows.map((row) => {
+                    const lim = limits[row.app] ?? 0;
+                    const over = lim > 0 && row.minutes >= lim;
+                    const left = lim > 0 && !over ? Math.ceil(lim - row.minutes) : 0;
+                    const pct = lim > 0 ? Math.min((row.minutes / lim) * 100, 100) : Math.max((row.minutes / maxAppMinutes) * 100, 3);
+                    const barColor = over ? palette.danger : colorForApp(row.app);
+                    return (
+                      <View key={row.app} style={styles.stAppRow}>
+                        <AppIcon app={row.app} style={styles.stAppIcon} textStyle={styles.stAppIconText} />
+                        <View style={styles.stAppMain}>
+                          <View style={styles.stAppNameLine}>
+                            <Text style={styles.stAppName} numberOfLines={1}>{row.app}</Text>
+                            {over ? (
+                              <Text style={styles.limitOverTag}>LIMIT REACHED</Text>
+                            ) : left > 0 ? (
+                              <Text style={styles.limitLeftTag}>{left}m left</Text>
+                            ) : null}
+                          </View>
+                          <View style={styles.stAppBarBg}>
+                            <View style={[styles.stAppBarFill, { width: `${Math.max(pct, 3)}%`, backgroundColor: barColor }]} />
+                          </View>
+                        </View>
+                        <Text style={[styles.stAppMinutes, over && styles.stWorse]}>{formatMinutes(row.minutes)}</Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
 
-            <Text style={styles.stValue}>{screenTimeLoading ? '\u2014' : formatMinutes(totalToday)}</Text>
-            <Text style={[styles.stCompare, compare.better ? styles.stBetter : compare.worse ? styles.stWorse : null]}>
-              {compare.text}
-            </Text>
-
-            {trackedRows.length > 0 && (
-              <View style={styles.stApps}>
-                <Text style={styles.trackedSummary}>TRACKED APPS · {formatMinutes(trackedToday)}</Text>
-                {trackedRows.map((row) => (
-                  <View key={row.app} style={styles.stAppRow}>
-                    <AppIcon app={row.app} style={styles.stAppIcon} textStyle={styles.stAppIconText} />
-                    <Text style={styles.stAppName} numberOfLines={1}>{row.app}{limits[row.app] ? row.minutes >= limits[row.app] ? ' - limit reached' : ` - ${Math.ceil(limits[row.app] - row.minutes)}m left` : ''}</Text>
-                    <View style={styles.stAppBarBg}>
-                      <View style={[styles.stAppBarFill, { width: `${Math.max((row.minutes / maxAppMinutes) * 100, 3)}%` }]} />
+              <View style={styles.barChart}>
+                {weekMinutes.map((m, i) => (
+                  <View key={i} style={styles.barCol}>
+                    <View style={styles.barTrack}>
+                      <View style={[
+                        styles.bar,
+                        { height: Math.max((m / maxWeek) * 52, 4) },
+                        i === todayBarIdx && styles.barToday,
+                      ]} />
                     </View>
-                    <Text style={styles.stAppMinutes}>{formatMinutes(row.minutes)}</Text>
+                    <Text style={[styles.dayLabel, i === todayBarIdx && styles.dayToday]}>{DAYS[i]}</Text>
                   </View>
                 ))}
               </View>
+            </View>
+
+            {paused && (
+              <TouchableOpacity style={styles.pausedBanner} onPress={resumeMonitoring} activeOpacity={0.85}>
+                <View style={styles.pausedBody}>
+                  <Text style={styles.pausedTitle}>MONITORING PAUSED</Text>
+                  <Text style={styles.pausedSub}>No challenges will fire · resumes in {remaining}</Text>
+                </View>
+                <Text style={styles.pausedAction}>RESUME</Text>
+              </TouchableOpacity>
             )}
 
-            <View style={styles.barChart}>
-              {weekMinutes.map((m, i) => (
-                <View key={i} style={styles.barCol}>
-                  <View style={styles.barTrack}>
-                    <View style={[
-                      styles.bar,
-                      { height: Math.max((m / maxWeek) * 56, 4) },
-                      i === todayBarIdx && styles.barToday,
-                    ]} />
+            {reelsTest && hasShortVideoTracked && (reelsTest.isActive || reelsTest.needsSetup) && (
+              <TouchableOpacity
+                style={[styles.scrollStrip, reelsTest.needsSetup && styles.scrollStripWarn]}
+                onPress={reelsTest.open}
+                activeOpacity={0.85}
+              >
+                <View style={[styles.scrollDot, reelsTest.needsSetup && styles.scrollDotWarn]} />
+                <Text style={styles.scrollStripText} numberOfLines={1}>
+                  {reelsTest.needsSetup
+                    ? 'Finish Scroll Detection setup for Reels/TikTok/Shorts'
+                    : `Scroll Detection · ${reelsTest.countToday}/${reelsTest.maxPerDay} today${cooldownMins > 0 ? ` · ${cooldownMins}m cooldown` : ' · Ready'}`}
+                </Text>
+                <Text style={[styles.scrollStripCta, reelsTest.needsSetup && styles.scrollStripCtaWarn]}>
+                  {reelsTest.needsSetup ? 'SETUP →' : 'LIVE'}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            <View style={styles.halfRow}>
+              <View style={styles.halfCard}>
+                <View style={styles.halfHead}>
+                  <Text style={styles.todayLabel}>STREAK</Text>
+                  <View style={styles.lvBadge}>
+                    <Text style={styles.lvText}>LV {stats.level}</Text>
                   </View>
-                  <Text style={[styles.dayLabel, i === todayBarIdx && styles.dayToday]}>{DAYS[i]}</Text>
                 </View>
-              ))}
-            </View>
-          </View>
-
-          {paused && (
-            <TouchableOpacity style={styles.pausedBanner} onPress={resumeMonitoring} activeOpacity={0.85}>
-              <View style={styles.pausedBody}>
-                <Text style={styles.pausedTitle}>MONITORING PAUSED</Text>
-                <Text style={styles.pausedSub}>No challenges will fire · resumes in {remaining}</Text>
+                <View style={styles.streakNumRow}>
+                  <Text style={styles.halfNum}>{streakStr}</Text>
+                  {stats.currentStreak >= 3 && <Text style={styles.streakFlame}>🔥</Text>}
+                </View>
+                <View style={styles.xpBarBg}>
+                  <View style={[styles.xpBarFill, { width: `${xpPct}%` }]} />
+                </View>
+                <Text style={styles.xpLabel}>{stats.currentXP % XP_PER_LEVEL} / {XP_PER_LEVEL} XP</Text>
               </View>
-              <Text style={styles.pausedAction}>RESUME</Text>
+
+              <View style={styles.halfCard}>
+                <View style={styles.halfHead}>
+                  <Text style={styles.todayLabel}>CHALLENGES</Text>
+                  <View style={styles.todayDots}>
+                    {dotColumns.map((column, c) => (
+                      <View key={c} style={styles.dotColumn}>
+                        {column.map((i) => (
+                          <View
+                            key={i}
+                            style={[
+                              styles.dot,
+                              i < todaySuccess && styles.dotSuccess,
+                              i >= todaySuccess && i < todayCount && styles.dotFail,
+                            ]}
+                          />
+                        ))}
+                      </View>
+                    ))}
+                  </View>
+                </View>
+                <Text style={styles.halfNum}>
+                  {todayCount}<Text style={styles.todayOf}> / {dailyChallengeLimit}</Text>
+                </Text>
+                <Text style={[styles.todayRemain, isPerfectToday ? styles.todayPerfect : firedRemaining === 0 && styles.todayCapped]}>
+                  {isPerfectToday
+                    ? '★ Perfect day!'
+                    : firedRemaining > 0
+                    ? `${todaySuccess} won · ${firedRemaining} left`
+                    : `${todaySuccess} won · done today`}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.quickRow}>
+              <View style={styles.quickCell}>
+                <Text style={[styles.quickVal, styles.accentVal]}>{rxnDisplay}</Text>
+                <Text style={styles.quickLabel}>BEST EXIT</Text>
+              </View>
+              <View style={styles.quickCell}>
+                <Text style={styles.quickVal}>{winRateDisplay}</Text>
+                <Text style={styles.quickLabel}>WIN RATE</Text>
+              </View>
+              <TouchableOpacity style={styles.shopCell} onPress={() => setShowShop(true)} activeOpacity={0.85}>
+                <Text style={styles.coinVal}>◉ {coins}</Text>
+                <Text style={styles.shopLabel}>SHOP →</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.coachBanner}>
+              <Text style={styles.coachKicker}>COACH</Text>
+              <Text style={styles.coachText}>{coachLine}</Text>
+            </View>
+
+            <View style={styles.recentHeader}>
+              <Text style={styles.recentTitle}>RECENT CHALLENGES</Text>
+              {history.length > 0 && <Text style={styles.recentCount}>{history.length} total</Text>}
+            </View>
+          </>
+        )}
+        ListEmptyComponent={(
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyTitle}>READY FOR YOUR FIRST CHALLENGE</Text>
+            <Text style={styles.emptySub}>Open any tracked app and exit before the timer expires to earn coins and start your streak.</Text>
+            <TouchableOpacity style={styles.emptyBtn} onPress={() => onNavigate('APPS')} activeOpacity={0.85}>
+              <Text style={styles.emptyBtnText}>MANAGE APPS →</Text>
             </TouchableOpacity>
-          )}
-
-          <View style={styles.halfRow}>
-            <View style={styles.halfCard}>
-              <View style={styles.halfHead}>
-                <Text style={styles.todayLabel}>STREAK</Text>
-                <View style={styles.lvBadge}>
-                  <Text style={styles.lvText}>LV {stats.level}</Text>
-                </View>
-              </View>
-              <Text style={styles.halfNum}>{streakStr}</Text>
-              <View style={styles.xpBarBg}>
-                <View style={[styles.xpBarFill, { width: `${xpPct}%` }]} />
-              </View>
-              <Text style={styles.xpLabel}>{stats.currentXP % XP_PER_LEVEL} / {XP_PER_LEVEL} XP</Text>
-            </View>
-
-            <View style={styles.halfCard}>
-              <View style={styles.halfHead}>
-                <Text style={styles.todayLabel}>CHALLENGES</Text>
-                <View style={styles.todayDots}>
-                  {dotColumns.map((column, c) => (
-                    <View key={c} style={styles.dotColumn}>
-                      {column.map((i) => (
-                        <View
-                          key={i}
-                          style={[
-                            styles.dot,
-                            i < todaySuccess && styles.dotSuccess,
-                            i >= todaySuccess && i < todayCount && styles.dotFail,
-                          ]}
-                        />
-                      ))}
+          </View>
+        )}
+        renderItem={({ item }) => {
+          const kindBadge = kindBadgeFor(item.challengeKind);
+          const grade = item.wasSuccessful ? gradeForExit(item.elapsedTime) : null;
+          return (
+            <View style={styles.repRow}>
+              <AppIcon app={item.targetApp} style={styles.repIcon} textStyle={styles.repIconText} />
+              <View style={styles.repMain}>
+                <View style={styles.repTitleLine}>
+                  <Text style={styles.repApp} numberOfLines={1}>{item.targetApp}</Text>
+                  {kindBadge && (
+                    <View style={styles.kindPill}>
+                      <Text style={styles.kindPillText}>{kindBadge}</Text>
                     </View>
-                  ))}
+                  )}
                 </View>
+                <Text style={styles.repTime}>{timeAgo(item.timestamp)}</Text>
               </View>
-              <Text style={styles.halfNum}>
-                {todayCount}<Text style={styles.todayOf}> / {dailyChallengeLimit}</Text>
-              </Text>
-              <Text style={[styles.todayRemain, firedRemaining === 0 && styles.todayCapped]}>
-                {firedRemaining > 0 ? `${todaySuccess} won · ${firedRemaining} left` : `${todaySuccess} won · done for today`}
-              </Text>
+              <View style={styles.repRight}>
+                <Text style={item.wasSuccessful ? styles.repReact : styles.repFailTime}>
+                  {item.elapsedTime > 0 ? `${item.elapsedTime.toFixed(2)}s` : '—'}
+                </Text>
+                {item.wasSuccessful && grade ? (
+                  <Text style={[styles.repGrade, grade.hot && styles.repGradeHot]}>{grade.label}</Text>
+                ) : item.freezeUsed ? (
+                  <Text style={styles.repFrozenLabel}>❄ SAVED</Text>
+                ) : (
+                  <Text style={styles.repFailLabel}>FAIL</Text>
+                )}
+              </View>
             </View>
-          </View>
-
-          <View style={styles.quickRow}>
-            <View style={styles.quickCell}>
-              <Text style={[styles.quickVal, styles.accentVal]}>{rxnDisplay}</Text>
-              <Text style={styles.quickLabel}>BEST RXN</Text>
-            </View>
-            <View style={styles.quickCell}>
-              <Text style={styles.quickVal}>{stats.totalChallenges}</Text>
-              <Text style={styles.quickLabel}>TOTAL</Text>
-            </View>
-            <TouchableOpacity style={styles.shopCell} onPress={() => setShowShop(true)} activeOpacity={0.85}>
-              <Text style={styles.coinVal}>◉ {coins}</Text>
-              <Text style={styles.shopLabel}>SHOP →</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.recentHeader}>
-            <Text style={styles.recentTitle}>RECENT CHALLENGES</Text>
-          </View>
-        </>
-      )}
-      ListEmptyComponent={(
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyTitle}>NO CHALLENGES YET</Text>
-          <Text style={styles.emptySub}>Enable app monitoring to start receiving challenges.</Text>
-          <TouchableOpacity style={styles.emptyBtn} onPress={() => onNavigate('APPS')} activeOpacity={0.85}>
-            <Text style={styles.emptyBtnText}>GO TO APPS →</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-      renderItem={({ item }) => (
-        <View style={styles.repRow}>
-          <View style={[styles.repDot, item.wasSuccessful ? styles.repDotOk : styles.repDotFail]} />
-          <Text style={styles.repApp}>{item.targetApp.toUpperCase()}</Text>
-          <Text style={styles.repTime}>{timeAgo(item.timestamp)}</Text>
-          <View style={styles.repRight}>
-            <Text style={item.wasSuccessful ? styles.repReact : styles.repFailTime}>
-              {item.elapsedTime > 0 ? `${item.elapsedTime.toFixed(2)}s` : '—'}
-            </Text>
-            {!item.wasSuccessful && <Text style={styles.repFailLabel}>FAIL</Text>}
-          </View>
-        </View>
-      )}
-      ItemSeparatorComponent={() => <View style={styles.repDivider} />}
-      ListFooterComponent={(
-        <>
-          {history.length > visibleCount ? (
-            <TouchableOpacity style={styles.moreBtn} onPress={() => setVisibleCount((n) => n + 10)} activeOpacity={0.8}>
-              <Text style={styles.moreText}>SHOW MORE · {history.length - visibleCount}</Text>
-            </TouchableOpacity>
-          ) : visibleCount > RECENT_PAGE ? (
-            <TouchableOpacity style={styles.moreBtn} onPress={() => setVisibleCount(RECENT_PAGE)} activeOpacity={0.8}>
-              <Text style={styles.moreText}>SHOW LESS</Text>
-            </TouchableOpacity>
-          ) : null}
-        </>
-      )}
-    />
-    <ShopScreen visible={showShop} onClose={() => setShowShop(false)} />
+          );
+        }}
+        ItemSeparatorComponent={() => <View style={styles.repDivider} />}
+        ListFooterComponent={(
+          <>
+            {history.length > visibleCount ? (
+              <TouchableOpacity style={styles.moreBtn} onPress={() => setVisibleCount((n) => n + 10)} activeOpacity={0.8}>
+                <Text style={styles.moreText}>SHOW MORE · {history.length - visibleCount}</Text>
+              </TouchableOpacity>
+            ) : visibleCount > RECENT_PAGE ? (
+              <TouchableOpacity style={styles.moreBtn} onPress={() => setVisibleCount(RECENT_PAGE)} activeOpacity={0.8}>
+                <Text style={styles.moreText}>SHOW LESS</Text>
+              </TouchableOpacity>
+            ) : null}
+          </>
+        )}
+      />
+      <ShopScreen visible={showShop} onClose={() => setShowShop(false)} />
     </>
   );
 };
 
 const makeStyles = (c: Palette) => StyleSheet.create({
   root: { flex: 1, backgroundColor: c.bg },
-  content: { paddingTop: spacing.lg, paddingBottom: 30 },
+  content: { paddingTop: spacing.lg, paddingBottom: 32 },
 
   header: {
     flexDirection: 'row',
@@ -331,10 +499,250 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     marginBottom: spacing.lg,
   },
   brand: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  logoBox: { width: 30, height: 30, borderRadius: radius.sm },
-  brandName: { color: c.textPrimary, fontSize: 15, fontWeight: '900', letterSpacing: 1.5 },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  dateText: { color: c.textTertiary, fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
+  logoBox: { width: 32, height: 32, borderRadius: radius.sm },
+  brandName: { color: c.textPrimary, fontSize: 15, fontWeight: '900', letterSpacing: 1.4 },
+  brandRank: { fontSize: 10, fontWeight: '900', letterSpacing: 0.7, marginTop: 1 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  dateText: { color: c.textTertiary, fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
+  freezeChip: {
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: radius.pill,
+    backgroundColor: c.surface,
+    borderWidth: 1,
+    borderColor: c.border,
+  },
+  freezeChipText: { color: '#9FD8FF', fontSize: 12, fontWeight: '900' },
+  avatarBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.pill,
+    backgroundColor: c.accent,
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  avatarImg: { width: '100%', height: '100%' },
+  avatarBtnText: { color: c.accentContrast, fontSize: 11, fontWeight: '900' },
+
+  heroCard: {
+    backgroundColor: c.surface,
+    marginHorizontal: spacing.lg,
+    borderRadius: radius.xl,
+    padding: spacing.xl,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: c.border,
+    overflow: 'hidden',
+    ...cardShadow,
+  },
+  heroAccentStrip: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+    backgroundColor: c.accent,
+    opacity: 0.85,
+  },
+  heroTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
+  metaChipText: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 1.1 },
+  weekPill: {
+    backgroundColor: c.surfaceRaised,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: c.borderSubtle,
+  },
+  weekPillText: { color: c.textSecondary, fontSize: 10, fontWeight: '800', letterSpacing: 0.6 },
+
+  stValue: { color: c.textPrimary, fontSize: 54, fontWeight: '900', letterSpacing: -2, lineHeight: 58 },
+  compareRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm, marginTop: spacing.xs, marginBottom: spacing.lg },
+  comparePill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.pill, backgroundColor: c.surfaceRaised },
+  compareBetterBg: { backgroundColor: c.accentMuted },
+  compareWorseBg: { backgroundColor: c.dangerMuted },
+  stCompare: { color: c.textSecondary, fontSize: 11, fontWeight: '800' },
+  stBetter: { color: c.accent },
+  stWorse: { color: c.danger },
+  reclaimPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.pill, backgroundColor: c.accentMuted, borderWidth: 1, borderColor: c.accentDim },
+  reclaimText: { color: c.accent, fontSize: 11, fontWeight: '900' },
+
+  stApps: { gap: 12, marginBottom: spacing.lg },
+  trackedHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  trackedSummary: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 0.9 },
+  trackedSummaryVal: { color: c.textSecondary, fontSize: 11, fontWeight: '900' },
+  stAppRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  stAppIcon: { width: 28, height: 28, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+  stAppIconText: { color: '#FFFFFF', fontSize: 10, fontWeight: '900' },
+  stAppMain: { flex: 1, gap: 5 },
+  stAppNameLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6 },
+  stAppName: { color: c.textPrimary, fontSize: 12, fontWeight: '800', flexShrink: 1 },
+  limitLeftTag: { color: c.textTertiary, fontSize: 10, fontWeight: '800' },
+  limitOverTag: { color: c.danger, fontSize: 10, fontWeight: '900', letterSpacing: 0.4 },
+  stAppBarBg: { height: 6, borderRadius: 3, backgroundColor: c.borderSubtle, overflow: 'hidden' },
+  stAppBarFill: { height: 6, borderRadius: 3 },
+  stAppMinutes: { color: c.textPrimary, fontSize: 12, fontWeight: '900', width: 48, textAlign: 'right' },
+
+  barChart: { flexDirection: 'row', alignItems: 'flex-end', height: 74, justifyContent: 'space-between', paddingTop: spacing.xs, borderTopWidth: 1, borderColor: c.borderSubtle },
+  barCol: { flex: 1, alignItems: 'center', gap: 6 },
+  barTrack: { height: 52, justifyContent: 'flex-end' },
+  bar: { width: 16, backgroundColor: c.surfaceRaised, borderRadius: 8 },
+  barToday: { backgroundColor: c.accent },
+  dayLabel: { color: c.textFaint, fontSize: 10, fontWeight: '800' },
+  dayToday: { color: c.accent, fontWeight: '900' },
+
+  scrollStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 11,
+    borderRadius: radius.md,
+    backgroundColor: c.surface,
+    borderWidth: 1,
+    borderColor: c.border,
+  },
+  scrollStripWarn: { borderColor: '#FFA23B', backgroundColor: 'rgba(255, 162, 59, 0.1)' },
+  scrollDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: c.accent },
+  scrollDotWarn: { backgroundColor: '#FFA23B' },
+  scrollStripText: { flex: 1, color: c.textSecondary, fontSize: 12, fontWeight: '700' },
+  scrollStripCta: { color: c.accent, fontSize: 10, fontWeight: '900', letterSpacing: 0.6 },
+  scrollStripCtaWarn: { color: '#FFA23B' },
+
+  halfRow: { flexDirection: 'row', gap: spacing.sm, marginHorizontal: spacing.lg, marginBottom: spacing.sm },
+  halfCard: {
+    flex: 1,
+    backgroundColor: c.surface,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: c.border,
+  },
+  halfHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', minHeight: 26 },
+  streakNumRow: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
+  streakFlame: { fontSize: 22 },
+  halfNum: { color: c.textPrimary, fontSize: 38, fontWeight: '900', letterSpacing: -1.5, marginBottom: spacing.sm },
+  lvBadge: { backgroundColor: c.accentMuted, paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: radius.pill },
+  lvText: { color: c.accent, fontSize: 10, fontWeight: '900', letterSpacing: 0.4 },
+
+  xpBarBg: { height: 6, backgroundColor: c.borderSubtle, borderRadius: radius.pill, marginBottom: spacing.xs, overflow: 'hidden' },
+  xpBarFill: { height: '100%', backgroundColor: c.accent, borderRadius: radius.pill },
+  xpLabel: { color: c.textTertiary, fontSize: 11, fontWeight: '700' },
+
+  todayLabel: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 1, marginBottom: spacing.xs },
+  todayOf: { fontSize: 15, color: c.textTertiary, fontWeight: '700' },
+  todayRemain: { color: c.textSecondary, fontSize: 11, fontWeight: '700', marginTop: 2 },
+  todayPerfect: { color: c.accent, fontWeight: '900' },
+  todayCapped: { color: c.textTertiary },
+  todayDots: { flexDirection: 'row', gap: 6 },
+  dotColumn: { gap: 6 },
+  dot: { width: 10, height: 10, borderRadius: radius.pill, backgroundColor: c.borderSubtle, borderWidth: 1, borderColor: c.border },
+  dotSuccess: { backgroundColor: c.accent, borderColor: c.accent },
+  dotFail: { backgroundColor: c.danger, borderColor: c.danger },
+
+  quickRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  quickCell: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: c.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: c.border,
+    paddingVertical: spacing.md,
+  },
+  quickVal: { color: c.textPrimary, fontSize: 20, fontWeight: '900', letterSpacing: -0.5 },
+  quickLabel: { color: c.textTertiary, fontSize: 10, fontWeight: '800', letterSpacing: 0.5, marginTop: 3 },
+  accentVal: { color: c.accent },
+
+  shopCell: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: c.accentMuted,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: c.accent,
+    paddingVertical: spacing.md,
+  },
+  coinVal: { color: c.accent, fontSize: 20, fontWeight: '900', letterSpacing: -0.5 },
+  shopLabel: { color: c.accent, fontSize: 10, fontWeight: '900', letterSpacing: 0.6, marginTop: 3 },
+
+  coachBanner: {
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: c.surface,
+    borderWidth: 1,
+    borderColor: c.border,
+    borderLeftWidth: 3,
+    borderLeftColor: c.accent,
+  },
+  coachKicker: { color: c.accent, fontSize: 10, fontWeight: '900', letterSpacing: 1, marginBottom: 3 },
+  coachText: { color: c.textPrimary, fontSize: 13, lineHeight: 19, fontWeight: '600' },
+
+  pausedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+    padding: spacing.lg,
+    borderRadius: radius.md,
+    backgroundColor: c.dangerMuted,
+    borderWidth: 1,
+    borderColor: c.danger,
+  },
+  pausedBody: { flex: 1 },
+  pausedTitle: { color: c.danger, fontSize: 12, fontWeight: '900', letterSpacing: 0.8 },
+  pausedSub: { color: c.textSecondary, fontSize: 11, marginTop: 3 },
+  pausedAction: { color: c.danger, fontSize: 11, fontWeight: '900', letterSpacing: 0.6 },
+
+  recentHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.xl,
+    marginBottom: spacing.xs,
+  },
+  recentTitle: { color: c.textPrimary, fontSize: 12, fontWeight: '900', letterSpacing: 0.7 },
+  recentCount: { color: c.textTertiary, fontSize: 11, fontWeight: '700' },
+
+  repRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.xl, paddingVertical: 14, gap: spacing.md },
+  repIcon: { width: 34, height: 34, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+  repIconText: { fontSize: 11, fontWeight: '900' },
+  repMain: { flex: 1, gap: 2 },
+  repTitleLine: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  repApp: { color: c.textPrimary, fontSize: 14, fontWeight: '800', flexShrink: 1 },
+  kindPill: {
+    backgroundColor: c.surfaceRaised,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: c.border,
+  },
+  kindPillText: { color: c.textSecondary, fontSize: 10, fontWeight: '900', letterSpacing: 0.4 },
+  repTime: { color: c.textTertiary, fontSize: 11, fontWeight: '600' },
+  repRight: { alignItems: 'flex-end', minWidth: 64 },
+  repReact: { color: c.accent, fontSize: 14, fontWeight: '900' },
+  repFailTime: { color: c.textSecondary, fontSize: 14, fontWeight: '800' },
+  repGrade: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 0.4, marginTop: 1 },
+  repGradeHot: { color: c.accent },
+  repFrozenLabel: { color: '#9FD8FF', fontSize: 10, fontWeight: '900', letterSpacing: 0.4, marginTop: 1 },
+  repFailLabel: { color: c.danger, fontSize: 10, fontWeight: '900', letterSpacing: 0.5, marginTop: 1 },
+  repDivider: { height: 1, backgroundColor: c.borderSubtle, marginHorizontal: spacing.xl },
+
   moreBtn: {
     alignSelf: 'center',
     marginTop: spacing.lg,
@@ -347,179 +755,10 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     backgroundColor: c.surface,
   },
   moreText: { color: c.textSecondary, fontSize: 11, fontWeight: '900', letterSpacing: 0.8 },
-  freezeChip: {
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: 14,
-    backgroundColor: c.surface,
-    borderWidth: 1,
-    borderColor: c.border,
-  },
-  freezeChipText: { color: '#9FD8FF', fontSize: 12, fontWeight: '900' },
-  avatarBtn: { width: 34, height: 34, borderRadius: radius.pill, backgroundColor: c.accent, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
-  avatarImg: { width: '100%', height: '100%' },
-  avatarBtnText: { color: c.accentContrast, fontSize: 11, fontWeight: '900' },
 
-  heroCard: {
-    backgroundColor: c.surface,
-    marginHorizontal: spacing.lg,
-    borderRadius: radius.xl,
-    padding: spacing.xl,
-    marginBottom: spacing.lg,
-    overflow: 'hidden',
-    ...cardShadow,
-  },
-  heroGlow: {
-    position: 'absolute',
-    top: -80,
-    right: -60,
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    backgroundColor: c.accent,
-    opacity: 0.08,
-  },
-  heroTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
-  metaChipText: { color: c.textTertiary, fontSize: 11, fontWeight: '800', letterSpacing: 1 },
-  lvBadge: { backgroundColor: c.accentMuted, paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.pill },
-  lvText: { color: c.accent, fontSize: 11, fontWeight: '900', letterSpacing: 0.3 },
-
-  stValue: { color: c.textPrimary, fontSize: 56, fontWeight: '900', letterSpacing: -2, lineHeight: 60 },
-  stCompare: { color: c.textTertiary, fontSize: 12, fontWeight: '700', marginTop: 2, marginBottom: spacing.lg },
-  stBetter: { color: c.accent },
-  stWorse: { color: c.danger },
-  stApps: { gap: 10, marginBottom: spacing.lg },
-  trackedSummary: { color: c.textSecondary, fontSize: 10, fontWeight: '800', letterSpacing: 0.6 },
-  stAppRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  stAppIcon: { width: 26, height: 26, borderRadius: 7, justifyContent: 'center', alignItems: 'center' },
-  stAppIconText: { color: '#FFFFFF', fontSize: 9, fontWeight: '900' },
-  stAppName: { color: c.textSecondary, fontSize: 12, fontWeight: '700', width: 78 },
-  stAppBarBg: { flex: 1, height: 6, borderRadius: 3, backgroundColor: c.borderSubtle, overflow: 'hidden' },
-  stAppBarFill: { height: 6, borderRadius: 3, backgroundColor: c.accent },
-  stAppMinutes: { color: c.textPrimary, fontSize: 12, fontWeight: '900', width: 52, textAlign: 'right' },
-
-  halfRow: { flexDirection: 'row', gap: spacing.sm, marginHorizontal: spacing.lg, marginBottom: spacing.sm },
-  halfCard: {
-    flex: 1,
-    backgroundColor: c.surface,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: c.border,
-  },
-  halfHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', minHeight: 28 },
-  halfNum: { color: c.textPrimary, fontSize: 40, fontWeight: '900', letterSpacing: -1.5, marginBottom: spacing.sm },
-
-  xpBarBg: { height: 6, backgroundColor: c.borderSubtle, borderRadius: radius.pill, marginBottom: spacing.sm, overflow: 'hidden' },
-  xpBarFill: { height: '100%', backgroundColor: c.accent, borderRadius: radius.pill },
-  xpLabelRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  xpLabel: { color: c.textTertiary, fontSize: 11, fontWeight: '600' },
-  xpNext: { color: c.accent, fontSize: 11, fontWeight: '700' },
-
-  todayCard: {
-    backgroundColor: c.surface,
-    marginHorizontal: spacing.lg,
-    borderRadius: radius.lg,
-    padding: spacing.xl,
-    marginBottom: spacing.lg,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    ...cardShadow,
-  },
-  todayLeft: { flex: 1 },
-  todayLabel: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 1, marginBottom: spacing.sm },
-  todayCount: { color: c.textPrimary, fontSize: 34, fontWeight: '900', letterSpacing: -1, lineHeight: 36 },
-  todayOf: { fontSize: 15, color: c.textTertiary, fontWeight: '600' },
-  todayRemain: { color: c.textSecondary, fontSize: 11, marginTop: spacing.xs },
-  todayDots: { flexDirection: 'row', gap: 7 },
-  dotColumn: { gap: 7 },
-  dot: { width: 10, height: 10, borderRadius: radius.pill, backgroundColor: c.borderSubtle, borderWidth: 1, borderColor: c.border },
-  dotSuccess: { backgroundColor: c.accent, borderColor: c.accent },
-  dotFail: { backgroundColor: c.danger, borderColor: c.danger },
-
-  quickRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    marginBottom: spacing.lg,
-  },
-  quickCell: {
-    flex: 1,
-    alignItems: 'center',
-    backgroundColor: c.surface,
-    borderRadius: radius.md,
-    paddingVertical: spacing.lg,
-  },
-  quickVal: { color: c.textPrimary, fontSize: 22, fontWeight: '900', letterSpacing: -0.5 },
-  quickLabel: { color: c.textTertiary, fontSize: 9, fontWeight: '800', letterSpacing: 0.5, marginTop: spacing.xs },
-  accentVal: { color: c.accent },
-  todayCapped: { color: c.danger },
-
-  pausedBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    marginHorizontal: spacing.lg,
-    marginBottom: spacing.lg,
-    padding: spacing.lg,
-    borderRadius: radius.md,
-    backgroundColor: c.dangerMuted,
-    borderWidth: 1,
-    borderColor: c.danger,
-  },
-  pausedBody: { flex: 1 },
-  pausedTitle: { color: c.danger, fontSize: 12, fontWeight: '900', letterSpacing: 0.8 },
-  pausedSub: { color: c.textSecondary, fontSize: 11, marginTop: 3 },
-  pausedAction: { color: c.danger, fontSize: 11, fontWeight: '900', letterSpacing: 0.6 },
-
-  shopCell: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: c.accentMuted,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: c.accent,
-    paddingVertical: spacing.lg,
-  },
-  coinVal: { color: c.accent, fontSize: 20, fontWeight: '900', letterSpacing: -0.5 },
-  shopLabel: { color: c.accent, fontSize: 9, fontWeight: '900', letterSpacing: 0.6, marginTop: spacing.xs },
-
-  chartCard: {
-    backgroundColor: c.surface,
-    marginHorizontal: spacing.lg,
-    borderRadius: radius.lg,
-    padding: spacing.xl,
-    marginBottom: spacing.xl,
-  },
-  chartLabel: { color: c.textTertiary, fontSize: 10, fontWeight: '800', letterSpacing: 1, marginBottom: spacing.lg },
-  barChart: { flexDirection: 'row', alignItems: 'flex-end', height: 76, justifyContent: 'space-between' },
-  barCol: { flex: 1, alignItems: 'center', gap: spacing.sm },
-  barTrack: { height: 56, justifyContent: 'flex-end' },
-  bar: { width: 18, backgroundColor: c.borderSubtle, borderRadius: 9 },
-  barToday: { backgroundColor: c.accent },
-  dayLabel: { color: c.textFaint, fontSize: 10, fontWeight: '700' },
-  dayToday: { color: c.accent },
-
-  recentHeader: { paddingHorizontal: spacing.xl, marginBottom: spacing.xs },
-  recentTitle: { color: c.textPrimary, fontSize: 12, fontWeight: '900', letterSpacing: 0.5 },
-
-  repRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.lg, gap: spacing.md },
-  repDot: { width: 8, height: 8, borderRadius: radius.pill },
-  repDotOk: { backgroundColor: c.accent },
-  repDotFail: { backgroundColor: c.danger },
-  repApp: { flex: 1, color: c.textPrimary, fontSize: 14, fontWeight: '800', letterSpacing: 0.3 },
-  repTime: { color: c.textFaint, fontSize: 11, fontWeight: '600' },
-  repRight: { alignItems: 'flex-end', minWidth: 52 },
-  repReact: { color: c.accent, fontSize: 14, fontWeight: '900' },
-  repFailTime: { color: c.textSecondary, fontSize: 14, fontWeight: '800' },
-  repFailLabel: { color: c.danger, fontSize: 9, fontWeight: '900', letterSpacing: 0.5, marginTop: 1 },
-  repDivider: { height: 1, backgroundColor: c.borderSubtle, marginHorizontal: spacing.xl },
-
-  emptyState: { alignItems: 'center', paddingVertical: 40, paddingHorizontal: spacing.xl },
-  emptyTitle: { color: c.textFaint, fontSize: 14, fontWeight: '900', letterSpacing: 0.5, marginBottom: spacing.sm },
-  emptySub: { color: c.textFaint, fontSize: 12, textAlign: 'center', lineHeight: 18, marginBottom: spacing.xl },
-  emptyBtn: { backgroundColor: c.accentMuted, paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderRadius: radius.pill },
+  emptyState: { alignItems: 'center', paddingVertical: 36, paddingHorizontal: spacing.xl },
+  emptyTitle: { color: c.textSecondary, fontSize: 13, fontWeight: '900', letterSpacing: 0.5, marginBottom: spacing.sm },
+  emptySub: { color: c.textTertiary, fontSize: 12, textAlign: 'center', lineHeight: 18, marginBottom: spacing.lg },
+  emptyBtn: { backgroundColor: c.accentMuted, paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderRadius: radius.pill, borderWidth: 1, borderColor: c.accentDim },
   emptyBtnText: { color: c.accent, fontSize: 12, fontWeight: '900', letterSpacing: 0.5 },
 });

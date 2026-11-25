@@ -9,6 +9,8 @@ import { ProProvider, usePro } from './src/context/ProContext';
 import { initCrashReporting, setCrashUser, wrapWithCrashReporting } from './src/config/sentry';
 import { StreakReclaimModal } from './src/components/StreakReclaimModal';
 import { StreakSavedOverlay } from './src/components/StreakSavedOverlay';
+import { MilestoneOverlay } from './src/components/MilestoneOverlay';
+import { ShortVideoSetupModal } from './src/components/ShortVideoSetupModal';
 import { reportActiveDuels } from './src/hooks/useDuels';
 import { ProScreen } from './src/screens/ProScreen';
 import { WelcomeOfferScreen } from './src/screens/WelcomeOfferScreen';
@@ -29,6 +31,13 @@ import { authedFetch } from './src/utils/authFetch';
 import { deviceTimeZone } from './src/utils/challengeTime';
 import { auth } from './src/config/firebase';
 import { API_BASE_URL } from './src/config/api';
+import { TrainingState } from './src/types/training';
+import { LoginScreen } from './src/screens/LoginScreen';
+import { OnboardingScreen } from './src/screens/OnboardingScreen';
+import { HomeScreen } from './src/screens/HomeScreen';
+import { AppsScreen } from './src/screens/AppsScreen';
+import { FriendsScreen } from './src/screens/FriendsScreen';
+import { ProfileScreen } from './src/screens/ProfileScreen';
 
 initCrashReporting();
 
@@ -41,32 +50,25 @@ Notifications.setNotificationHandler({
     shouldShowList: true,
   }),
 });
-import { TrainingState } from './src/types/training';
-import { LoginScreen } from './src/screens/LoginScreen';
-import { OnboardingScreen } from './src/screens/OnboardingScreen';
-import { HomeScreen } from './src/screens/HomeScreen';
-import { AppsScreen } from './src/screens/AppsScreen';
-import { FriendsScreen } from './src/screens/FriendsScreen';
-import { ProfileScreen } from './src/screens/ProfileScreen';
 
 const HomeIcon = ({ active }: { active: boolean }) => {
   const palette = useTheme();
-  const c = active ? palette.accentContrast : palette.textFaint;
+  const c = active ? palette.accentContrast : palette.textTertiary;
   return (
     <View style={{ alignItems: 'center', gap: 2 }}>
-      <View style={{ width: 14, height: 9, borderTopLeftRadius: 7, borderTopRightRadius: 7, backgroundColor: c }} />
-      <View style={{ width: 10, height: 7, backgroundColor: c, borderRadius: 1 }} />
+      <View style={{ width: 15, height: 8, borderTopLeftRadius: 8, borderTopRightRadius: 8, backgroundColor: c }} />
+      <View style={{ width: 11, height: 7, backgroundColor: c, borderBottomLeftRadius: 2, borderBottomRightRadius: 2 }} />
     </View>
   );
 };
 
 const AppsIcon = ({ active }: { active: boolean }) => {
   const palette = useTheme();
-  const c = active ? palette.accentContrast : palette.textFaint;
+  const c = active ? palette.accentContrast : palette.textTertiary;
   return (
-    <View style={{ width: 14, height: 14, flexDirection: 'row', flexWrap: 'wrap', gap: 2 }}>
+    <View style={{ width: 14, height: 14, flexDirection: 'row', flexWrap: 'wrap', gap: 2.5 }}>
       {[0, 1, 2, 3].map((i) => (
-        <View key={i} style={{ width: 5, height: 5, backgroundColor: c, borderRadius: 1 }} />
+        <View key={i} style={{ width: 5.5, height: 5.5, backgroundColor: c, borderRadius: 2 }} />
       ))}
     </View>
   );
@@ -76,18 +78,24 @@ const SCREEN_ORDER: TrainingState[] = ['HOME', 'APPS', 'FRIENDS', 'PROFILE'];
 
 const FriendsIcon = ({ active }: { active: boolean }) => {
   const palette = useTheme();
-  const c = active ? palette.accentContrast : palette.textFaint;
+  const c = active ? palette.accentContrast : palette.textTertiary;
   return (
-    <View style={{ flexDirection: 'row' }}>
-      <View style={{ width: 9, height: 9, borderRadius: 4.5, backgroundColor: c, marginRight: -3, marginTop: 2 }} />
-      <View style={{ width: 11, height: 11, borderRadius: 5.5, backgroundColor: c }} />
+    <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
+      <View style={{ alignItems: 'center', marginRight: -2 }}>
+        <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: c, marginBottom: 1 }} />
+        <View style={{ width: 10, height: 5, borderTopLeftRadius: 5, borderTopRightRadius: 5, backgroundColor: c }} />
+      </View>
+      <View style={{ alignItems: 'center' }}>
+        <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: c, marginBottom: 1 }} />
+        <View style={{ width: 12, height: 6, borderTopLeftRadius: 6, borderTopRightRadius: 6, backgroundColor: c }} />
+      </View>
     </View>
   );
 };
 
 const ProfileIcon = ({ active }: { active: boolean }) => {
   const palette = useTheme();
-  const c = active ? palette.accentContrast : palette.textFaint;
+  const c = active ? palette.accentContrast : palette.textTertiary;
   return (
     <View style={{ alignItems: 'center', gap: 2 }}>
       <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: c }} />
@@ -101,9 +109,14 @@ function RootNavigator() {
   const nav = useThemedStyles(makeNav);
   const palette = useTheme();
   const { fbUser, loading } = useAuth();
-  const { stats, history, monitoredApps, challengeTimeZone, syncStatus, syncMessage, pendingCount, retrySync, DAILY_CHALLENGE_LIMIT, refreshSettings, lostStreak, reclaimStreak, dismissLostStreak, savedStreak, dismissSavedStreak } = useStats();
+  const {
+    stats, history, monitoredApps, reportedHours, challengeTimeZone,
+    syncStatus, syncMessage, pendingCount, retrySync,
+    DAILY_CHALLENGE_LIMIT, refreshSettings, lostStreak, reclaimStreak,
+    dismissLostStreak, savedStreak, dismissSavedStreak,
+  } = useStats();
   const [showPro, setShowPro] = useState<boolean>(false);
-  const { refresh: refreshEntitlement } = usePro();
+  const { refresh: refreshEntitlement, welcomeOffer, welcomeGiftAvailable } = usePro();
   const [notificationTarget, setNotificationTarget] = useState<TrainingState | null>(null);
   useNotifications(fbUser?.uid, setNotificationTarget);
 
@@ -149,11 +162,7 @@ function RootNavigator() {
   const [screen, setScreen] = useState<TrainingState>('HOME');
   const [isOnboarded, setIsOnboarded] = useState<boolean>(false);
   const [checkingOnboarding, setCheckingOnboarding] = useState<boolean>(true);
-  const reelsTest = useInstagramReelsTest(
-    fbUser?.uid,
-    !loading && isOnboarded && !checkingOnboarding &&
-      monitoredApps.some((app) => app === 'Instagram' || app === 'Facebook' || app === 'TikTok' || app === 'YouTube'),
-  );
+  const reelsTest = useInstagramReelsTest(fbUser?.uid, false);
 
   useAppMonitor(fbUser?.uid);
   useScreenTimeSync(fbUser?.uid);
@@ -290,16 +299,49 @@ function RootNavigator() {
   if (!fbUser) return <LoginScreen />;
   if (!isOnboarded) return <OnboardingScreen onComplete={handleOnboardingComplete} />;
 
+  const suppressMilestone =
+    welcomeGiftAvailable || welcomeOffer || lostStreak > 0 || savedStreak !== null || Boolean(reelsTest?.guideVisible);
+
   const screenFor = (id: TrainingState) => {
     switch (id) {
       case 'APPS':
-        return <AppsScreen history={history} onSettingsChanged={refreshSettings} onNavigate={goToTab} />;
+        return (
+          <AppsScreen
+            history={history}
+            onSettingsChanged={refreshSettings}
+            onNavigate={goToTab}
+            reelsTest={reelsTest}
+          />
+        );
       case 'FRIENDS':
-        return <FriendsScreen stats={stats} onNavigate={goToTab} />;
+        return <FriendsScreen stats={stats} isActive={screen === 'FRIENDS'} onNavigate={goToTab} />;
       case 'PROFILE':
-        return <ProfileScreen stats={stats} history={history} onSettingsChanged={refreshSettings} syncStatus={syncStatus} syncMessage={syncMessage} pendingCount={pendingCount} onRetrySync={retrySync} onNavigate={goToTab} reelsTest={reelsTest} />;
+        return (
+          <ProfileScreen
+            stats={stats}
+            history={history}
+            challengeTimeZone={challengeTimeZone}
+            onSettingsChanged={refreshSettings}
+            syncStatus={syncStatus}
+            syncMessage={syncMessage}
+            pendingCount={pendingCount}
+            onRetrySync={retrySync}
+            onNavigate={goToTab}
+            reelsTest={reelsTest}
+          />
+        );
       default:
-        return <HomeScreen stats={stats} history={history} dailyChallengeLimit={DAILY_CHALLENGE_LIMIT} challengeTimeZone={challengeTimeZone} onNavigate={goToTab} />;
+        return (
+          <HomeScreen
+            stats={stats}
+            history={history}
+            dailyChallengeLimit={DAILY_CHALLENGE_LIMIT}
+            challengeTimeZone={challengeTimeZone}
+            reportedHours={reportedHours}
+            reelsTest={reelsTest}
+            onNavigate={goToTab}
+          />
+        );
     }
   };
 
@@ -364,6 +406,16 @@ function RootNavigator() {
       <InviteRewardOverlay />
       <WelcomeGiftScreen />
       <PermissionGate />
+      <ShortVideoSetupModal controller={reelsTest} />
+
+      <MilestoneOverlay
+        uid={fbUser.uid}
+        stats={stats}
+        history={history}
+        dailyLimit={DAILY_CHALLENGE_LIMIT}
+        timeZone={challengeTimeZone}
+        suppressed={suppressMilestone}
+      />
 
       <StreakSavedOverlay
         streak={savedStreak?.streak ?? 0}
@@ -371,7 +423,18 @@ function RootNavigator() {
         onDone={dismissSavedStreak}
       />
 
-      <ProScreen visible={showPro} onClose={() => setShowPro(false)} />
+      <ProScreen
+        visible={showPro}
+        onClose={() => setShowPro(false)}
+        onOpenFriends={() => {
+          setShowPro(false);
+          goToTab('FRIENDS');
+        }}
+        onOpenHome={() => {
+          setShowPro(false);
+          goToTab('HOME');
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -383,14 +446,14 @@ function App() {
 
   return (
     <SafeAreaProvider>
-    <AuthProvider>
-      <ProProvider>
-        <ThemeProvider>
-          <RootNavigator />
-          <AppDialogHost />
-        </ThemeProvider>
-      </ProProvider>
-    </AuthProvider>
+      <AuthProvider>
+        <ProProvider>
+          <ThemeProvider>
+            <RootNavigator />
+            <AppDialogHost />
+          </ThemeProvider>
+        </ProProvider>
+      </AuthProvider>
     </SafeAreaProvider>
   );
 }
@@ -404,24 +467,26 @@ const makeStyles = (c: Palette) => StyleSheet.create({
 });
 
 const makeNav = (c: Palette) => StyleSheet.create({
-  container: { paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
+  container: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, paddingTop: 4 },
   bar: {
     flexDirection: 'row',
     backgroundColor: c.surface,
     borderRadius: radius.xl,
-    paddingVertical: spacing.md,
+    borderWidth: 1,
+    borderColor: c.border,
+    paddingVertical: 10,
     paddingHorizontal: spacing.sm,
     ...cardShadow,
   },
-  item: { flex: 1, alignItems: 'center', gap: 5 },
+  item: { flex: 1, alignItems: 'center', gap: 4 },
   iconWrap: {
-    width: 56,
-    height: 32,
-    borderRadius: 16,
+    width: 54,
+    height: 30,
+    borderRadius: 15,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  pill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: c.accent, borderRadius: 16 },
-  label: { fontSize: 9, fontWeight: '800', letterSpacing: 0.8, color: c.textFaint },
-  labelActive: { color: c.accent },
+  pill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: c.accent, borderRadius: 15 },
+  label: { fontSize: 10, fontWeight: '800', letterSpacing: 0.7, color: c.textTertiary },
+  labelActive: { color: c.accent, fontWeight: '900' },
 });

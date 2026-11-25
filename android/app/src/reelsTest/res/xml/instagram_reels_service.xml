@@ -7,4 +7,4 @@
     android:description="@string/instagram_reels_service_description"
     android:isAccessibilityTool="false"
     android:notificationTimeout="50"
-    android:packageNames="com.instagram.android" />
+    android:packageNames="com.instagram.android,com.facebook.katana,com.zhiliaoapp.musically,com.ss.android.ugc.trill,com.google.android.youtube" />

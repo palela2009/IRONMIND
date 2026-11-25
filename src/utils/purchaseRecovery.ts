@@ -19,9 +19,14 @@ export async function recoverStorePurchase(storage: Storage, key: string, confir
 export async function completeStorePurchase(storage: Storage, key: string, productId: string, buy: () => Promise<StoreOutcome>, confirm: () => Promise<boolean>): Promise<ConfirmedOutcome> {
   await storage.setItem(key, JSON.stringify({ productId, startedAt: Date.now() }));
   const outcome = await buy();
-  if (outcome !== 'purchased') {
+  if (outcome === 'cancelled') {
     await storage.removeItem(key);
-    return outcome;
+    return 'cancelled';
+  }
+  if (outcome === 'failed') {
+    if (await recoverStorePurchase(storage, key, confirm)) return 'purchased';
+    await storage.removeItem(key);
+    return 'failed';
   }
   return (await recoverStorePurchase(storage, key, confirm)) ? 'purchased' : 'pending';
 }

@@ -1,14 +1,18 @@
 export const APPS_LIST = ['Instagram', 'YouTube', 'TikTok', 'Facebook', 'X (Twitter)', 'Reddit', 'Snapchat'];
 
+export const SHORT_VIDEO_APPS = ['Instagram', 'TikTok', 'YouTube', 'Facebook'] as const;
+
 const APP_COLORS: Record<string, string> = {
-  Instagram: '#833AB4',
+  Instagram: '#C13584',
   YouTube: '#FF0000',
-  TikTok: '#010101',
+  TikTok: '#FE2C55',
   Facebook: '#1877F2',
-  'X (Twitter)': '#14171A',
+  'X (Twitter)': '#E7E9EA',
   Reddit: '#FF4500',
   Snapchat: '#FFFC00',
 };
+
+const DARK_TEXT_APPS = new Set(['Snapchat', 'X (Twitter)']);
 
 const APP_ICONS: Record<string, string> = {
   Instagram: 'IG',
@@ -28,6 +32,8 @@ export const colorForApp = (app: string): string => {
   for (let i = 0; i < app.length; i++) hash = (hash * 31 + app.charCodeAt(i)) >>> 0;
   return FALLBACK_PALETTE[hash % FALLBACK_PALETTE.length];
 };
+
+export const textColorForApp = (app: string): string => (DARK_TEXT_APPS.has(app) ? '#0B0C0E' : '#FFFFFF');
 
 export const abbrForApp = (app: string): string => {
   if (APP_ICONS[app]) return APP_ICONS[app];

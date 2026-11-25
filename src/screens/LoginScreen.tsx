@@ -3,12 +3,13 @@ import { View, Text, StyleSheet, TouchableOpacity, TextInput, ActivityIndicator,
 import { appAlert } from '../components/AppDialog';
 import { useThemedStyles, useTheme } from '../context/ThemeContext';
 import { Palette } from '../theme';
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import {
   GoogleAuthProvider,
   signInWithCredential,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
 } from 'firebase/auth';
 import { auth } from '../config/firebase';
 
@@ -16,29 +17,46 @@ GoogleSignin.configure({
   webClientId: '1094826576454-rus44gke6b6f1o6ujunucs8dk0kfurub.apps.googleusercontent.com',
 });
 
-export const LoginScreen: React.FC = () => {  const styles = useThemedStyles(makeStyles);
+const friendlyAuthError = (error: any): string => {
+  const code = String(error?.code ?? '');
+  if (code === 'auth/invalid-email') return 'That email address does not look valid.';
+  if (code === 'auth/user-not-found' || code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
+    return 'Incorrect email or password. Try again or reset your password.';
+  }
+  if (code === 'auth/email-already-in-use') return 'An account with this email already exists. Try logging in instead.';
+  if (code === 'auth/weak-password') return 'Choose a stronger password (at least 6 characters).';
+  if (code === 'auth/too-many-requests') return 'Too many attempts. Wait a minute and try again.';
+  if (code === 'auth/network-request-failed') return 'No internet connection. Check your network and try again.';
+  return error?.message || 'Something went wrong. Please try again.';
+};
+
+export const LoginScreen: React.FC = () => {
+  const styles = useThemedStyles(makeStyles);
   const palette = useTheme();
 
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
 
   const handleGoogleSignIn = async () => {
+    if (googleBusy || submitting) return;
+    setGoogleBusy(true);
     try {
       await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-
       const response = await GoogleSignin.signIn();
+      if (response.type === 'cancelled') return;
       const idToken = response.data?.idToken;
-
       if (idToken) {
         const credential = GoogleAuthProvider.credential(idToken);
         await signInWithCredential(auth, credential);
-        console.log('Successfully authenticated with Firebase!');
       }
     } catch (error: any) {
-      console.error('Google Sign-In Error:', error);
-      appAlert('Sign-In Error', error.message);
+      if (error?.code === statusCodes.SIGN_IN_CANCELLED || error?.code === statusCodes.IN_PROGRESS) return;
+      appAlert('Google Sign-In Error', friendlyAuthError(error));
+    } finally {
+      setGoogleBusy(false);
     }
   };
 
@@ -55,9 +73,24 @@ export const LoginScreen: React.FC = () => {  const styles = useThemedStyles(ma
         await signInWithEmailAndPassword(auth, email.trim(), password);
       }
     } catch (error: any) {
-      appAlert(mode === 'signup' ? 'Sign-Up Error' : 'Sign-In Error', error.message);
+      appAlert(mode === 'signup' ? 'Could not create account' : 'Could not log in', friendlyAuthError(error));
+    } finally {
+      setSubmitting(false);
     }
-    setSubmitting(false);
+  };
+
+  const handleForgotPassword = async () => {
+    const trimmed = email.trim();
+    if (!trimmed) {
+      appAlert('Enter your email first', 'Type your account email in the field above, then tap Forgot password.');
+      return;
+    }
+    try {
+      await sendPasswordResetEmail(auth, trimmed);
+      appAlert('Reset link sent', `Check ${trimmed} for a password reset link.`);
+    } catch (error: any) {
+      appAlert('Could not send reset email', friendlyAuthError(error));
+    }
   };
 
   return (
@@ -69,7 +102,7 @@ export const LoginScreen: React.FC = () => {  const styles = useThemedStyles(ma
         <View style={styles.centerBlock}>
           <Image source={require('../../assets/icon.png')} style={styles.logoBox} />
           <Text style={styles.mainTitle}>IRONMIND</Text>
-          <Text style={styles.tagline}>Train your attention.</Text>
+          <Text style={styles.tagline}>Train your attention. Beat the feed.</Text>
         </View>
 
         <View style={styles.actionBlock}>
@@ -108,10 +141,16 @@ export const LoginScreen: React.FC = () => {  const styles = useThemedStyles(ma
             onChangeText={setPassword}
           />
 
+          {mode === 'signin' && (
+            <TouchableOpacity style={styles.forgotBtn} onPress={handleForgotPassword} activeOpacity={0.8}>
+              <Text style={styles.forgotText}>Forgot password?</Text>
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity
             style={styles.primaryButton}
             onPress={handleEmailSubmit}
-            disabled={submitting}
+            disabled={submitting || googleBusy}
             activeOpacity={0.85}
           >
             {submitting ? (
@@ -127,8 +166,17 @@ export const LoginScreen: React.FC = () => {  const styles = useThemedStyles(ma
             <View style={styles.dividerLine} />
           </View>
 
-          <TouchableOpacity style={styles.googleButton} onPress={handleGoogleSignIn} activeOpacity={0.85}>
-            <Text style={styles.buttonText}>G  Continue with Google</Text>
+          <TouchableOpacity
+            style={styles.googleButton}
+            onPress={handleGoogleSignIn}
+            disabled={googleBusy || submitting}
+            activeOpacity={0.85}
+          >
+            {googleBusy ? (
+              <ActivityIndicator color={palette.accentContrast} />
+            ) : (
+              <Text style={styles.buttonText}>G  Continue with Google</Text>
+            )}
           </TouchableOpacity>
           <Text style={styles.footerNote}>Become the master of your screen reflex.</Text>
         </View>
@@ -139,14 +187,14 @@ export const LoginScreen: React.FC = () => {  const styles = useThemedStyles(ma
 
 const makeStyles = (c: Palette) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.bg },
-  scrollContent: { flexGrow: 1, paddingHorizontal: 24, justifyContent: 'space-between', paddingBottom: 50, paddingTop: 100 },
-  centerBlock: { alignItems: 'center', marginBottom: 40 },
-  logoBox: { width: 72, height: 72, borderRadius: 18, marginBottom: 16 },
-  mainTitle: { color: c.textPrimary, fontSize: 36, fontWeight: '900', letterSpacing: 1 },
-  tagline: { color: c.textSecondary, fontSize: 15, fontWeight: '500', marginTop: 6 },
+  scrollContent: { flexGrow: 1, paddingHorizontal: 24, justifyContent: 'space-between', paddingBottom: 48, paddingTop: 92 },
+  centerBlock: { alignItems: 'center', marginBottom: 36 },
+  logoBox: { width: 76, height: 76, borderRadius: 20, marginBottom: 16 },
+  mainTitle: { color: c.textPrimary, fontSize: 36, fontWeight: '900', letterSpacing: 1.2 },
+  tagline: { color: c.textSecondary, fontSize: 14, fontWeight: '600', marginTop: 6 },
   actionBlock: { width: '100%' },
 
-  modeSwitch: { flexDirection: 'row', backgroundColor: c.surface, borderRadius: 14, padding: 4, marginBottom: 16 },
+  modeSwitch: { flexDirection: 'row', backgroundColor: c.surface, borderRadius: 14, padding: 4, marginBottom: 16, borderWidth: 1, borderColor: c.border },
   modeTab: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
   modeTabActive: { backgroundColor: c.accent },
   modeTabText: { color: c.textSecondary, fontSize: 12, fontWeight: '900', letterSpacing: 0.5 },
@@ -164,14 +212,16 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     borderWidth: 1,
     borderColor: c.border,
   },
+  forgotBtn: { alignSelf: 'flex-end', paddingVertical: 4, marginBottom: 10 },
+  forgotText: { color: c.textSecondary, fontSize: 12, fontWeight: '700' },
 
-  primaryButton: { backgroundColor: c.accent, borderRadius: 20, paddingVertical: 20, alignItems: 'center', justifyContent: 'center', marginTop: 4, marginBottom: 20 },
+  primaryButton: { backgroundColor: c.accent, borderRadius: 18, paddingVertical: 18, alignItems: 'center', justifyContent: 'center', marginTop: 4, marginBottom: 20 },
 
   dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 20 },
   dividerLine: { flex: 1, height: 1, backgroundColor: c.surfaceRaised },
-  dividerText: { color: c.textFaint, fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
+  dividerText: { color: c.textTertiary, fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
 
-  googleButton: { backgroundColor: c.textPrimary, borderRadius: 20, paddingVertical: 20, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-  buttonText: { color: c.accentContrast, fontSize: 16, fontWeight: '900', letterSpacing: 0.5 },
-  footerNote: { color: c.textFaint, fontSize: 12, textAlign: 'center', fontWeight: '600' }
+  googleButton: { backgroundColor: c.textPrimary, borderRadius: 18, paddingVertical: 18, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  buttonText: { color: c.accentContrast, fontSize: 15, fontWeight: '900', letterSpacing: 0.5 },
+  footerNote: { color: c.textTertiary, fontSize: 12, textAlign: 'center', fontWeight: '600' },
 });

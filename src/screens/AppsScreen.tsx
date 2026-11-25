@@ -4,29 +4,32 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, AppState, Activit
 import { useThemedStyles, useTheme } from '../context/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ChallengeItem } from '../types/training';
-import { useAuth } from '../context/AuthContext';
 import { useScreenTime, formatMinutes } from '../hooks/useScreenTime';
 import { syncAppMonitor } from '../hooks/useAppMonitor';
-import { APPS_LIST, colorForApp } from '../constants/apps';
+import { APPS_LIST, SHORT_VIDEO_APPS, colorForApp } from '../constants/apps';
 import { AppIcon } from '../components/AppIcon';
 import { API_BASE_URL } from '../config/api';
 import { authedFetch } from '../utils/authFetch';
+import { deviceTimeZone } from '../utils/challengeTime';
 import { radius, spacing, cardShadow, Palette } from '../theme';
+import type { ShortVideoController } from '../hooks/useInstagramReelsTest';
 
 interface AppsProps {
   history: ChallengeItem[];
   onSettingsChanged?: () => void;
   onNavigate: (state: any) => void;
+  reelsTest?: ShortVideoController | null;
 }
 
 const ONBOARDING_URL = `${API_BASE_URL}/api/user/onboarding`;
+const LIMIT_CHIPS = [15, 30, 45, 60, 90, 120];
 
-export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged }) => {  const styles = useThemedStyles(makeStyles);
+export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged, reelsTest }) => {
+  const styles = useThemedStyles(makeStyles);
   const scrollRef = useRef<any>(null);
   useTabScrollReset('APPS', scrollRef);
   const palette = useTheme();
 
-  const { fbUser } = useAuth();
   const { screenTime, loading: stLoading, totalToday, trackedToday } = useScreenTime();
   const [monitoredApps, setMonitoredApps] = useState<string[]>([]);
   const [editing, setEditing] = useState(false);
@@ -86,6 +89,8 @@ export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged }) 
           goals: data.goals ?? [],
           difficultyLevel: data.difficultyLevel ?? 'EASY',
           dailyChallengeLimit: data.dailyChallengeLimit ?? 5,
+          appLimits: data.appLimits ?? [],
+          timeZone: data.timeZone ?? deviceTimeZone(),
         }),
       }).catch(() => {});
 
@@ -99,11 +104,13 @@ export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged }) 
 
   const limitFor = (app: string): number => appLimits[app] ?? 0;
 
+  const minutesForApp = (app: string) => screenTime.find((s) => s.app === app)?.minutes ?? 0;
+
   const suggestFor = (app: string): number => {
     const mins = minutesForApp(app);
     if (mins <= 0) return 30;
-    const target = Math.max(10, Math.round((mins * 0.7) / 5) * 5);
-    return target;
+    const rawTarget = mins * 0.7;
+    return LIMIT_CHIPS.reduce((best, chip) => (Math.abs(chip - rawTarget) < Math.abs(best - rawTarget) ? chip : best), LIMIT_CHIPS[1]);
   };
 
   const saveLimit = async (app: string, minutes: number) => {
@@ -127,6 +134,7 @@ export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged }) 
           difficultyLevel: data.difficultyLevel ?? 'EASY',
           dailyChallengeLimit: data.dailyChallengeLimit ?? 5,
           appLimits: asArray,
+          timeZone: data.timeZone ?? deviceTimeZone(),
         }),
       }).catch(() => {});
 
@@ -147,10 +155,9 @@ export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged }) 
     return { total: items.length, successes, bestTime, today };
   };
 
-  const minutesForApp = (app: string) => screenTime.find((s) => s.app === app)?.minutes ?? 0;
-
   const totalMinutes = totalToday;
   const maxMins = screenTime.length > 0 ? screenTime[0].minutes || 1 : 1;
+  const trackedSharePct = totalMinutes > 0 ? Math.min(Math.round((trackedToday / totalMinutes) * 100), 100) : 0;
 
   return (
     <ScrollView ref={scrollRef} style={styles.root} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -164,13 +171,61 @@ export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged }) 
       <View style={styles.hero}>
         <Text style={styles.heroLabel}>TODAY'S SCREEN TIME</Text>
         <Text style={styles.heroValue}>{stLoading ? '—' : formatMinutes(totalMinutes)}</Text>
-        <Text style={styles.heroSub}>All apps · {formatMinutes(trackedToday)} in tracked apps</Text>
+        <View style={styles.ratioTrack}>
+          <View style={[styles.ratioFill, { width: `${Math.max(trackedSharePct, trackedToday > 0 ? 4 : 0)}%` }]} />
+        </View>
+        <Text style={styles.heroSub}>
+          {formatMinutes(trackedToday)} in tracked apps{totalMinutes > 0 ? ` (${trackedSharePct}% of total)` : ''}
+        </Text>
       </View>
+
+      {reelsTest && (
+        <TouchableOpacity
+          style={[
+            styles.scrollCard,
+            reelsTest.isActive && styles.scrollCardActive,
+            reelsTest.needsSetup && styles.scrollCardWarn,
+          ]}
+          onPress={reelsTest.open}
+          activeOpacity={0.85}
+        >
+          <View style={styles.scrollCardHead}>
+            <Text style={styles.scrollCardTitle}>SCROLL-ONLY DETECTION</Text>
+            <View
+              style={[
+                styles.scrollBadge,
+                reelsTest.isActive && styles.scrollBadgeActive,
+                reelsTest.needsSetup && styles.scrollBadgeWarn,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.scrollBadgeText,
+                  reelsTest.isActive && styles.scrollBadgeTextActive,
+                  reelsTest.needsSetup && styles.scrollBadgeTextWarn,
+                ]}
+              >
+                {reelsTest.status}
+              </Text>
+            </View>
+          </View>
+          <Text style={styles.scrollCardDesc}>
+            Challenges fire ONLY when scrolling Instagram Reels, TikTok, YouTube Shorts, or Facebook Reels — never while texting or watching 1 shared video.
+          </Text>
+          <Text style={styles.scrollCardAction}>
+            {reelsTest.isActive
+              ? `${reelsTest.countToday}/${reelsTest.maxPerDay} short-video alerts today · Tap to manage`
+              : reelsTest.needsSetup
+              ? 'TAP TO FINISH 1-STEP SETUP GUIDE →'
+              : 'TURN ON WITH STEP-BY-STEP GUIDE →'}
+          </Text>
+        </TouchableOpacity>
+      )}
 
       <View style={styles.sectionRow}>
         <Text style={styles.sectionLabel}>TRACKED APPS</Text>
         <TouchableOpacity onPress={openEditor} activeOpacity={0.8}>
-          <Text style={styles.editLink}>{editing ? 'CLOSE' : 'EDIT'}</Text>
+          <Text style={styles.editLink}>{editing ? 'CLOSE' : 'EDIT APPS'}</Text>
         </TouchableOpacity>
       </View>
 
@@ -207,7 +262,7 @@ export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged }) 
       {!editing && monitoredApps.length === 0 && (
         <TouchableOpacity style={styles.emptyCard} onPress={openEditor} activeOpacity={0.85}>
           <Text style={styles.emptyTitle}>NO APPS TRACKED</Text>
-          <Text style={styles.emptySub}>Pick the apps that pull you in. Tap EDIT to choose.</Text>
+          <Text style={styles.emptySub}>Pick the apps that pull you in. Tap EDIT APPS to choose.</Text>
         </TouchableOpacity>
       )}
 
@@ -217,13 +272,22 @@ export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged }) 
           const rate = total > 0 ? Math.round((successes / total) * 100) : null;
           const mins = minutesForApp(app);
           const barPct = Math.min((mins / maxMins) * 100, 100);
+          const scrollSupported = (SHORT_VIDEO_APPS as readonly string[]).includes(app);
+          const scrollModeActive = Boolean(reelsTest?.isActive && scrollSupported);
 
           return (
             <View key={app} style={styles.appCard}>
               <View style={styles.appTop}>
                 <AppIcon app={app} style={styles.appIcon} textStyle={styles.appIconText} />
                 <View style={styles.appBody}>
-                  <Text style={styles.appName}>{app}</Text>
+                  <View style={styles.appNameRow}>
+                    <Text style={styles.appName}>{app}</Text>
+                    {scrollModeActive && (
+                      <View style={styles.scrollChip}>
+                        <Text style={styles.scrollChipText}>SCROLL-ONLY</Text>
+                      </View>
+                    )}
+                  </View>
                   <Text style={styles.appSub}>
                     {today > 0 ? `${today} challenge${today > 1 ? 's' : ''} today` : 'No challenges today'}
                   </Text>
@@ -240,6 +304,7 @@ export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged }) 
                 const near = limit > 0 && !over && mins >= limit * 0.8;
                 const pct = limit > 0 ? Math.min((mins / limit) * 100, 100) : barPct;
                 const barColor = over ? palette.danger : near ? '#FFA23B' : colorForApp(app);
+                const suggested = suggestFor(app);
 
                 return (
                   <>
@@ -256,24 +321,24 @@ export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged }) 
                         {limit > 0
                           ? over
                             ? `Over limit — ${formatMinutes(mins)} of ${limit}m`
-                            : `${formatMinutes(mins)} of ${limit}m used`
-                          : 'No daily limit set'}
+                            : `${formatMinutes(mins)} of ${limit}m daily budget`
+                          : 'No daily budget set'}
                       </Text>
-                      <Text style={styles.limitAction}>{limit > 0 ? 'CHANGE' : 'SET LIMIT'}</Text>
+                      <Text style={styles.limitAction}>{limit > 0 ? 'CHANGE' : 'SET BUDGET'}</Text>
                     </TouchableOpacity>
 
                     {editingLimitFor === app && (
                       <View style={styles.limitEditor}>
                         <Text style={styles.limitHint}>
                           {mins > 0
-                            ? `You have used ${formatMinutes(mins)} today. Suggested: ${suggestFor(app)}m`
-                            : 'Pick a daily budget for this app.'}
+                            ? `Used ${formatMinutes(mins)} today · Suggested target: ${suggested}m`
+                            : 'Pick a daily budget. IRONMIND warns you at 80%.'}
                         </Text>
                         <View style={styles.limitChips}>
-                          {[15, 30, 45, 60, 90, 120].map((m) => (
+                          {LIMIT_CHIPS.map((m) => (
                             <TouchableOpacity
                               key={m}
-                              style={[styles.chip, limit === m && styles.chipOn, suggestFor(app) === m && styles.chipSuggested]}
+                              style={[styles.chip, limit === m && styles.chipOn, suggested === m && styles.chipSuggested]}
                               onPress={() => saveLimit(app, m)}
                               activeOpacity={0.85}
                             >
@@ -302,14 +367,14 @@ export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged }) 
                   <Text style={[styles.statVal, rate !== null && rate >= 50 && styles.statAccent]}>
                     {rate !== null ? `${rate}%` : '—'}
                   </Text>
-                  <Text style={styles.statLabel}>SUCCESS</Text>
+                  <Text style={styles.statLabel}>WIN RATE</Text>
                 </View>
                 <View style={styles.statDivider} />
                 <View style={styles.statCell}>
                   <Text style={[styles.statVal, bestTime > 0 && styles.statAccent]}>
                     {bestTime > 0 ? `${bestTime.toFixed(2)}s` : '—'}
                   </Text>
-                  <Text style={styles.statLabel}>BEST</Text>
+                  <Text style={styles.statLabel}>BEST EXIT</Text>
                 </View>
               </View>
             </View>
@@ -325,7 +390,7 @@ export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged }) 
                 <AppIcon app={item.app} style={styles.stIcon} textStyle={styles.stIconText} />
                 <Text style={styles.stApp} numberOfLines={1}>{item.app}</Text>
                 <View style={styles.stBarWrap}>
-                  <View style={[styles.stBar, { width: `${Math.max((item.minutes / maxMins) * 100, 3)}%` }]} />
+                  <View style={[styles.stBar, { width: `${Math.max((item.minutes / maxMins) * 100, 3)}%`, backgroundColor: colorForApp(item.app) }]} />
                 </View>
                 <Text style={styles.stTime}>{formatMinutes(item.minutes)}</Text>
               </View>
@@ -350,14 +415,38 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     borderRadius: radius.lg,
     marginHorizontal: spacing.lg,
     padding: spacing.xl,
-    marginBottom: spacing.xl,
+    marginBottom: spacing.md,
     borderWidth: 1,
     borderColor: c.border,
     ...cardShadow,
   },
   heroLabel: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 1.2 },
-  heroValue: { color: c.textPrimary, fontSize: 40, fontWeight: '900', letterSpacing: -1.5, marginTop: 6 },
-  heroSub: { color: c.textSecondary, fontSize: 12, marginTop: spacing.sm },
+  heroValue: { color: c.textPrimary, fontSize: 42, fontWeight: '900', letterSpacing: -1.5, marginTop: 4 },
+  ratioTrack: { height: 6, borderRadius: 3, backgroundColor: c.borderSubtle, overflow: 'hidden', marginTop: spacing.md },
+  ratioFill: { height: '100%', backgroundColor: c.accent, borderRadius: 3 },
+  heroSub: { color: c.textSecondary, fontSize: 12, marginTop: spacing.sm, fontWeight: '600' },
+
+  scrollCard: {
+    backgroundColor: c.surface,
+    borderRadius: radius.md,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.xl,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: c.border,
+  },
+  scrollCardActive: { borderColor: c.accentDim },
+  scrollCardWarn: { borderColor: '#FFA23B' },
+  scrollCardHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  scrollCardTitle: { color: c.textPrimary, fontSize: 12, fontWeight: '900', letterSpacing: 0.7 },
+  scrollBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: c.surfaceRaised },
+  scrollBadgeActive: { backgroundColor: c.accentMuted },
+  scrollBadgeWarn: { backgroundColor: 'rgba(255, 162, 59, 0.16)' },
+  scrollBadgeText: { color: c.textSecondary, fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
+  scrollBadgeTextActive: { color: c.accent },
+  scrollBadgeTextWarn: { color: '#FFA23B' },
+  scrollCardDesc: { color: c.textSecondary, fontSize: 12, lineHeight: 17 },
+  scrollCardAction: { color: c.accent, fontSize: 11, fontWeight: '900', letterSpacing: 0.5, marginTop: spacing.sm },
 
   sectionRow: {
     flexDirection: 'row',
@@ -398,7 +487,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   },
   editRowOn: { backgroundColor: c.accentMuted },
   editIcon: { width: 30, height: 30, borderRadius: 9, justifyContent: 'center', alignItems: 'center' },
-  editIconText: { color: c.textPrimary, fontSize: 10, fontWeight: '900' },
+  editIconText: { fontSize: 10, fontWeight: '900' },
   editLabel: { flex: 1, color: c.textSecondary, fontSize: 13, fontWeight: '700' },
   editLabelOn: { color: c.textPrimary },
   check: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: c.border, justifyContent: 'center', alignItems: 'center' },
@@ -422,16 +511,19 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   },
   appTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   appIcon: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  appIconText: { color: c.textPrimary, fontSize: 13, fontWeight: '900' },
+  appIconText: { fontSize: 13, fontWeight: '900' },
   appBody: { flex: 1 },
+  appNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
   appName: { color: c.textPrimary, fontSize: 15, fontWeight: '800' },
+  scrollChip: { backgroundColor: c.accentMuted, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5 },
+  scrollChipText: { color: c.accent, fontSize: 10, fontWeight: '900', letterSpacing: 0.4 },
   appSub: { color: c.textTertiary, fontSize: 11, marginTop: 2 },
   appRight: { alignItems: 'flex-end' },
   appMinutes: { color: c.textPrimary, fontSize: 15, fontWeight: '900' },
-  appMinutesLabel: { color: c.textFaint, fontSize: 8, fontWeight: '900', letterSpacing: 0.5, marginTop: 2 },
+  appMinutesLabel: { color: c.textTertiary, fontSize: 10, fontWeight: '800', letterSpacing: 0.5, marginTop: 2 },
 
-  barWrap: { height: 4, backgroundColor: c.surfaceRaised, borderRadius: 2, overflow: 'hidden', marginTop: spacing.md },
-  bar: { height: '100%', borderRadius: 2 },
+  barWrap: { height: 5, backgroundColor: c.surfaceRaised, borderRadius: 3, overflow: 'hidden', marginTop: spacing.md },
+  bar: { height: '100%', borderRadius: 3 },
 
   limitRow: {
     flexDirection: 'row',
@@ -439,13 +531,13 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: spacing.sm,
   },
-  limitText: { color: c.textTertiary, fontSize: 11, fontWeight: '600' },
-  limitNear: { color: '#FFA23B' },
+  limitText: { color: c.textSecondary, fontSize: 11, fontWeight: '600' },
+  limitNear: { color: '#FFA23B', fontWeight: '800' },
   limitOver: { color: c.danger, fontWeight: '900' },
   limitAction: { color: c.accent, fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
 
   limitEditor: { marginTop: spacing.md, paddingTop: spacing.md, borderTopWidth: 1, borderColor: c.borderSubtle },
-  limitHint: { color: c.textTertiary, fontSize: 11, marginBottom: spacing.md, lineHeight: 15 },
+  limitHint: { color: c.textTertiary, fontSize: 11, marginBottom: spacing.md, lineHeight: 16 },
   limitChips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: {
     paddingHorizontal: spacing.lg,
@@ -462,9 +554,9 @@ const makeStyles = (c: Palette) => StyleSheet.create({
 
   statsRow: { flexDirection: 'row', marginTop: spacing.md, paddingTop: spacing.md, borderTopWidth: 1, borderColor: c.borderSubtle },
   statCell: { flex: 1, alignItems: 'center' },
-  statVal: { color: c.textSecondary, fontSize: 14, fontWeight: '900' },
+  statVal: { color: c.textPrimary, fontSize: 14, fontWeight: '900' },
   statAccent: { color: c.accent },
-  statLabel: { color: c.textFaint, fontSize: 8, fontWeight: '900', letterSpacing: 0.5, marginTop: 3 },
+  statLabel: { color: c.textTertiary, fontSize: 10, fontWeight: '800', letterSpacing: 0.4, marginTop: 3 },
   statDivider: { width: 1, backgroundColor: c.borderSubtle },
 
   allCard: {
@@ -477,11 +569,11 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   },
   stRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: spacing.md },
   stIcon: { width: 28, height: 28, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
-  stIconText: { color: c.textPrimary, fontSize: 9, fontWeight: '900' },
-  stApp: { color: c.textSecondary, fontSize: 12, fontWeight: '700', width: 78 },
-  stBarWrap: { flex: 1, height: 5, backgroundColor: c.surfaceRaised, borderRadius: 3, overflow: 'hidden' },
-  stBar: { height: '100%', backgroundColor: c.accent, borderRadius: 3 },
-  stTime: { color: c.accent, fontSize: 12, fontWeight: '900', width: 48, textAlign: 'right' },
+  stIconText: { fontSize: 10, fontWeight: '900' },
+  stApp: { color: c.textSecondary, fontSize: 12, fontWeight: '700', width: 82 },
+  stBarWrap: { flex: 1, height: 6, backgroundColor: c.surfaceRaised, borderRadius: 3, overflow: 'hidden' },
+  stBar: { height: '100%', borderRadius: 3 },
+  stTime: { color: c.textPrimary, fontSize: 12, fontWeight: '900', width: 48, textAlign: 'right' },
 
   emptyCard: {
     backgroundColor: c.surface,
@@ -493,5 +585,5 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     borderColor: c.border,
   },
   emptyTitle: { color: c.textSecondary, fontSize: 13, fontWeight: '900', letterSpacing: 0.5, marginBottom: 6 },
-  emptySub: { color: c.textFaint, fontSize: 12, textAlign: 'center', lineHeight: 17 },
+  emptySub: { color: c.textTertiary, fontSize: 12, textAlign: 'center', lineHeight: 18 },
 });

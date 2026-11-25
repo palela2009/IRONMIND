@@ -5,7 +5,7 @@ import { appAlert } from '../components/AppDialog';
 import { useThemedStyles, useTheme } from '../context/ThemeContext';
 import { Palette, radius, spacing } from '../theme';
 import { useFriends } from '../hooks/useFriends';
-import { useDuels, formatTimeLeft, formatAgo, DUEL_REACTIONS, reactionText, appsOf } from '../hooks/useDuels';
+import { useDuels, Duel, formatTimeLeft, formatAgo, DUEL_REACTIONS, reactionText, appsOf } from '../hooks/useDuels';
 import { useScreenTime, formatMinutes, trackedTotal, todayKey } from '../hooks/useScreenTime';
 import { AppIcon } from '../components/AppIcon';
 import { SwordsClash } from '../components/SwordsClash';
@@ -21,14 +21,15 @@ import { usePro } from '../context/ProContext';
 const DUEL_STAKE = 50;
 const FREE_STAKE = 0;
 
-const hoursSince = (iso: string | null): number =>
-  iso ? (Date.now() - new Date(iso).getTime()) / 3_600_000 : 0;
+type SubTab = 'BOARD' | 'DUELS' | 'INVITE';
+type SortLane = 'TODAY' | 'STREAK' | 'SPEED';
 
 const recentlyReacted = (iso: string | null): boolean =>
   !!iso && Date.now() - new Date(iso).getTime() < 60_000;
 
 interface FriendsProps {
   stats: UserStats;
+  isActive?: boolean;
   onNavigate: (state: TrainingState) => void;
 }
 
@@ -38,6 +39,7 @@ interface Entry {
   photoURL: string | null;
   currentStreak: number;
   longestStreak: number;
+  bestReactionTime: number;
   totalChallenges: number;
   level: number;
   currentXP: number;
@@ -46,6 +48,7 @@ interface Entry {
   frame: string | null;
   nameEffect: string | null;
   todayMinutes: number;
+  hasTodayData: boolean;
   weekAvgMinutes: number;
   trackedApps: string[];
 }
@@ -76,8 +79,8 @@ const Avatar: React.FC<{ entry: { uid: string; displayName: string; photoURL: st
   entry,
   size,
   ring,
-}) => {  const styles = useThemedStyles(makeStyles);
-
+}) => {
+  const styles = useThemedStyles(makeStyles);
   const [failed, setFailed] = useState(false);
   const frame = frameById(entry.frame);
   const boxStyle = {
@@ -112,8 +115,8 @@ const Avatar: React.FC<{ entry: { uid: string; displayName: string; photoURL: st
   );
 };
 
-const RankBadge: React.FC<{ level: number }> = ({ level }) => {  const styles = useThemedStyles(makeStyles);
-
+const RankBadge: React.FC<{ level: number }> = ({ level }) => {
+  const styles = useThemedStyles(makeStyles);
   const rank = rankForLevel(level);
   return (
     <View style={[styles.rankBadge, { borderColor: rank.color }]}>
@@ -122,15 +125,18 @@ const RankBadge: React.FC<{ level: number }> = ({ level }) => {  const styles =
   );
 };
 
-export const FriendsScreen: React.FC<FriendsProps> = ({ stats, onNavigate }) => {  const styles = useThemedStyles(makeStyles);
+export const FriendsScreen: React.FC<FriendsProps> = ({ stats, isActive = true, onNavigate }) => {
+  const styles = useThemedStyles(makeStyles);
   const scrollRef = useRef<any>(null);
   useTabScrollReset('FRIENDS', scrollRef);
   const palette = useTheme();
 
   const { fbUser } = useAuth();
   const { isPro, isOwner, coins, equippedFrame, equippedNameEffect } = usePro();
-  const { code, friends, requests, loading, error, addByCode, acceptRequest, rejectRequest, removeFriend, refresh: refreshFriends } = useFriends();
-  const { duels, challenge, respond, cancel: cancelDuel, react, error: duelError, refresh: refreshDuels } = useDuels();
+  const { code, friends, requests, loading, error, addByCode, acceptRequest, rejectRequest, removeFriend, refresh: refreshFriends } = useFriends(isActive);
+  const { duels, challenge, respond, cancel: cancelDuel, react, refresh: refreshDuels } = useDuels(isActive);
+  const [subTab, setSubTab] = useState<SubTab>('BOARD');
+  const [sortLane, setSortLane] = useState<SortLane>('TODAY');
   const [reactingId, setReactingId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const { progress: invites, refresh: refreshInvites } = useInvites();
@@ -141,9 +147,10 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats, onNavigate }) => 
 
   const { tracked: monitoredApps, trackedToday, week } = useScreenTime();
   const myWeekAvg = useMemo(() => {
-    const past = week.filter((w) => w.date < todayKey()).map((w) => trackedTotal(w.apps, monitoredApps));
+    const past = week.filter((w) => w.date < todayKey()).slice(-7).map((w) => trackedTotal(w.apps, monitoredApps));
     return past.length ? past.reduce((a, b) => a + b, 0) / past.length : trackedToday;
   }, [week, monitoredApps, trackedToday]);
+
   const [profile, setProfile] = useState<Entry | null>(null);
   const [duelTarget, setDuelTarget] = useState<Entry | null>(null);
   const [duelStake, setDuelStake] = useState<number>(DUEL_STAKE);
@@ -154,10 +161,11 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats, onNavigate }) => 
   const leaderboard = useMemo<Entry[]>(() => {
     const me: Entry = {
       uid: fbUser?.uid ?? 'me',
-      displayName: fbUser?.displayName || fbUser?.email || 'You',
+      displayName: fbUser?.displayName || 'You',
       photoURL: fbUser?.photoURL ?? null,
       currentStreak: stats.currentStreak,
       longestStreak: stats.longestStreak,
+      bestReactionTime: stats.bestReactionTime,
       totalChallenges: stats.totalChallenges,
       level: stats.level,
       currentXP: stats.currentXP,
@@ -166,6 +174,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats, onNavigate }) => 
       frame: equippedFrame,
       nameEffect: equippedNameEffect,
       todayMinutes: trackedToday,
+      hasTodayData: true,
       weekAvgMinutes: myWeekAvg,
       trackedApps: monitoredApps,
     };
@@ -176,10 +185,12 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats, onNavigate }) => 
       photoURL: f.photoURL,
       currentStreak: f.currentStreak,
       longestStreak: f.longestStreak,
+      bestReactionTime: f.bestReactionTime ?? 0,
       totalChallenges: f.totalChallenges,
       level: f.level,
       currentXP: f.currentXP,
       todayMinutes: f.todayMinutes ?? 0,
+      hasTodayData: f.hasTodayData !== false,
       weekAvgMinutes: f.weekAvgMinutes ?? 0,
       trackedApps: f.trackedApps ?? [],
       isMe: false,
@@ -200,10 +211,23 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats, onNavigate }) => 
       nameEffect: f.nameEffect,
     }));
 
-    return [me, ...others].sort(
-      (a, b) => a.todayMinutes - b.todayMinutes || b.currentStreak - a.currentStreak || b.level - a.level
-    );
-  }, [fbUser?.uid, fbUser?.displayName, fbUser?.email, fbUser?.photoURL, stats, friends, isPro, isOwner, equippedFrame, equippedNameEffect, trackedToday, myWeekAvg, monitoredApps]);
+    const all = [me, ...others];
+    if (sortLane === 'STREAK') {
+      return all.sort((a, b) => b.currentStreak - a.currentStreak || b.longestStreak - a.longestStreak || b.level - a.level);
+    }
+    if (sortLane === 'SPEED') {
+      return all.sort((a, b) => {
+        const aHas = a.bestReactionTime > 0 ? 0 : 1;
+        const bHas = b.bestReactionTime > 0 ? 0 : 1;
+        if (aHas !== bHas) return aHas - bHas;
+        return a.bestReactionTime - b.bestReactionTime || b.currentStreak - a.currentStreak;
+      });
+    }
+    return all.sort((a, b) => {
+      if (a.hasTodayData !== b.hasTodayData) return a.hasTodayData ? -1 : 1;
+      return a.todayMinutes - b.todayMinutes || b.currentStreak - a.currentStreak || b.level - a.level;
+    });
+  }, [fbUser?.uid, fbUser?.displayName, fbUser?.photoURL, stats, friends, isPro, isOwner, equippedFrame, equippedNameEffect, trackedToday, myWeekAvg, monitoredApps, sortLane]);
 
   const handleCopy = async () => {
     if (!code) return;
@@ -215,9 +239,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats, onNavigate }) => 
   const handleShare = async () => {
     if (!code) return;
     try {
-      await Share.share({
-        message: inviteMessage(code),
-      });
+      await Share.share({ message: inviteMessage(code) });
     } catch {}
   };
 
@@ -232,34 +254,47 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats, onNavigate }) => 
   };
 
   const handleAccept = async (id: string) => {
-    const ok = await acceptRequest(id);
-    if (!ok) appAlert('Could not accept request', error || 'Try again.');
+    const err = await acceptRequest(id);
+    if (err) appAlert('Could not accept request', err);
   };
 
   const handleReject = async (id: string) => {
-    const ok = await rejectRequest(id);
-    if (!ok) appAlert('Could not reject request', error || 'Try again.');
+    const err = await rejectRequest(id);
+    if (err) appAlert('Could not reject request', err);
   };
 
   const handleRemove = (uid: string, name: string) => {
     appAlert('Remove friend', `Remove ${name} from your friends?`, [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Remove', style: 'destructive', onPress: () => removeFriend(uid) },
+      { text: 'Remove', style: 'destructive', onPress: () => void removeFriend(uid) },
     ]);
   };
 
   const openProfile = (entry: Entry) => setProfile(entry);
 
-  const openDuel = (entry: Entry) => {
+  const openDuel = (entry: Entry, presetApps?: string[], presetStake?: number) => {
     if (entry.isMe) return;
     if (monitoredApps.length === 0) {
-      appAlert('No apps tracked', 'Pick at least one app to track in the APPS tab before starting a duel.');
+      appAlert('No apps tracked', 'Pick at least one app in the APPS tab before starting a duel.');
       return;
     }
     setProfile(null);
-    setDuelStake(coins >= DUEL_STAKE ? DUEL_STAKE : FREE_STAKE);
-    setDuelApps([monitoredApps[0]]);
+    const nextStake = presetStake !== undefined
+      ? (coins >= presetStake ? presetStake : FREE_STAKE)
+      : (coins >= DUEL_STAKE ? DUEL_STAKE : FREE_STAKE);
+    const validPreset = (presetApps ?? []).filter((a) => monitoredApps.includes(a));
+    setDuelStake(nextStake);
+    setDuelApps(validPreset.length > 0 ? validPreset : [monitoredApps[0]]);
     setDuelTarget(entry);
+  };
+
+  const openRematch = (d: Duel) => {
+    const friendEntry = leaderboard.find((e) => e.uid === d.opponentUid);
+    if (!friendEntry) {
+      appAlert('Friend unavailable', 'You can only rematch people currently on your friends list.');
+      return;
+    }
+    openDuel(friendEntry, appsOf(d), d.stake);
   };
 
   const toggleDuelApp = (app: string) =>
@@ -275,6 +310,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats, onNavigate }) => 
       appAlert('Could not start duel', err);
       return;
     }
+    setSubTab('DUELS');
     setClashKey((k) => k + 1);
   };
 
@@ -284,15 +320,24 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats, onNavigate }) => 
     setRefreshing(false);
   };
 
-  const handleCancelDuel = (id: string, opponent: string) => {
-    appAlert('Cancel duel?', `Your duel with ${opponent} ends now. Nobody wins and both antes are refunded.`, [
-      { text: 'Keep duelling', style: 'cancel' },
+  const handleCancelDuel = (d: Duel) => {
+    const isActiveDuel = d.status === 'active';
+    const pot = d.stake * 2;
+    const title = isActiveDuel ? 'Forfeit this duel?' : 'Withdraw challenge?';
+    const message = isActiveDuel
+      ? pot > 0
+        ? `Quitting an active duel counts as a forfeit. ${d.opponentName} wins immediately and takes the full ◉ ${pot} pot.`
+        : `Quitting an active duel counts as a forfeit and awards the win to ${d.opponentName}.`
+      : `Withdraw your pending duel challenge to ${d.opponentName}? No coins are charged.`;
+
+    appAlert(title, message, [
+      { text: isActiveDuel ? 'Stay in duel' : 'Keep pending', style: 'cancel' },
       {
-        text: 'Cancel duel',
+        text: isActiveDuel ? 'Forfeit duel' : 'Withdraw',
         style: 'destructive',
         onPress: async () => {
-          const ok = await cancelDuel(id);
-          if (!ok) appAlert('Could not cancel duel', duelError || 'Try again.');
+          const err = await cancelDuel(d.id);
+          if (err) appAlert('Could not update duel', err);
         },
       },
     ]);
@@ -306,8 +351,8 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats, onNavigate }) => 
   };
 
   const handleDuelResponse = async (id: string, action: 'accept' | 'decline') => {
-    const ok = await respond(id, action);
-    if (!ok) appAlert(`Could not ${action} duel`, duelError || 'Try again.');
+    const err = await respond(id, action);
+    if (err) appAlert(`Could not ${action} duel`, err);
   };
 
   if (loading) {
@@ -328,7 +373,27 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats, onNavigate }) => 
   const activeDuels = duels.filter((d) => d.status === 'active');
   const settledDuels = duels
     .filter((d) => d.status === 'completed' || d.status === 'void' || d.status === 'cancelled')
-    .slice(0, 5);
+    .slice(0, 6);
+  const duelBadgeCount = incomingDuels.length + activeDuels.length;
+
+  const laneValue = (entry: Entry) => {
+    if (sortLane === 'STREAK') return `🔥 ${entry.currentStreak}`;
+    if (sortLane === 'SPEED') return entry.bestReactionTime > 0 ? `${entry.bestReactionTime.toFixed(2)}s` : '—';
+    return entry.hasTodayData ? formatMinutes(entry.todayMinutes) : '—';
+  };
+
+  const laneCaption = (entry: Entry) => {
+    if (sortLane === 'STREAK') return 'STREAK';
+    if (sortLane === 'SPEED') return 'BEST EXIT';
+    return entry.hasTodayData ? 'TODAY' : 'NOT SYNCED';
+  };
+
+  const laneSubtitle =
+    sortLane === 'STREAK'
+      ? 'LONGEST ACTIVE STREAK WINS'
+      : sortLane === 'SPEED'
+      ? 'FASTEST CHALLENGE EXIT WINS'
+      : 'LEAST TRACKED TIME TODAY WINS';
 
   return (
     <ScrollView
@@ -340,335 +405,448 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats, onNavigate }) => 
     >
       <View style={styles.header}>
         <Text style={styles.headerTitle}>FRIENDS</Text>
+        <View style={styles.tabSwitch}>
+          {([
+            { id: 'BOARD' as SubTab, label: 'BOARD', count: requests.length },
+            { id: 'DUELS' as SubTab, label: 'DUELS', count: duelBadgeCount },
+            { id: 'INVITE' as SubTab, label: 'INVITE', count: 0 },
+          ]).map((t) => {
+            const on = subTab === t.id;
+            return (
+              <TouchableOpacity
+                key={t.id}
+                style={[styles.tabPill, on && styles.tabPillOn]}
+                onPress={() => setSubTab(t.id)}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.tabPillText, on && styles.tabPillTextOn]}>{t.label}</Text>
+                {t.count > 0 && (
+                  <View style={[styles.tabBadge, on && styles.tabBadgeOn]}>
+                    <Text style={[styles.tabBadgeText, on && styles.tabBadgeTextOn]}>{t.count}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       </View>
 
-      {!hasFriends ? (
-        <View style={styles.emptyCard}>
-          <Text style={styles.emptyTitle}>NOBODY HERE YET</Text>
-          <Text style={styles.emptySub}>Add a friend with their code below and compete on screen time.</Text>
-        </View>
-      ) : (
+      {subTab === 'BOARD' && (
         <>
-          <Text style={styles.sectionLabel}>TODAY · LEAST SCREEN TIME WINS</Text>
+          {requests.length > 0 && (
+            <>
+              <Text style={styles.sectionLabel}>FRIEND REQUESTS · {requests.length}</Text>
+              {requests.map((r) => (
+                <View key={r.id} style={styles.requestRow}>
+                  <Avatar entry={{ uid: r.fromUid, displayName: r.displayName, photoURL: r.photoURL }} size={40} />
+                  <Text style={styles.requestName} numberOfLines={1}>{r.displayName}</Text>
+                  <TouchableOpacity style={styles.rejectBtn} onPress={() => handleReject(r.id)} activeOpacity={0.8}>
+                    <Text style={styles.rejectBtnText}>✕</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.acceptBtn} onPress={() => handleAccept(r.id)} activeOpacity={0.8}>
+                    <Text style={styles.acceptBtnText}>ACCEPT</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </>
+          )}
 
-          <View style={styles.podium}>
-            {podiumOrder.map((i) => {
-              const entry = podium[i];
-              const metal = PODIUM[i];
-              const first = i === 0;
-              return (
+          {!hasFriends ? (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyTitle}>SQUAD EMPTY</Text>
+              <Text style={styles.emptySub}>Add a friend by code to compare screen time and challenge them to 24h duels.</Text>
+              <TouchableOpacity style={styles.emptyCta} onPress={() => setSubTab('INVITE')} activeOpacity={0.85}>
+                <Text style={styles.emptyCtaText}>INVITE OR ADD FRIEND →</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <>
+              <View style={styles.laneRow}>
+                {(['TODAY', 'STREAK', 'SPEED'] as SortLane[]).map((lane) => {
+                  const on = sortLane === lane;
+                  return (
+                    <TouchableOpacity
+                      key={lane}
+                      style={[styles.laneChip, on && styles.laneChipOn]}
+                      onPress={() => setSortLane(lane)}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={[styles.laneChipText, on && styles.laneChipTextOn]}>{lane}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <Text style={styles.sectionLabel}>{laneSubtitle}</Text>
+
+              <View style={styles.podium}>
+                {podiumOrder.map((i) => {
+                  const entry = podium[i];
+                  const metal = PODIUM[i];
+                  const first = i === 0;
+                  return (
+                    <TouchableOpacity
+                      key={entry.uid}
+                      style={[styles.podiumSlot, first && styles.podiumSlotFirst]}
+                      onPress={() => openProfile(entry)}
+                      activeOpacity={0.85}
+                    >
+                      {first && <Text style={styles.crown}>♛</Text>}
+                      <Avatar entry={entry} size={first ? 64 : 50} ring={metal.color} />
+                      <View style={styles.nameRow}>
+                        {entry.badge && (
+                          <Text style={[styles.eliteGlyph, { color: entry.badge.color }]}>{entry.badge.glyph}</Text>
+                        )}
+                        <EntryName entry={entry} style={[styles.podiumName, entry.isMe && styles.podiumNameMe]} />
+                      </View>
+                      <Text style={styles.podiumStreakSmall}>
+                        {sortLane === 'TODAY' && !entry.hasTodayData ? 'Not synced' : `🔥 ${entry.currentStreak}`}
+                      </Text>
+                      <View style={[styles.podiumBlock, { backgroundColor: metal.color, height: first ? 66 : 46 }]}>
+                        <Text style={styles.podiumPlace}>{metal.label}</Text>
+                        <Text style={styles.podiumStreak}>{laneValue(entry)}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {leaderboard.map((entry, idx) => (
                 <TouchableOpacity
                   key={entry.uid}
-                  style={[styles.podiumSlot, first && styles.podiumSlotFirst]}
+                  style={[styles.friendCard, entry.isMe && styles.friendCardMe]}
                   onPress={() => openProfile(entry)}
                   activeOpacity={0.85}
                 >
-                  {first && <Text style={styles.crown}>♛</Text>}
-                  <Avatar entry={entry} size={first ? 64 : 50} ring={metal.color} />
-                  <View style={styles.nameRow}>
-                    {entry.badge && (
-                      <Text style={[styles.eliteGlyph, { color: entry.badge.color }]}>{entry.badge.glyph}</Text>
-                    )}
-                    <EntryName entry={entry} style={[styles.podiumName, entry.isMe && styles.podiumNameMe]} />
+                  <Text style={styles.rank}>{idx + 1}</Text>
+                  <Avatar entry={entry} size={40} />
+                  <View style={styles.friendBody}>
+                    <View style={styles.nameRow}>
+                      {entry.badge && (
+                        <Text style={[styles.eliteGlyph, { color: entry.badge.color }]}>{entry.badge.glyph}</Text>
+                      )}
+                      <EntryName entry={entry} style={styles.friendName} />
+                    </View>
+                    <View style={styles.friendMeta}>
+                      <RankBadge level={entry.level} />
+                      <Text style={styles.friendSub}>🔥 {entry.currentStreak} streak</Text>
+                    </View>
                   </View>
-                  <Text style={styles.podiumStreakSmall}>🔥 {entry.currentStreak}</Text>
-                  <View style={[styles.podiumBlock, { backgroundColor: metal.color, height: first ? 64 : 44 }]}>
-                    <Text style={styles.podiumPlace}>{metal.label}</Text>
-                    <Text style={styles.podiumStreak}>{formatMinutes(entry.todayMinutes)}</Text>
+                  <View style={styles.friendRight}>
+                    <Text style={[styles.friendStreak, sortLane === 'TODAY' && !entry.hasTodayData && styles.notSyncedVal]}>
+                      {laneValue(entry)}
+                    </Text>
+                    <Text style={styles.friendStreakLabel}>{laneCaption(entry)}</Text>
                   </View>
+                  {!entry.isMe && (
+                    <TouchableOpacity style={styles.quickDuelBtn} onPress={() => openDuel(entry)} activeOpacity={0.8}>
+                      <Text style={styles.quickDuelIcon}>⚔</Text>
+                    </TouchableOpacity>
+                  )}
                 </TouchableOpacity>
-              );
-            })}
+              ))}
+            </>
+          )}
+        </>
+      )}
+
+      {subTab === 'DUELS' && (
+        <>
+          <View style={styles.autoSyncPill}>
+            <View style={styles.autoSyncDot} />
+            <Text style={styles.autoSyncText}>
+              Auto-sync active — once a friend accepts, scores update and settle in the background without reopening IRONMIND.
+            </Text>
           </View>
 
-          {rest.map((entry, i) => (
-            <TouchableOpacity
-              key={entry.uid}
-              style={[styles.friendCard, entry.isMe && styles.friendCardMe]}
-              onPress={() => openProfile(entry)}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.rank}>{i + 4}</Text>
-              <Avatar entry={entry} size={40} />
-              <View style={styles.friendBody}>
-                <View style={styles.nameRow}>
-                  {entry.badge && (
-                    <Text style={[styles.eliteGlyph, { color: entry.badge.color }]}>{entry.badge.glyph}</Text>
-                  )}
-                  <EntryName entry={entry} style={styles.friendName} />
-                </View>
-                <View style={styles.friendMeta}>
-                  <RankBadge level={entry.level} />
-                  <Text style={styles.friendSub}>🔥 {entry.currentStreak} streak</Text>
-                </View>
-              </View>
-              <View style={styles.friendRight}>
-                <Text style={styles.friendStreak}>{formatMinutes(entry.todayMinutes)}</Text>
-                <Text style={styles.friendStreakLabel}>TODAY</Text>
-              </View>
-            </TouchableOpacity>
-          ))}
-        </>
-      )}
-
-      {requests.length > 0 && (
-        <>
-          <Text style={styles.sectionLabel}>REQUESTS · {requests.length}</Text>
-          {requests.map((r) => (
-            <View key={r.id} style={styles.requestRow}>
-              <Avatar entry={{ uid: r.fromUid, displayName: r.displayName, photoURL: r.photoURL }} size={40} />
-              <Text style={styles.requestName} numberOfLines={1}>{r.displayName}</Text>
-              <TouchableOpacity style={styles.rejectBtn} onPress={() => handleReject(r.id)} activeOpacity={0.8}>
-                <Text style={styles.rejectBtnText}>✕</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.acceptBtn} onPress={() => handleAccept(r.id)} activeOpacity={0.8}>
-                <Text style={styles.acceptBtnText}>ACCEPT</Text>
-              </TouchableOpacity>
-            </View>
-          ))}
-        </>
-      )}
-
-      {incomingDuels.length > 0 && (
-        <>
-          <Text style={styles.sectionLabel}>DUEL CHALLENGES · {incomingDuels.length}</Text>
-          {incomingDuels.map((d) => {
-            const missing = appsOf(d).filter((a) => !monitoredApps.includes(a));
-            return (
-              <View key={d.id} style={styles.duelCard}>
-                <View style={styles.duelHead}>
-                  <Text style={styles.duelTitle} numberOfLines={1}>{d.opponentName}</Text>
-                  <Text style={styles.duelStake}>{d.stake > 0 ? `◉ ${d.stake}` : 'FREE'}</Text>
-                </View>
-                <Text style={styles.duelSub}>
-                  Fewest minutes on {d.app} over 24 hours wins.
-                </Text>
-                {missing.length > 0 && (
-                  <View style={styles.missingBox}>
-                    <Text style={styles.missingText}>
-                      You don't track {missing.join(' or ')}. Add {missing.length > 1 ? 'them' : 'it'} in Apps to accept, or decline if you don't have {missing.length > 1 ? 'them' : 'it'}.
+          {incomingDuels.length > 0 && (
+            <>
+              <Text style={styles.sectionLabel}>INCOMING CHALLENGES · {incomingDuels.length}</Text>
+              {incomingDuels.map((d) => {
+                const duelAppNames = appsOf(d);
+                const missing = duelAppNames.filter((a) => !monitoredApps.includes(a));
+                return (
+                  <View key={d.id} style={[styles.duelCard, styles.duelCardIncoming]}>
+                    <View style={styles.duelHead}>
+                      <Text style={styles.duelTitle} numberOfLines={1}>{d.opponentName}</Text>
+                      <Text style={styles.duelStake}>{d.stake > 0 ? `◉ ${d.stake}` : 'FREE DUEL'}</Text>
+                    </View>
+                    <Text style={styles.duelSub}>
+                      Fewest minutes on {duelAppNames.join(', ')} over 24 hours wins.
                     </Text>
-                    <TouchableOpacity onPress={() => onNavigate('APPS')} activeOpacity={0.8}>
-                      <Text style={styles.missingLink}>OPEN APPS →</Text>
+                    {missing.length > 0 && (
+                      <View style={styles.missingBox}>
+                        <Text style={styles.missingText}>
+                          You don't track {missing.join(' or ')}. Add {missing.length > 1 ? 'them' : 'it'} in Apps to accept.
+                        </Text>
+                        <TouchableOpacity onPress={() => onNavigate('APPS')} activeOpacity={0.8}>
+                          <Text style={styles.missingLink}>OPEN APPS →</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                    <View style={styles.duelActions}>
+                      <TouchableOpacity style={styles.rejectBtn} onPress={() => handleDuelResponse(d.id, 'decline')} activeOpacity={0.8}>
+                        <Text style={styles.rejectBtnText}>✕</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.acceptBtn, missing.length > 0 && styles.acceptBtnOff]}
+                        onPress={() => missing.length === 0 && handleDuelResponse(d.id, 'accept')}
+                        activeOpacity={missing.length > 0 ? 1 : 0.8}
+                      >
+                        <Text style={styles.acceptBtnText}>ACCEPT DUEL</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              })}
+            </>
+          )}
+
+          {(activeDuels.length > 0 || outgoingDuels.length > 0) && (
+            <>
+              <Text style={styles.sectionLabel}>LIVE & PENDING · {activeDuels.length + outgoingDuels.length}</Text>
+
+              {activeDuels.map((d) => {
+                const mine = d.myMinutes === null ? null : Math.round(d.myMinutes);
+                const theirs = d.theirMinutes === null ? null : Math.round(d.theirMinutes);
+                const leader = mine === null || theirs === null || mine === theirs ? null : mine < theirs ? 'me' : 'them';
+                const appLabel = appsOf(d).join(', ');
+                const potText = d.stake > 0 ? `pot ◉ ${d.stake * 2}` : 'FREE DUEL';
+                return (
+                  <View key={d.id} style={styles.duelCard}>
+                    <View style={styles.duelHead}>
+                      <Text style={styles.duelTitle} numberOfLines={1}>vs {d.opponentName}</Text>
+                      <Text style={styles.duelTimer}>{formatTimeLeft(d.endAt)}</Text>
+                    </View>
+                    <Text style={styles.duelSub}>{appLabel} · fewest minutes wins · {potText}</Text>
+                    <View style={styles.scoreRow}>
+                      <View style={styles.scoreSide}>
+                        <Text style={[styles.scoreVal, leader === 'me' && styles.scoreWinning]}>
+                          {mine === null ? '·' : mine}
+                          {mine !== null && <Text style={styles.scoreUnit}>m</Text>}
+                        </Text>
+                        <Text style={styles.scoreLabel}>YOU</Text>
+                      </View>
+                      <Text style={styles.scoreVs}>VS</Text>
+                      <View style={styles.scoreSide}>
+                        <Text style={[styles.scoreVal, leader === 'them' && styles.scoreWinning]}>
+                          {theirs === null ? '·' : theirs}
+                          {theirs !== null && <Text style={styles.scoreUnit}>m</Text>}
+                        </Text>
+                        <Text style={styles.scoreLabel}>THEM</Text>
+                        {theirs !== null && (
+                          <Text style={styles.syncLabel}>{formatAgo(d.theirReportedAt)}</Text>
+                        )}
+                      </View>
+                    </View>
+                    {mine !== null && theirs !== null && (
+                      <Text style={[styles.duelState, leader === 'me' && styles.duelStateWin, leader === 'them' && styles.duelStateLose]}>
+                        {leader === null
+                          ? 'DEAD EVEN'
+                          : leader === 'me'
+                          ? `YOU LEAD BY ${theirs - mine}m`
+                          : `BEHIND BY ${mine - theirs}m`}
+                      </Text>
+                    )}
+                    {theirs === null && (
+                      <Text style={styles.duelWarn}>
+                        Waiting for their first automatic background sync. If one player never syncs within 4h after the duel ends, the synced player wins by forfeit.
+                      </Text>
+                    )}
+                    {reactionText(d.theirReaction) && (
+                      <Text style={styles.reactLast}>
+                        {d.opponentName}: {reactionText(d.theirReaction)}
+                        <Text style={styles.reactAgo}>  {formatAgo(d.theirReactedAt)}</Text>
+                      </Text>
+                    )}
+                    {recentlyReacted(d.myReactedAt) ? (
+                      <Text style={styles.reactSent}>SENT ✓ — NEXT ONE IN A MINUTE</Text>
+                    ) : (
+                      <View style={styles.reactRow}>
+                        {DUEL_REACTIONS.map((r) => (
+                          <TouchableOpacity
+                            key={r.id}
+                            style={styles.reactChip}
+                            onPress={() => handleReact(d.id, r.id)}
+                            activeOpacity={0.8}
+                            disabled={reactingId === d.id}
+                          >
+                            <Text style={styles.reactChipText}>{r.text}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+                    <TouchableOpacity
+                      style={styles.cancelDuelBtn}
+                      onPress={() => handleCancelDuel(d)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.forfeitText}>FORFEIT DUEL</Text>
                     </TouchableOpacity>
                   </View>
-                )}
-                <View style={styles.duelActions}>
-                  <TouchableOpacity style={styles.rejectBtn} onPress={() => handleDuelResponse(d.id, 'decline')} activeOpacity={0.8}>
-                    <Text style={styles.rejectBtnText}>✕</Text>
-                  </TouchableOpacity>
+                );
+              })}
+
+              {outgoingDuels.map((d) => (
+                <View key={d.id} style={[styles.duelCard, styles.duelCardMuted]}>
+                  <View style={styles.duelHead}>
+                    <Text style={styles.duelTitle} numberOfLines={1}>vs {d.opponentName}</Text>
+                    <Text style={styles.duelPending}>WAITING</Text>
+                  </View>
+                  <Text style={styles.duelSub}>
+                    {appsOf(d).join(', ')} · {d.stake > 0 ? `ante ◉ ${d.stake}` : 'FREE DUEL'} · awaiting accept
+                  </Text>
                   <TouchableOpacity
-                    style={[styles.acceptBtn, missing.length > 0 && styles.acceptBtnOff]}
-                    onPress={() => missing.length === 0 && handleDuelResponse(d.id, 'accept')}
-                    activeOpacity={missing.length > 0 ? 1 : 0.8}
+                    style={styles.cancelDuelBtn}
+                    onPress={() => handleCancelDuel(d)}
+                    activeOpacity={0.8}
                   >
-                    <Text style={styles.acceptBtnText}>ACCEPT DUEL</Text>
+                    <Text style={styles.cancelDuelText}>WITHDRAW CHALLENGE</Text>
                   </TouchableOpacity>
                 </View>
-              </View>
-            );
-          })}
-        </>
-      )}
+              ))}
+            </>
+          )}
 
-      {(activeDuels.length > 0 || outgoingDuels.length > 0) && (
-        <>
-          <Text style={styles.sectionLabel}>ACTIVE DUELS · {activeDuels.length + outgoingDuels.length}</Text>
-
-          {activeDuels.map((d) => {
-            const mine = Math.round(d.myMinutes ?? 0);
-            const theirs = d.theirMinutes === null ? null : Math.round(d.theirMinutes);
-            const leader = theirs === null || mine === theirs ? null : mine < theirs ? 'me' : 'them';
-            return (
-              <View key={d.id} style={styles.duelCard}>
-                <View style={styles.duelHead}>
-                  <Text style={styles.duelTitle} numberOfLines={1}>vs {d.opponentName}</Text>
-                  <Text style={styles.duelTimer}>{formatTimeLeft(d.endAt)}</Text>
-                </View>
-                <Text style={styles.duelSub}>{d.app} · fewest minutes wins · pot ◉ {d.stake * 2}</Text>
-                <View style={styles.scoreRow}>
-                  <View style={styles.scoreSide}>
-                    <Text style={[styles.scoreVal, leader === 'me' && styles.scoreWinning]}>
-                      {mine}
-                      <Text style={styles.scoreUnit}>m</Text>
-                    </Text>
-                    <Text style={styles.scoreLabel}>YOU</Text>
-                  </View>
-                  <Text style={styles.scoreVs}>—</Text>
-                  <View style={styles.scoreSide}>
-                    <Text style={[styles.scoreVal, leader === 'them' && styles.scoreWinning]}>
-                      {theirs === null ? '·' : theirs}
-                      {theirs !== null && <Text style={styles.scoreUnit}>m</Text>}
-                    </Text>
-                    <Text style={styles.scoreLabel}>THEM</Text>
-                    {theirs !== null && (
-                      <Text style={styles.syncLabel}>{formatAgo(d.theirReportedAt)}</Text>
-                    )}
-                  </View>
-                </View>
-                {theirs !== null && (
-                  <Text style={styles.duelState}>
-                    {leader === null
-                      ? 'TIED'
-                      : leader === 'me'
-                      ? `YOU LEAD BY ${theirs - mine}m`
-                      : `BEHIND BY ${mine - theirs}m`}
-                  </Text>
-                )}
-                {theirs === null && (
-                  <Text style={styles.duelWarn}>
-                    {hoursSince(d.startAt) >= 1
-                      ? "They haven't synced yet — a duel with no data from one side is voided."
-                      : 'Waiting for their first sync. Scores update when each of you opens IRONMIND.'}
-                  </Text>
-                )}
-                {reactionText(d.theirReaction) && (
-                  <Text style={styles.reactLast}>
-                    {d.opponentName}: {reactionText(d.theirReaction)}
-                    <Text style={styles.reactAgo}>  {formatAgo(d.theirReactedAt)}</Text>
-                  </Text>
-                )}
-                {recentlyReacted(d.myReactedAt) ? (
-                  <Text style={styles.reactSent}>SENT ✓ — NEXT ONE IN A MINUTE</Text>
-                ) : (
-                  <View style={styles.reactRow}>
-                    {DUEL_REACTIONS.map((r) => (
-                      <TouchableOpacity
-                        key={r.id}
-                        style={styles.reactChip}
-                        onPress={() => handleReact(d.id, r.id)}
-                        activeOpacity={0.8}
-                        disabled={reactingId === d.id}
-                      >
-                        <Text style={styles.reactChipText}>{r.text}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
-                <TouchableOpacity
-                  style={styles.cancelDuelBtn}
-                  onPress={() => handleCancelDuel(d.id, d.opponentName)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.cancelDuelText}>CANCEL DUEL</Text>
-                </TouchableOpacity>
-              </View>
-            );
-          })}
-
-          {outgoingDuels.map((d) => (
-            <View key={d.id} style={[styles.duelCard, styles.duelCardMuted]}>
-              <View style={styles.duelHead}>
-                <Text style={styles.duelTitle} numberOfLines={1}>vs {d.opponentName}</Text>
-                <Text style={styles.duelPending}>WAITING</Text>
-              </View>
-              <Text style={styles.duelSub}>{d.app} · ante ◉ {d.stake} · not accepted yet</Text>
+          {incomingDuels.length === 0 && activeDuels.length === 0 && outgoingDuels.length === 0 && (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyTitle}>NO ACTIVE DUELS</Text>
+              <Text style={styles.emptySub}>
+                Challenge any friend to a 24-hour screen-time showdown. Fewest minutes takes the pot.
+              </Text>
               <TouchableOpacity
-                style={styles.cancelDuelBtn}
-                onPress={() => handleCancelDuel(d.id, d.opponentName)}
-                activeOpacity={0.8}
+                style={styles.emptyCta}
+                onPress={() => setSubTab(hasFriends ? 'BOARD' : 'INVITE')}
+                activeOpacity={0.85}
               >
-                <Text style={styles.cancelDuelText}>WITHDRAW CHALLENGE</Text>
+                <Text style={styles.emptyCtaText}>{hasFriends ? 'PICK AN OPPONENT →' : 'ADD A FRIEND FIRST →'}</Text>
               </TouchableOpacity>
             </View>
-          ))}
+          )}
+
+          {settledDuels.length > 0 && (
+            <>
+              <Text style={styles.sectionLabel}>RECENT RESULTS</Text>
+              {settledDuels.map((d) => {
+                const statusTag =
+                  d.status === 'cancelled'
+                    ? 'CANCELLED'
+                    : d.status === 'void'
+                    ? 'REFUNDED'
+                    : d.iWon
+                    ? 'VICTORY'
+                    : 'DEFEAT';
+                return (
+                  <View key={d.id} style={styles.resultCard}>
+                    <TouchableOpacity
+                      style={styles.resultMain}
+                      onPress={() => appAlert('Duel result', d.resolutionReason ?? 'Duel settled automatically.')}
+                      activeOpacity={0.8}
+                    >
+                      <Text
+                        style={[
+                          styles.resultTag,
+                          d.status === 'completed'
+                            ? d.iWon
+                              ? styles.resultWin
+                              : styles.resultLoss
+                            : styles.resultVoid,
+                        ]}
+                      >
+                        {statusTag}
+                      </Text>
+                      <View style={styles.resultInfo}>
+                        <Text style={styles.resultName} numberOfLines={1}>vs {d.opponentName}</Text>
+                        <Text style={styles.resultDetail} numberOfLines={1}>
+                          {appsOf(d).join(', ')} ·{' '}
+                          {d.status === 'void' || d.status === 'cancelled'
+                            ? d.startAt ? 'coins returned' : 'no charge'
+                            : d.myMinutes !== null && d.theirMinutes !== null
+                            ? `${Math.round(d.myMinutes)}m – ${Math.round(d.theirMinutes)}m`
+                            : d.resolutionReason ?? 'settled'}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.rematchBtn} onPress={() => openRematch(d)} activeOpacity={0.85}>
+                      <Text style={styles.rematchText}>REMATCH</Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+            </>
+          )}
         </>
       )}
 
-      <Text style={styles.sectionLabel}>INVITE & ADD FRIENDS</Text>
-      <View style={styles.codeCard}>
-        <Text style={styles.codeLabel}>YOUR INVITE CODE</Text>
-        <Text style={styles.codeValue}>{code || '——————'}</Text>
-        <View style={styles.codeActions}>
-          <TouchableOpacity style={styles.copyBtn} onPress={handleCopy} activeOpacity={0.85} disabled={!code}>
-            <Text style={styles.copyBtnText}>{copied ? 'COPIED ✓' : 'COPY'}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.shareBtn} onPress={handleShare} activeOpacity={0.85} disabled={!code}>
-            <Text style={styles.shareBtnText}>SHARE CODE →</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {invites && (
-        <View style={styles.inviteCard}>
-          <Text style={styles.addLabel}>INVITE FRIENDS · EARN PRO</Text>
-          {invites.next ? (
-            <>
-              <View style={styles.inviteHead}>
-                <Text style={styles.inviteCount}>
-                  {Math.min(invites.active, invites.next.at)}
-                  <Text style={styles.inviteOf}> / {invites.next.at} friends</Text>
-                </Text>
-                <Text style={styles.inviteReward}>{daysLabel(invites.next.days)} PRO</Text>
-              </View>
-              <View style={styles.inviteBarBg}>
-                <View style={[styles.inviteBarFill, { width: `${Math.min(invites.active / invites.next.at, 1) * 100}%` }]} />
-              </View>
-            </>
-          ) : (
-            <Text style={styles.inviteCount}>All rewards earned</Text>
-          )}
-          <View style={styles.inviteSteps}>
-            {invites.milestones.map((m) => (
-              <View key={m.at} style={[styles.inviteStep, invites.rewarded.includes(m.at) && styles.inviteStepDone]}>
-                <Text style={[styles.inviteStepText, invites.rewarded.includes(m.at) && styles.inviteStepTextDone]}>
-                  {invites.rewarded.includes(m.at) ? '✓ ' : ''}{m.at} → {daysLabel(m.days)}
-                </Text>
-              </View>
-            ))}
-          </View>
-        </View>
-      )}
-
-      <View style={styles.addCard}>
-        <Text style={styles.addLabel}>ADD A FRIEND</Text>
-        <View style={styles.addRow}>
-          <TextInput
-            style={styles.addInput}
-            placeholder="Enter their code"
-            placeholderTextColor={palette.textFaint}
-            autoCapitalize="characters"
-            autoCorrect={false}
-            value={inputCode}
-            onChangeText={setInputCode}
-            maxLength={6}
-          />
-          <TouchableOpacity style={styles.addBtn} onPress={handleAdd} activeOpacity={0.85} disabled={adding}>
-            {adding ? <ActivityIndicator color={palette.accentContrast} size="small" /> : <Text style={styles.addBtnText}>ADD</Text>}
-          </TouchableOpacity>
-        </View>
-        {addResult === 'accepted' && <Text style={styles.addOk}>Friend added ✓</Text>}
-        {addResult === 'pending' && (
-          <Text style={styles.addOk}>Request sent — waiting for them to accept</Text>
-        )}
-        {addResult === 'err' && <Text style={styles.addErr}>{error || 'Could not add friend'}</Text>}
-      </View>
-
-      {settledDuels.length > 0 && (
+      {subTab === 'INVITE' && (
         <>
-          <Text style={styles.sectionLabel}>DUEL HISTORY</Text>
-          {settledDuels.map((d) => (
-            <TouchableOpacity key={d.id} style={styles.resultRow} onPress={() => appAlert('Duel result', d.resolutionReason ?? 'Open the app after a duel ends to sync your final usage.')}>
-              <Text
-                style={[
-                  styles.resultTag,
-                  d.status === 'completed'
-                    ? d.iWon
-                      ? styles.resultWin
-                      : styles.resultLoss
-                    : styles.resultVoid,
-                ]}
-              >
-                {d.status === 'cancelled' ? 'CANCELLED' : d.status === 'void' ? 'REFUNDED' : d.iWon ? 'WON' : 'LOST'}
-              </Text>
-              <Text style={styles.resultName} numberOfLines={1}>{d.opponentName}</Text>
-              <Text style={styles.resultDetail}>
-                {d.status === 'void' || d.status === 'cancelled'
-                  ? d.startAt ? 'coins returned' : 'no charge'
-                  : `${Math.round(d.myMinutes ?? 0)}–${Math.round(d.theirMinutes ?? 0)}m`}
-              </Text>
-            </TouchableOpacity>
-          ))}
+          <Text style={styles.sectionLabel}>YOUR INVITE CODE</Text>
+          <View style={styles.codeCard}>
+            <Text style={styles.codeLabel}>SHARE WITH FRIENDS</Text>
+            <Text style={styles.codeValue}>{code || '——————'}</Text>
+            <View style={styles.codeActions}>
+              <TouchableOpacity style={styles.copyBtn} onPress={handleCopy} activeOpacity={0.85} disabled={!code}>
+                <Text style={styles.copyBtnText}>{copied ? 'COPIED ✓' : 'COPY'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.shareBtn} onPress={handleShare} activeOpacity={0.85} disabled={!code}>
+                <Text style={styles.shareBtnText}>SHARE CODE →</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.addCard}>
+            <Text style={styles.addLabel}>ADD A FRIEND BY CODE</Text>
+            <View style={styles.addRow}>
+              <TextInput
+                style={styles.addInput}
+                placeholder="Enter 6-letter code"
+                placeholderTextColor={palette.textFaint}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                value={inputCode}
+                onChangeText={setInputCode}
+                maxLength={6}
+              />
+              <TouchableOpacity style={styles.addBtn} onPress={handleAdd} activeOpacity={0.85} disabled={adding}>
+                {adding ? <ActivityIndicator color={palette.accentContrast} size="small" /> : <Text style={styles.addBtnText}>ADD</Text>}
+              </TouchableOpacity>
+            </View>
+            {addResult === 'accepted' && <Text style={styles.addOk}>Friend added ✓</Text>}
+            {addResult === 'pending' && (
+              <Text style={styles.addOk}>Request sent — waiting for them to accept</Text>
+            )}
+            {addResult === 'err' && <Text style={styles.addErr}>{error || 'Could not add friend'}</Text>}
+          </View>
+
+          {invites && (
+            <View style={styles.inviteCard}>
+              <Text style={styles.addLabel}>INVITE FRIENDS · EARN FREE PRO</Text>
+              {invites.next ? (
+                <>
+                  <View style={styles.inviteHead}>
+                    <Text style={styles.inviteCount}>
+                      {Math.min(invites.active, invites.next.at)}
+                      <Text style={styles.inviteOf}> / {invites.next.at} friends</Text>
+                    </Text>
+                    <Text style={styles.inviteReward}>{daysLabel(invites.next.days)} PRO</Text>
+                  </View>
+                  <View style={styles.inviteBarBg}>
+                    <View style={[styles.inviteBarFill, { width: `${Math.min(invites.active / invites.next.at, 1) * 100}%` }]} />
+                  </View>
+                </>
+              ) : (
+                <Text style={styles.inviteCount}>All rewards earned ★</Text>
+              )}
+              <View style={styles.inviteSteps}>
+                {invites.milestones.map((m) => (
+                  <View key={m.at} style={[styles.inviteStep, invites.rewarded.includes(m.at) && styles.inviteStepDone]}>
+                    <Text style={[styles.inviteStepText, invites.rewarded.includes(m.at) && styles.inviteStepTextDone]}>
+                      {invites.rewarded.includes(m.at) ? '✓ ' : ''}{m.at} → {daysLabel(m.days)}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
         </>
       )}
 
@@ -680,57 +858,59 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats, onNavigate }) => 
       >
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>CHALLENGE {duelTarget?.displayName.toUpperCase()}</Text>
-            <Text style={styles.modalSub}>
-              Whoever spends fewer minutes on the chosen apps over the next 24 hours wins.
-            </Text>
+            <ScrollView showsVerticalScrollIndicator={false} style={styles.modalScroll}>
+              <Text style={styles.modalTitle}>CHALLENGE {duelTarget?.displayName.toUpperCase()}</Text>
+              <Text style={styles.modalSub}>
+                Fewest minutes on the chosen apps over the next 24 hours wins. Quitting early forfeits the pot.
+              </Text>
 
-            <Text style={styles.modalLabel}>STAKE</Text>
-            <View style={styles.stakeRow}>
-              <TouchableOpacity
-                style={[styles.stakeChip, duelStake === FREE_STAKE && styles.stakeChipOn]}
-                onPress={() => setDuelStake(FREE_STAKE)}
-                activeOpacity={0.85}
-              >
-                <Text style={[styles.stakeText, duelStake === FREE_STAKE && styles.stakeTextOn]}>FREE</Text>
-                <Text style={[styles.stakeSub, duelStake === FREE_STAKE && styles.stakeSubOn]}>bragging rights</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.stakeChip,
-                  duelStake === DUEL_STAKE && styles.stakeChipOn,
-                  coins < DUEL_STAKE && styles.stakeChipDisabled,
-                ]}
-                onPress={() => coins >= DUEL_STAKE && setDuelStake(DUEL_STAKE)}
-                activeOpacity={coins < DUEL_STAKE ? 1 : 0.85}
-              >
-                <Text style={[styles.stakeText, duelStake === DUEL_STAKE && styles.stakeTextOn]}>◉ {DUEL_STAKE}</Text>
-                <Text style={[styles.stakeSub, duelStake === DUEL_STAKE && styles.stakeSubOn]}>
-                  {coins < DUEL_STAKE ? `you have ${coins}` : `win ${DUEL_STAKE * 2}`}
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.modalLabel}>PICK THE APPS · {duelApps.length} SELECTED</Text>
-            {monitoredApps.map((app) => {
-              const on = duelApps.includes(app);
-              return (
+              <Text style={styles.modalLabel}>STAKE</Text>
+              <View style={styles.stakeRow}>
                 <TouchableOpacity
-                  key={app}
-                  style={[styles.appOption, on && styles.appOptionOn]}
-                  onPress={() => toggleDuelApp(app)}
+                  style={[styles.stakeChip, duelStake === FREE_STAKE && styles.stakeChipOn]}
+                  onPress={() => setDuelStake(FREE_STAKE)}
                   activeOpacity={0.85}
-                  disabled={sending}
                 >
-                  <AppIcon app={app} style={styles.appOptionIcon} textStyle={styles.appOptionIconText} />
-                  <Text style={styles.appOptionText}>{app}</Text>
-                  <View style={[styles.checkBox, on && styles.checkBoxOn]}>
-                    {on && <Text style={styles.checkMark}>✓</Text>}
-                  </View>
+                  <Text style={[styles.stakeText, duelStake === FREE_STAKE && styles.stakeTextOn]}>FREE</Text>
+                  <Text style={[styles.stakeSub, duelStake === FREE_STAKE && styles.stakeSubOn]}>bragging rights</Text>
                 </TouchableOpacity>
-              );
-            })}
+
+                <TouchableOpacity
+                  style={[
+                    styles.stakeChip,
+                    duelStake === DUEL_STAKE && styles.stakeChipOn,
+                    coins < DUEL_STAKE && styles.stakeChipDisabled,
+                  ]}
+                  onPress={() => coins >= DUEL_STAKE && setDuelStake(DUEL_STAKE)}
+                  activeOpacity={coins < DUEL_STAKE ? 1 : 0.85}
+                >
+                  <Text style={[styles.stakeText, duelStake === DUEL_STAKE && styles.stakeTextOn]}>◉ {DUEL_STAKE}</Text>
+                  <Text style={[styles.stakeSub, duelStake === DUEL_STAKE && styles.stakeSubOn]}>
+                    {coins < DUEL_STAKE ? `you have ${coins}` : `win ${DUEL_STAKE * 2}`}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.modalLabel}>PICK THE APPS · {duelApps.length} SELECTED</Text>
+              {monitoredApps.map((app) => {
+                const on = duelApps.includes(app);
+                return (
+                  <TouchableOpacity
+                    key={app}
+                    style={[styles.appOption, on && styles.appOptionOn]}
+                    onPress={() => toggleDuelApp(app)}
+                    activeOpacity={0.85}
+                    disabled={sending}
+                  >
+                    <AppIcon app={app} style={styles.appOptionIcon} textStyle={styles.appOptionIconText} />
+                    <Text style={styles.appOptionText}>{app}</Text>
+                    <View style={[styles.checkBox, on && styles.checkBoxOn]}>
+                      {on && <Text style={styles.checkMark}>✓</Text>}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
 
             <TouchableOpacity
               style={[styles.sendDuelBtn, (duelApps.length === 0 || sending) && styles.acceptBtnOff]}
@@ -769,7 +949,9 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats, onNavigate }) => 
 
               <View style={styles.profileGrid}>
                 <View style={styles.profileStat}>
-                  <Text style={styles.profileStatVal}>{formatMinutes(profile.todayMinutes)}</Text>
+                  <Text style={styles.profileStatVal}>
+                    {profile.hasTodayData ? formatMinutes(profile.todayMinutes) : '—'}
+                  </Text>
                   <Text style={styles.profileStatLabel}>TODAY</Text>
                 </View>
                 <View style={styles.profileStat}>
@@ -781,8 +963,10 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats, onNavigate }) => 
                   <Text style={styles.profileStatLabel}>STREAK</Text>
                 </View>
                 <View style={styles.profileStat}>
-                  <Text style={styles.profileStatVal}>{profile.longestStreak}</Text>
-                  <Text style={styles.profileStatLabel}>BEST STREAK</Text>
+                  <Text style={styles.profileStatVal}>
+                    {profile.bestReactionTime > 0 ? `${profile.bestReactionTime.toFixed(2)}s` : '—'}
+                  </Text>
+                  <Text style={styles.profileStatLabel}>BEST EXIT</Text>
                 </View>
               </View>
 
@@ -796,7 +980,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats, onNavigate }) => 
 
               {!profile.isMe && (
                 <TouchableOpacity style={styles.sendDuelBtn} onPress={() => openDuel(profile)} activeOpacity={0.85}>
-                  <Text style={styles.sendDuelText}>⚔ DUEL</Text>
+                  <Text style={styles.sendDuelText}>⚔ CHALLENGE TO DUEL</Text>
                 </TouchableOpacity>
               )}
 
@@ -832,26 +1016,80 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   content: { paddingTop: spacing.lg, paddingBottom: 48 },
   centerFill: { justifyContent: 'center', alignItems: 'center' },
 
-  header: { paddingHorizontal: 20, marginBottom: 16 },
-  headerTitle: { color: c.textPrimary, fontSize: 18, fontWeight: '900', letterSpacing: 0.5 },
+  header: { paddingHorizontal: 16, marginBottom: 16, gap: 12 },
+  headerTitle: { color: c.textPrimary, fontSize: 18, fontWeight: '900', letterSpacing: 0.5, paddingHorizontal: 4 },
+
+  tabSwitch: {
+    flexDirection: 'row',
+    backgroundColor: c.surface,
+    borderRadius: radius.md,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: c.border,
+  },
+  tabPill: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: radius.sm,
+  },
+  tabPillOn: { backgroundColor: c.accent },
+  tabPillText: { color: c.textSecondary, fontSize: 11, fontWeight: '900', letterSpacing: 0.7 },
+  tabPillTextOn: { color: c.accentContrast },
+  tabBadge: { backgroundColor: c.danger, borderRadius: radius.pill, paddingHorizontal: 6, paddingVertical: 1 },
+  tabBadgeOn: { backgroundColor: c.accentContrast },
+  tabBadgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '900' },
+  tabBadgeTextOn: { color: c.accent },
+
+  laneRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, marginBottom: 14 },
+  laneChip: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderRadius: radius.pill,
+    backgroundColor: c.surface,
+    borderWidth: 1,
+    borderColor: c.border,
+  },
+  laneChipOn: { backgroundColor: c.accentMuted, borderColor: c.accent },
+  laneChipText: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 0.7 },
+  laneChipTextOn: { color: c.accent },
+
+  autoSyncPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    padding: 12,
+    borderRadius: radius.md,
+    backgroundColor: c.surface,
+    borderWidth: 1,
+    borderColor: c.border,
+  },
+  autoSyncDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: c.accent },
+  autoSyncText: { flex: 1, color: c.textSecondary, fontSize: 11, lineHeight: 16, fontWeight: '600' },
 
   codeCard: {
     backgroundColor: c.accentMuted,
-    borderRadius: 14,
+    borderRadius: 16,
     marginHorizontal: 16,
     padding: 20,
-    marginBottom: 12,
+    marginBottom: 14,
     borderWidth: 1,
     borderColor: c.accentDim,
     alignItems: 'center',
   },
-  codeLabel: { color: c.accentDim, fontSize: 10, fontWeight: '900', letterSpacing: 1, marginBottom: 10 },
-  codeValue: { color: c.accent, fontSize: 32, fontWeight: '900', letterSpacing: 6, marginBottom: 16 },
+  codeLabel: { color: c.accent, fontSize: 10, fontWeight: '900', letterSpacing: 1.1, marginBottom: 8 },
+  codeValue: { color: c.accent, fontSize: 34, fontWeight: '900', letterSpacing: 6, marginBottom: 16 },
   codeActions: { flexDirection: 'row', gap: 10 },
   copyBtn: { borderRadius: 10, paddingVertical: 12, paddingHorizontal: 20, borderWidth: 1, borderColor: c.accentDim },
-  copyBtnText: { color: c.accent, fontSize: 12, fontWeight: '900', letterSpacing: 0.3 },
+  copyBtnText: { color: c.accent, fontSize: 12, fontWeight: '900', letterSpacing: 0.4 },
   shareBtn: { backgroundColor: c.accent, borderRadius: 10, paddingVertical: 12, paddingHorizontal: 24 },
-  shareBtnText: { color: c.accentContrast, fontSize: 12, fontWeight: '900', letterSpacing: 0.3 },
+  shareBtnText: { color: c.accentContrast, fontSize: 12, fontWeight: '900', letterSpacing: 0.4 },
 
   inviteCard: { backgroundColor: c.surface, borderRadius: 14, marginHorizontal: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: c.border },
   inviteHead: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 10 },
@@ -865,8 +1103,8 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   inviteStepDone: { borderColor: c.accentDim, backgroundColor: c.accentMuted },
   inviteStepText: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 0.3 },
   inviteStepTextDone: { color: c.accent },
-  invitePending: { color: c.textSecondary, fontSize: 11, marginTop: 10 },
-  addCard: { backgroundColor: c.surface, borderRadius: 14, marginHorizontal: 16, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: c.border },
+
+  addCard: { backgroundColor: c.surface, borderRadius: 14, marginHorizontal: 16, padding: 16, marginBottom: 14, borderWidth: 1, borderColor: c.border },
   addLabel: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 1, marginBottom: 10 },
   addRow: { flexDirection: 'row', gap: 10 },
   addInput: {
@@ -887,8 +1125,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   addOk: { color: c.accent, fontSize: 12, fontWeight: '700', marginTop: 10 },
   addErr: { color: c.danger, fontSize: 12, fontWeight: '700', marginTop: 10 },
 
-  sectionLabel: { color: c.textFaint, fontSize: 10, fontWeight: '900', letterSpacing: 1, paddingHorizontal: 20, marginBottom: 10 },
-  duelHint: { color: c.textFaint, fontSize: 11, paddingHorizontal: 20, marginTop: -4, marginBottom: 14 },
+  sectionLabel: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 1, paddingHorizontal: 20, marginBottom: 10 },
 
   requestRow: {
     flexDirection: 'row',
@@ -900,10 +1137,10 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     marginBottom: 10,
     padding: 12,
     borderWidth: 1,
-    borderColor: c.border,
+    borderColor: c.accentDim,
   },
-  requestName: { flex: 1, color: c.textPrimary, fontSize: 13, fontWeight: '700' },
-  rejectBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: c.surfaceRaised, justifyContent: 'center', alignItems: 'center' },
+  requestName: { flex: 1, color: c.textPrimary, fontSize: 13, fontWeight: '800' },
+  rejectBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: c.surfaceRaised, justifyContent: 'center', alignItems: 'center' },
   rejectBtnText: { color: c.textSecondary, fontSize: 13, fontWeight: '900' },
   acceptBtn: { backgroundColor: c.accent, borderRadius: 16, paddingHorizontal: 14, paddingVertical: 8 },
   acceptBtnText: { color: c.accentContrast, fontSize: 11, fontWeight: '900' },
@@ -915,7 +1152,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   eliteGlyph: { fontSize: 12, fontWeight: '900' },
 
   rankBadge: { borderWidth: 1, borderRadius: 5, paddingHorizontal: 5, paddingVertical: 2, alignSelf: 'flex-start' },
-  rankBadgeText: { fontSize: 8, fontWeight: '900', letterSpacing: 0.5 },
+  rankBadgeText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.5 },
 
   podium: {
     flexDirection: 'row',
@@ -923,66 +1160,81 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     marginHorizontal: 16,
-    marginBottom: 20,
+    marginBottom: 18,
   },
-  podiumSlot: { flex: 1, alignItems: 'center', gap: 6 },
+  podiumSlot: { flex: 1, alignItems: 'center', gap: 5 },
   podiumSlotFirst: { marginBottom: 0 },
-  crown: { color: '#FFD700', fontSize: 16, marginBottom: -2 },
+  crown: { color: '#FFD700', fontSize: 18, marginBottom: -2 },
   podiumName: { color: c.textPrimary, fontSize: 11, fontWeight: '800', maxWidth: '100%' },
   podiumNameMe: { color: c.accent },
+  podiumStreakSmall: { color: c.textTertiary, fontSize: 10, fontWeight: '800', marginBottom: 2 },
   podiumBlock: {
     width: '100%',
-    borderTopLeftRadius: 8,
-    borderTopRightRadius: 8,
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 2,
   },
-  podiumPlace: { color: 'rgba(0,0,0,0.55)', fontSize: 9, fontWeight: '900', letterSpacing: 0.5 },
-  podiumStreak: { color: c.accentContrast, fontSize: 18, fontWeight: '900' },
+  podiumPlace: { color: 'rgba(0,0,0,0.6)', fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
+  podiumStreak: { color: c.accentContrast, fontSize: 17, fontWeight: '900' },
 
   friendCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
     backgroundColor: c.surface,
     borderRadius: 14,
     marginHorizontal: 16,
     marginBottom: 10,
-    padding: 14,
+    padding: 13,
     borderWidth: 1,
     borderColor: c.border,
   },
   friendCardMe: { borderColor: c.accentDim, backgroundColor: c.accentMuted },
-  rank: { color: c.textFaint, fontSize: 12, fontWeight: '900', width: 16, textAlign: 'center' },
+  rank: { color: c.textTertiary, fontSize: 12, fontWeight: '900', width: 18, textAlign: 'center' },
   friendBody: { flex: 1, gap: 4 },
   friendName: { color: c.textPrimary, fontSize: 14, fontWeight: '800' },
   friendMeta: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   friendSub: { color: c.textTertiary, fontSize: 11 },
   friendRight: { alignItems: 'flex-end' },
-  friendStreak: { color: c.accent, fontSize: 20, fontWeight: '900' },
-  friendStreakLabel: { color: c.textFaint, fontSize: 9, fontWeight: '800', letterSpacing: 0.3 },
+  friendStreak: { color: c.accent, fontSize: 18, fontWeight: '900' },
+  notSyncedVal: { color: c.textTertiary },
+  friendStreakLabel: { color: c.textTertiary, fontSize: 9, fontWeight: '800', letterSpacing: 0.3 },
+  quickDuelBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: c.surfaceRaised,
+    borderWidth: 1,
+    borderColor: c.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 2,
+  },
+  quickDuelIcon: { color: c.accent, fontSize: 15, fontWeight: '900' },
 
   duelCard: {
     backgroundColor: c.surface,
-    borderRadius: 14,
+    borderRadius: 16,
     marginHorizontal: 16,
-    marginBottom: 10,
-    padding: 14,
+    marginBottom: 12,
+    padding: 16,
     borderWidth: 1,
     borderColor: c.border,
   },
+  duelCardIncoming: { borderColor: c.accent },
   duelCardMuted: { backgroundColor: c.surface, borderColor: c.border },
-  duelHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
-  duelTitle: { flex: 1, color: c.textPrimary, fontSize: 14, fontWeight: '800' },
-  duelStake: { color: c.danger, fontSize: 12, fontWeight: '900' },
+  duelHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4, gap: 8 },
+  duelTitle: { flex: 1, color: c.textPrimary, fontSize: 15, fontWeight: '900' },
+  duelStake: { color: c.accent, fontSize: 12, fontWeight: '900' },
   duelTimer: { color: c.danger, fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
   duelPending: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
-  duelSub: { color: c.textTertiary, fontSize: 11, marginBottom: 10 },
+  duelSub: { color: c.textSecondary, fontSize: 12, marginBottom: 12 },
   duelActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 10 },
-  duelWarn: { color: '#8A6A20', fontSize: 10, marginTop: 8, lineHeight: 14 },
+  duelWarn: { color: '#D4A138', fontSize: 11, marginTop: 8, lineHeight: 16, textAlign: 'center' },
   reactLast: { color: c.textPrimary, fontSize: 12, fontWeight: '800', textAlign: 'center', marginTop: 12 },
-  reactAgo: { color: c.textFaint, fontSize: 10, fontWeight: '700' },
+  reactAgo: { color: c.textTertiary, fontSize: 10, fontWeight: '700' },
   reactRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 6, marginTop: 12 },
   reactChip: {
     backgroundColor: c.surfaceRaised,
@@ -996,40 +1248,57 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   reactSent: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 0.6, textAlign: 'center', marginTop: 12 },
   cancelDuelBtn: { alignSelf: 'center', paddingVertical: 10, paddingHorizontal: 16, marginTop: 6 },
   cancelDuelText: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 0.6 },
+  forfeitText: { color: c.danger, fontSize: 10, fontWeight: '900', letterSpacing: 0.6 },
 
-  scoreRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 20, paddingVertical: 4 },
-  scoreSide: { alignItems: 'center', minWidth: 60 },
-  scoreVal: { color: c.textSecondary, fontSize: 26, fontWeight: '900' },
+  scoreRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 22, paddingVertical: 6 },
+  scoreSide: { alignItems: 'center', minWidth: 68 },
+  scoreVal: { color: c.textPrimary, fontSize: 28, fontWeight: '900' },
   scoreUnit: { fontSize: 13, fontWeight: '800' },
   scoreWinning: { color: c.accent },
-  duelState: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 0.6, textAlign: 'center', marginTop: 6 },
-  scoreLabel: { color: c.textFaint, fontSize: 9, fontWeight: '900', letterSpacing: 0.5, marginTop: 2 },
-  syncLabel: { color: c.borderSubtle, fontSize: 8, fontWeight: '700', marginTop: 2 },
-  scoreVs: { color: c.borderSubtle, fontSize: 16, fontWeight: '900' },
+  duelState: { color: c.textSecondary, fontSize: 11, fontWeight: '900', letterSpacing: 0.6, textAlign: 'center', marginTop: 6 },
+  duelStateWin: { color: c.accent },
+  duelStateLose: { color: c.danger },
+  scoreLabel: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 0.5, marginTop: 2 },
+  syncLabel: { color: c.textFaint, fontSize: 10, fontWeight: '700', marginTop: 2 },
+  scoreVs: { color: c.textFaint, fontSize: 12, fontWeight: '900', letterSpacing: 1 },
 
-  resultRow: {
+  resultCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     marginHorizontal: 16,
     marginBottom: 8,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 12,
     backgroundColor: c.surface,
-    borderRadius: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: c.border,
   },
-  resultTag: { fontSize: 9, fontWeight: '900', letterSpacing: 0.5, width: 34 },
+  resultMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  resultTag: { fontSize: 10, fontWeight: '900', letterSpacing: 0.5, minWidth: 66 },
   resultWin: { color: c.accent },
   resultLoss: { color: c.danger },
   resultVoid: { color: c.textTertiary },
-  resultName: { flex: 1, color: c.textSecondary, fontSize: 12, fontWeight: '700' },
-  resultDetail: { color: c.textTertiary, fontSize: 11, fontWeight: '700' },
+  resultInfo: { flex: 1 },
+  resultName: { color: c.textPrimary, fontSize: 13, fontWeight: '800' },
+  resultDetail: { color: c.textTertiary, fontSize: 11, fontWeight: '600', marginTop: 2 },
+  rematchBtn: {
+    backgroundColor: c.accentMuted,
+    borderWidth: 1,
+    borderColor: c.accentDim,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  rematchText: { color: c.accent, fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
 
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.82)', justifyContent: 'center', paddingHorizontal: 24 },
-  modalCard: { backgroundColor: c.surface, borderRadius: 18, padding: 20, borderWidth: 1, borderColor: c.border },
-  modalTitle: { color: c.textPrimary, fontSize: 15, fontWeight: '900', letterSpacing: 0.3, marginBottom: 8 },
-  modalSub: { color: c.textSecondary, fontSize: 12, lineHeight: 18, marginBottom: 18 },
-  stakeRow: { flexDirection: 'row', gap: 10, marginBottom: 18 },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.82)', justifyContent: 'center', paddingHorizontal: 20 },
+  modalCard: { backgroundColor: c.surface, borderRadius: 18, padding: 20, borderWidth: 1, borderColor: c.border, maxHeight: '84%' },
+  modalScroll: { flexGrow: 0 },
+  modalTitle: { color: c.textPrimary, fontSize: 16, fontWeight: '900', letterSpacing: 0.3, marginBottom: 6 },
+  modalSub: { color: c.textSecondary, fontSize: 12, lineHeight: 18, marginBottom: 16 },
+  stakeRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
   stakeChip: {
     flex: 1,
     alignItems: 'center',
@@ -1043,11 +1312,9 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   stakeChipDisabled: { opacity: 0.4 },
   stakeText: { color: c.textPrimary, fontSize: 14, fontWeight: '900' },
   stakeTextOn: { color: c.accent },
-  stakeSub: { color: c.textFaint, fontSize: 9, fontWeight: '700', marginTop: 2 },
+  stakeSub: { color: c.textTertiary, fontSize: 10, fontWeight: '700', marginTop: 2 },
   stakeSubOn: { color: c.accentDim },
 
-  modalBalance: { color: c.accent, fontSize: 11, fontWeight: '900', marginBottom: 14, marginTop: -8 },
-  modalBalanceLow: { color: c.danger },
   modalLabel: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 1, marginBottom: 10 },
   appOption: {
     flexDirection: 'row',
@@ -1063,31 +1330,32 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   },
   appOptionOn: { borderColor: c.accent, backgroundColor: c.accentMuted },
   appOptionIcon: { width: 30, height: 30, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
-  appOptionIconText: { color: '#FFFFFF', fontSize: 10, fontWeight: '900' },
+  appOptionIconText: { fontSize: 10, fontWeight: '900' },
   appOptionText: { flex: 1, color: c.textPrimary, fontSize: 13, fontWeight: '800' },
   checkBox: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: c.border, justifyContent: 'center', alignItems: 'center' },
   checkBoxOn: { backgroundColor: c.accent, borderColor: c.accent },
   checkMark: { color: c.accentContrast, fontSize: 12, fontWeight: '900' },
-  sendDuelBtn: { backgroundColor: c.accent, borderRadius: 12, paddingVertical: 15, alignItems: 'center', marginTop: 8 },
-  sendDuelText: { color: c.accentContrast, fontSize: 14, fontWeight: '900', letterSpacing: 1 },
+  sendDuelBtn: { backgroundColor: c.accent, borderRadius: 12, paddingVertical: 15, alignItems: 'center', marginTop: 10 },
+  sendDuelText: { color: c.accentContrast, fontSize: 13, fontWeight: '900', letterSpacing: 1 },
   acceptBtnOff: { opacity: 0.4 },
   missingBox: { backgroundColor: c.surfaceRaised, borderRadius: 10, padding: 12, marginBottom: 12, borderLeftWidth: 3, borderLeftColor: c.danger },
   missingText: { color: c.textSecondary, fontSize: 12, lineHeight: 17 },
   missingLink: { color: c.accent, fontSize: 11, fontWeight: '900', letterSpacing: 0.5, marginTop: 8 },
-  podiumStreakSmall: { color: c.textTertiary, fontSize: 11, fontWeight: '800', marginTop: 4, marginBottom: 4 },
   profileHead: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 18 },
   profileHeadBody: { flex: 1, gap: 6 },
   profileName: { color: c.textPrimary, fontSize: 18, fontWeight: '900' },
   profileGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
   profileStat: { width: '48%', flexGrow: 1, backgroundColor: c.surfaceRaised, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
   profileStatVal: { color: c.textPrimary, fontSize: 20, fontWeight: '900' },
-  profileStatLabel: { color: c.textTertiary, fontSize: 9, fontWeight: '900', letterSpacing: 1, marginTop: 4 },
+  profileStatLabel: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 0.8, marginTop: 4 },
   profileApps: { flexDirection: 'row', gap: 8, justifyContent: 'center', marginBottom: 8 },
   removeText: { color: c.danger, fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
-  modalCancel: { alignItems: 'center', paddingVertical: 14, marginTop: 4 },
+  modalCancel: { alignItems: 'center', paddingVertical: 12, marginTop: 4 },
   modalCancelText: { color: c.textTertiary, fontSize: 12, fontWeight: '900', letterSpacing: 0.5 },
 
-  emptyCard: { backgroundColor: c.surface, borderRadius: 14, marginHorizontal: 16, padding: 24, alignItems: 'center' },
-  emptyTitle: { color: c.textFaint, fontSize: 13, fontWeight: '900', letterSpacing: 0.5, marginBottom: 6 },
-  emptySub: { color: c.border, fontSize: 12, textAlign: 'center', lineHeight: 18 },
+  emptyCard: { backgroundColor: c.surface, borderRadius: 16, marginHorizontal: 16, padding: 24, alignItems: 'center', borderWidth: 1, borderColor: c.border },
+  emptyTitle: { color: c.textPrimary, fontSize: 14, fontWeight: '900', letterSpacing: 0.5, marginBottom: 6 },
+  emptySub: { color: c.textSecondary, fontSize: 12, textAlign: 'center', lineHeight: 18, marginBottom: 16 },
+  emptyCta: { backgroundColor: c.accent, paddingHorizontal: 18, paddingVertical: 12, borderRadius: radius.pill },
+  emptyCtaText: { color: c.accentContrast, fontSize: 11, fontWeight: '900', letterSpacing: 0.6 },
 });

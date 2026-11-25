@@ -1,15 +1,16 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useTabScrollReset } from '../hooks/useTabScrollReset';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, TextInput, NativeModules } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, TextInput, NativeModules, AppState, Animated, Easing } from 'react-native';
 import { appAlert } from '../components/AppDialog';
 import { useThemedStyles, useTheme } from '../context/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { UserStats, ChallengeItem } from '../types/training';
 import { AnalyticsScreen } from './AnalyticsScreen';
 import { HistoryScreen } from './HistoryScreen';
-import { usePause, pauseMonitoring, resumeMonitoring, PAUSE_OPTIONS } from '../hooks/usePause';
-import { syncAppMonitor } from '../hooks/useAppMonitor';
+import { usePause, pauseMonitoring, resumeMonitoring, resetPauseCache, PAUSE_OPTIONS } from '../hooks/usePause';
+import { syncAppMonitor, revokeBackgroundSync } from '../hooks/useAppMonitor';
 import { useAuth } from '../context/AuthContext';
 import { usePro } from '../context/ProContext';
 import { ProScreen } from './ProScreen';
@@ -17,25 +18,30 @@ import { StatusCard } from '../components/StatusCard';
 import { CoachCard } from '../components/CoachCard';
 import { NotificationSettings } from '../components/NotificationSettings';
 import { ELITE_BADGES, earnedBadges } from '../constants/badges';
+import { rankForLevel } from '../constants/ranks';
+import { frameById, nameEffectById, glowStyle } from '../constants/cosmetics';
 import { signOut, updateProfile } from 'firebase/auth';
 import { auth } from '../config/firebase';
 import { DIFFICULTY_WINDOW_SECONDS, DEFAULT_DIFFICULTY, DifficultyLevel } from '../constants/difficulty';
 import { DAILY_LIMIT_VALUES, DEFAULT_DAILY_LIMIT, DailyLimitLevel } from '../constants/dailyLimit';
 import { API_BASE_URL } from '../config/api';
 import { authedFetch } from '../utils/authFetch';
+import { challengeDay, deviceTimeZone } from '../utils/challengeTime';
 import { XP_PER_LEVEL } from '../constants/leveling';
 import { spacing, radius, cardShadow, Palette } from '../theme';
+import type { ShortVideoController } from '../hooks/useInstagramReelsTest';
 
 interface ProfileProps {
   stats: UserStats;
   history: ChallengeItem[];
+  challengeTimeZone: string;
   syncStatus: string;
   syncMessage: string;
   pendingCount: number;
   onRetrySync: () => Promise<void>;
   onSettingsChanged?: () => void;
   onNavigate: (state: any) => void;
-  reelsTest?: { status: string; open: () => void } | null;
+  reelsTest?: ShortVideoController | null;
 }
 
 const ONBOARDING_URL = `${API_BASE_URL}/api/user/onboarding`;
@@ -60,11 +66,11 @@ const dailyLimitLevelFor = (limit: number): DailyLimitLevel => {
   return match ? match[0] : DEFAULT_DAILY_LIMIT;
 };
 
-const hadPerfectDay = (history: ChallengeItem[], dailyLimit: number): boolean => {
+const hadPerfectDay = (history: ChallengeItem[], dailyLimit: number, zone: string): boolean => {
   const byDay = new Map<string, { total: number; won: number }>();
   for (const h of history) {
-    const d = new Date(h.timestamp);
-    const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    if (h.counted === false) continue;
+    const key = challengeDay(h.timestamp, zone);
     const e = byDay.get(key) ?? { total: 0, won: 0 };
     e.total += 1;
     if (h.wasSuccessful) e.won += 1;
@@ -76,25 +82,36 @@ const hadPerfectDay = (history: ChallengeItem[], dailyLimit: number): boolean =>
   return false;
 };
 
-const getAchievements = (s: UserStats, history: ChallengeItem[], dailyLimit: number) => [
+const getAchievements = (s: UserStats, history: ChallengeItem[], dailyLimit: number, zone: string) => [
   { id: '01', title: 'FIRST STEP', desc: 'Completed your first challenge', done: s.totalChallenges >= 1 },
   { id: '02', title: 'SPEED DEMON', desc: 'Exit in under 5 seconds', done: s.bestReactionTime > 0 && s.bestReactionTime < 5.0 },
   { id: '03', title: 'REFLEXES OF STEEL', desc: 'Exit in under 3 seconds', done: s.bestReactionTime > 0 && s.bestReactionTime < 3.0 },
   { id: '04', title: 'ON A ROLL', desc: '5 challenges won in a row', done: s.longestStreak >= 5 },
   { id: '05', title: 'IRON DISCIPLINE', desc: '15 challenges won in a row', done: s.longestStreak >= 15 },
   { id: '06', title: 'DEDICATED', desc: '50 challenges completed', done: s.totalChallenges >= 50 },
-  { id: '07', title: 'PERFECT DAY', desc: `All ${dailyLimit} daily challenges won`, done: hadPerfectDay(history, dailyLimit) },
+  { id: '07', title: 'PERFECT DAY', desc: `All ${dailyLimit} daily challenges won`, done: hadPerfectDay(history, dailyLimit, zone) },
   { id: '08', title: 'CENTURY', desc: '100 challenges completed', done: s.totalChallenges >= 100 },
 ];
 
-export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettingsChanged, syncStatus, syncMessage, pendingCount, onRetrySync, reelsTest }) => {
+export const ProfileScreen: React.FC<ProfileProps> = ({
+  stats,
+  history,
+  challengeTimeZone,
+  onSettingsChanged,
+  onNavigate,
+  syncStatus,
+  syncMessage,
+  pendingCount,
+  onRetrySync,
+  reelsTest,
+}) => {
   const styles = useThemedStyles(makeStyles);
   const scrollRef = useRef<any>(null);
   useTabScrollReset('PROFILE', scrollRef);
   const palette = useTheme();
 
   const { fbUser, refreshUser } = useAuth();
-  const { isPro, isOwner, streakFreezes } = usePro();
+  const { isPro, isOwner, streakFreezes, equippedFrame, equippedNameEffect } = usePro();
   const [showPro, setShowPro] = useState<boolean>(false);
   const [showAnalytics, setShowAnalytics] = useState<boolean>(false);
   const [showHistory, setShowHistory] = useState<boolean>(false);
@@ -112,18 +129,52 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
   const [pendingDailyLimit, setPendingDailyLimit] = useState<DailyLimitLevel>(DEFAULT_DAILY_LIMIT);
   const [savingDailyLimit, setSavingDailyLimit] = useState<boolean>(false);
 
+  const framePulse = useRef(new Animated.Value(1)).current;
+  const frame = frameById(equippedFrame);
+  const nameFx = nameEffectById(equippedNameEffect);
+  const rank = rankForLevel(stats.level);
+
   useEffect(() => {
+    if (equippedFrame !== 'galactic') {
+      framePulse.setValue(1);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(framePulse, { toValue: 1.045, duration: 1100, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(framePulse, { toValue: 1, duration: 1100, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [equippedFrame]);
+
+  const loadSettings = useCallback(() => {
     AsyncStorage.getItem('@ironmind_onboarding').then((raw) => {
-      if (raw) {
-        const data = JSON.parse(raw);
-        if (data.targetApps) setMonitoredApps(data.targetApps);
-        if (data.difficultyLevel) setDifficulty(data.difficultyLevel);
-        if (data.dailyChallengeLimit) setDailyLimit(data.dailyChallengeLimit);
-      }
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      if (data.targetApps) setMonitoredApps(data.targetApps);
+      if (data.difficultyLevel) setDifficulty(data.difficultyLevel);
+      if (data.dailyChallengeLimit) setDailyLimit(data.dailyChallengeLimit);
     }).catch(() => {});
   }, []);
 
-  const syncOnboarding = (fields: { targetApps: string[]; difficultyLevel: DifficultyLevel; dailyChallengeLimit: number; goals: string[] }) => {
+  useEffect(() => {
+    loadSettings();
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s === 'active') loadSettings();
+    });
+    return () => sub.remove();
+  }, [loadSettings]);
+
+  const syncOnboarding = (fields: {
+    targetApps: string[];
+    difficultyLevel: DifficultyLevel;
+    dailyChallengeLimit: number;
+    goals: string[];
+    appLimits: any[];
+    timeZone: string;
+  }) => {
     authedFetch(ONBOARDING_URL, {
       method: 'POST',
       body: JSON.stringify({
@@ -152,7 +203,14 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
       const effectiveApps = data.targetApps ?? monitoredApps;
       const effectiveDailyLimit = data.dailyChallengeLimit ?? dailyLimit;
       await syncAppMonitor();
-      syncOnboarding({ targetApps: effectiveApps, difficultyLevel: pendingDifficulty, dailyChallengeLimit: effectiveDailyLimit, goals: data.goals ?? [] });
+      syncOnboarding({
+        targetApps: effectiveApps,
+        difficultyLevel: pendingDifficulty,
+        dailyChallengeLimit: effectiveDailyLimit,
+        goals: data.goals ?? [],
+        appLimits: data.appLimits ?? [],
+        timeZone: data.timeZone ?? deviceTimeZone(),
+      });
       onSettingsChanged?.();
     } catch {}
     setSavingDifficulty(false);
@@ -177,14 +235,21 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
       const effectiveApps = data.targetApps ?? monitoredApps;
       const effectiveDifficulty = data.difficultyLevel ?? difficulty;
       await syncAppMonitor();
-      syncOnboarding({ targetApps: effectiveApps, difficultyLevel: effectiveDifficulty, dailyChallengeLimit: resolvedLimit, goals: data.goals ?? [] });
+      syncOnboarding({
+        targetApps: effectiveApps,
+        difficultyLevel: effectiveDifficulty,
+        dailyChallengeLimit: resolvedLimit,
+        goals: data.goals ?? [],
+        appLimits: data.appLimits ?? [],
+        timeZone: data.timeZone ?? deviceTimeZone(),
+      });
       onSettingsChanged?.();
     } catch {}
     setSavingDailyLimit(false);
     setEditingDailyLimit(false);
   };
 
-  const achievements = getAchievements(stats, history, dailyLimit);
+  const achievements = getAchievements(stats, history, dailyLimit, challengeTimeZone);
   const doneCount = achievements.filter((a) => a.done).length;
   const earnedElite = earnedBadges(stats, isOwner);
   const rankPct = Math.min(((stats.currentXP % XP_PER_LEVEL) / XP_PER_LEVEL) * 100, 100);
@@ -193,12 +258,26 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
     ? `${Math.round((stats.successCount / stats.totalChallenges) * 100)}%`
     : '—';
 
-  const handleSignOut = async () => {
+  const performSignOut = async () => {
     try {
+      const uid = fbUser?.uid;
       const pushToken = await AsyncStorage.getItem('@ironmind_push_token');
-      if (pushToken) await authedFetch(`${API_BASE_URL}/api/save-token`, { method: 'DELETE', body: JSON.stringify({ pushToken }) }).catch(() => {});
+      if (pushToken) {
+        await authedFetch(`${API_BASE_URL}/api/save-token`, { method: 'DELETE', body: JSON.stringify({ pushToken }) }).catch(() => {});
+      }
+      await AsyncStorage.removeItem('@ironmind_push_token_synced').catch(() => {});
+      await revokeBackgroundSync(uid);
+      resetPauseCache();
+      await GoogleSignin.signOut().catch(() => {});
       await signOut(auth);
     } catch {}
+  };
+
+  const handleSignOut = () => {
+    appAlert('Sign out?', 'You can sign back in anytime. Background monitoring pauses until you sign in again.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sign Out', style: 'destructive', onPress: () => void performSignOut() },
+    ]);
   };
 
   const [deletingAccount, setDeletingAccount] = useState<boolean>(false);
@@ -214,19 +293,25 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
         return;
       }
       const uid = fbUser?.uid;
-      if (uid) await NativeModules.UsageMonitor?.clearAccountData?.(uid);
-      await signOut(auth);
+      if (uid) {
+        NativeModules.UsageMonitor?.clearSyncToken?.();
+        await NativeModules.UsageMonitor?.clearAccountData?.(uid).catch?.(() => {});
+      }
+      const allKeys = await AsyncStorage.getAllKeys().catch(() => []);
       await AsyncStorage.multiRemove([
-        ...(uid ? (await AsyncStorage.getAllKeys()).filter((key) => key.startsWith(`@ironmind_shop_pending:${uid}:`)) : []),
-        ...(uid ? [`@ironmind_progress_v3:${uid}`, `@ironmind_screentime:${uid}`, `@ironmind_notifications:${uid}`, `@ironmind_pro_v1:${uid}`, `@ironmind_purchase_pending:${uid}`, `@ironmind_shop_pending:${uid}`] : []),
+        ...(uid ? allKeys.filter((key) => key.startsWith(`@ironmind_shop_pending:${uid}:`) || key.includes(`:${uid}`)) : []),
         '@ironmind_pro_v1',
         '@ironmind_stats_v2',
         '@ironmind_history_v2',
         '@ironmind_onboarded',
         '@ironmind_onboarding',
         '@ironmind_push_token',
+        '@ironmind_push_token_synced',
         '@ironmind_last_uid',
-      ]);
+      ]).catch(() => {});
+      resetPauseCache();
+      await GoogleSignin.signOut().catch(() => {});
+      await signOut(auth);
     } catch {
       appAlert('Could not delete account', 'Network error — try again.');
       setDeletingAccount(false);
@@ -279,7 +364,7 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
       await updateProfile(auth.currentUser!, { photoURL: newPhotoUrl });
       await refreshUser();
       resyncIdentityToBackend(fbUser.displayName, newPhotoUrl);
-    } catch (e) {
+    } catch {
       appAlert('Could not update photo', 'Try again.');
     }
     setUploadingPhoto(false);
@@ -326,31 +411,41 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
     return 'IM';
   };
 
+  const frameBoxStyle = frame
+    ? {
+        borderWidth: 3,
+        borderColor: frame.ring,
+        ...(frame.glow ? { shadowColor: frame.glow, shadowOpacity: 0.85, shadowRadius: 10, elevation: 8 } : {}),
+      }
+    : null;
+
   return (
     <ScrollView ref={scrollRef} style={styles.root} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>PROFILE</Text>
+        <Text style={styles.headerTitle}>YOU</Text>
       </View>
 
       <View style={styles.athleteCard}>
-        <View style={styles.heroGlow} />
+        <View style={[styles.cardAccentStrip, { backgroundColor: rank.color }]} />
         <View style={styles.cardTopRow}>
-          <View style={styles.athleteBadge}>
-            <Text style={styles.athleteBadgeText}>ATHLETE</Text>
+          <View style={[styles.athleteBadge, { borderColor: rank.color }]}>
+            <Text style={[styles.athleteBadgeText, { color: rank.color }]}>{rank.name}</Text>
           </View>
           <Text style={styles.athleteNo}>LV {stats.level} · {stats.currentXP} XP</Text>
         </View>
         <View style={styles.cardBody}>
           <TouchableOpacity onPress={handlePickPhoto} activeOpacity={0.8} disabled={uploadingPhoto}>
-            {uploadingPhoto ? (
-              <View style={styles.avatarBox}><ActivityIndicator color={palette.accentContrast} /></View>
-            ) : fbUser?.photoURL ? (
-              <Image source={{ uri: fbUser.photoURL }} style={styles.avatarImage} />
-            ) : (
-              <View style={styles.avatarBox}>
-                <Text style={styles.avatarLetters}>{getInitials()}</Text>
-              </View>
-            )}
+            <Animated.View style={[styles.avatarWrap, frameBoxStyle, { transform: [{ scale: framePulse }] }]}>
+              {uploadingPhoto ? (
+                <View style={styles.avatarBox}><ActivityIndicator color={palette.accentContrast} /></View>
+              ) : fbUser?.photoURL ? (
+                <Image source={{ uri: fbUser.photoURL }} style={styles.avatarImage} />
+              ) : (
+                <View style={styles.avatarBox}>
+                  <Text style={styles.avatarLetters}>{getInitials()}</Text>
+                </View>
+              )}
+            </Animated.View>
             <View style={styles.avatarEditBadge}><Text style={styles.avatarEditBadgeText}>✎</Text></View>
           </TouchableOpacity>
           <View style={styles.athleteDetails}>
@@ -372,26 +467,20 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
               </View>
             ) : (
               <TouchableOpacity onPress={openNameEditor} activeOpacity={0.7}>
-                <Text style={styles.handleText} numberOfLines={1} adjustsFontSizeToFit>
+                <Text
+                  style={[
+                    styles.handleText,
+                    nameFx ? [{ color: nameFx.color }, glowStyle(nameFx.glow)] : null,
+                  ]}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                >
                   {fbUser?.displayName || 'IRON ATHLETE'} <Text style={styles.nameEditHint}>✎</Text>
                 </Text>
               </TouchableOpacity>
             )}
-            <Text style={styles.emailText}>{fbUser?.email || ''}</Text>
-            <View style={styles.threeStats}>
-              <View style={styles.tStat}>
-                <Text style={styles.tStatVal}>{stats.currentStreak}</Text>
-                <Text style={styles.tStatLabel}>STREAK</Text>
-              </View>
-              <View style={styles.tStat}>
-                <Text style={styles.tStatVal}>{stats.longestStreak}</Text>
-                <Text style={styles.tStatLabel}>BEST</Text>
-              </View>
-              <View style={styles.tStat}>
-                <Text style={styles.tStatVal}>{stats.totalChallenges}</Text>
-                <Text style={styles.tStatLabel}>TOTAL</Text>
-              </View>
-            </View>
+            <Text style={styles.emailText} numberOfLines={1}>{fbUser?.email || ''}</Text>
+            <Text style={styles.totalLine}>{stats.totalChallenges} lifetime challenges</Text>
           </View>
         </View>
 
@@ -406,9 +495,9 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
 
       <View style={styles.quickRow}>
         {[
-          { label: 'CHALLENGES', val: String(stats.totalChallenges) },
-          { label: 'BEST RXN', val: rxnDisplay, accent: true },
-          { label: 'SUCCESS', val: successRate },
+          { label: 'STREAK', val: `🔥 ${stats.currentStreak}` },
+          { label: 'BEST EXIT', val: rxnDisplay, accent: true },
+          { label: 'WIN RATE', val: successRate },
           { label: 'LONGEST', val: String(stats.longestStreak) },
         ].map((s) => (
           <View key={s.label} style={styles.quickStat}>
@@ -424,11 +513,11 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
         activeOpacity={0.85}
       >
         <View style={styles.proBannerBody}>
-          <Text style={styles.proBannerTitle}>{isPro ? 'IRONMIND PRO' : 'UPGRADE TO PRO'}</Text>
+          <Text style={styles.proBannerTitle}>{isPro ? 'IRONMIND PRO' : 'UNLOCK IRONMIND PRO'}</Text>
           <Text style={styles.proBannerSub}>
             {isPro
               ? `${streakFreezes} streak ${streakFreezes === 1 ? 'freeze' : 'freezes'} remaining`
-              : 'Streak protection, themes, elite badges, full analytics'}
+              : 'Freezes, themes, elite badges & full analytics — earn free via invites or coins'}
           </Text>
         </View>
         <Text style={styles.proBannerArrow}>{isPro ? '✓' : '→'}</Text>
@@ -463,8 +552,8 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
           <Text style={styles.analyticsTitle}>ADVANCED ANALYTICS</Text>
           <Text style={styles.analyticsSub}>
             {isPro
-              ? 'Screen-time trends, per-app breakdown and challenge performance'
-              : 'Unlock full history and per-app trends with Pro'}
+              ? '30-day trends, app breakdown and escape speed history'
+              : 'Unlock 30-day charts and per-app trends with Pro'}
           </Text>
         </View>
         <Text style={styles.analyticsArrow}>{isPro ? '→' : '🔒'}</Text>
@@ -480,7 +569,7 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
       {!isPro && (
         <TouchableOpacity style={styles.eliteLockRow} onPress={() => setShowPro(true)} activeOpacity={0.85}>
           <Text style={styles.eliteLockText}>
-            Elite badges appear next to your name on the leaderboard. Unlock with Pro →
+            Elite badges shine next to your name on the leaderboard. Unlock with Pro →
           </Text>
         </TouchableOpacity>
       )}
@@ -498,26 +587,28 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
         })}
       </View>
 
-      <Text style={styles.settingsSection}>PERMISSIONS</Text>
-
+      <Text style={styles.settingsSection}>PERMISSIONS & MONITORING</Text>
       <StatusCard />
 
-      <Text style={styles.settingsSection}>SETTINGS</Text>
+      <Text style={[styles.settingsSection, styles.settingsSpaced]}>SETTINGS</Text>
 
       {reelsTest && (
         <TouchableOpacity style={styles.settingRow} onPress={reelsTest.open} accessibilityRole="button">
-          <View style={{ flex: 1, marginRight: spacing.md }}>
-            <Text style={styles.settingLabel}>SHORT VIDEO TEST</Text>
+          <View style={styles.settingCol}>
+            <Text style={styles.settingLabel}>SCROLL-ONLY DETECTION</Text>
+            <Text style={styles.pauseSub}>Only challenges when scrolling Reels, TikTok or Shorts</Text>
           </View>
-          <Text style={styles.pauseSub}>{reelsTest.status}</Text>
+          <Text style={[styles.settingStatus, reelsTest.isActive && styles.settingStatusOn]}>
+            {reelsTest.status} ›
+          </Text>
         </TouchableOpacity>
       )}
 
       {paused ? (
         <TouchableOpacity style={[styles.settingRow, styles.pauseRowActive]} onPress={resumeMonitoring} activeOpacity={0.8}>
-          <View>
+          <View style={styles.settingCol}>
             <Text style={styles.pauseActiveLabel}>RESUME MONITORING</Text>
-            <Text style={styles.pauseSub}>Paused · resumes on its own in {remaining}</Text>
+            <Text style={styles.pauseSub}>Paused · resumes automatically in {remaining}</Text>
           </View>
           <Text style={styles.pauseActiveLabel}>▶</Text>
         </TouchableOpacity>
@@ -527,9 +618,9 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
           onPress={() => setChoosingPause((v) => !v)}
           activeOpacity={0.8}
         >
-          <View>
+          <View style={styles.settingCol}>
             <Text style={styles.settingLabel}>PAUSE MONITORING</Text>
-            <Text style={styles.pauseSub}>For an exam, work, or anything important</Text>
+            <Text style={styles.pauseSub}>For exams, deep work, or anything urgent</Text>
           </View>
           <Text style={styles.settingValue}>{choosingPause ? '×' : '❚❚'}</Text>
         </TouchableOpacity>
@@ -556,7 +647,7 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
       <TouchableOpacity style={styles.settingRow} onPress={openDifficultyEditor} activeOpacity={0.7}>
         <Text style={styles.settingLabel}>CHALLENGE WINDOW</Text>
         <Text style={styles.settingValue}>
-          {DIFFICULTY_WINDOW_SECONDS[difficulty]} SECONDS · {DIFFICULTIES.find((d) => d.id === difficulty)?.label} ›
+          {DIFFICULTY_WINDOW_SECONDS[difficulty]}s · {DIFFICULTIES.find((d) => d.id === difficulty)?.label} ›
         </Text>
       </TouchableOpacity>
 
@@ -661,9 +752,9 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
 
       {(syncStatus === 'offline' || syncStatus === 'error') && (
         <TouchableOpacity style={styles.settingRow} onPress={onRetrySync}>
-          <View style={{ flex: 1, marginRight: spacing.md }}>
+          <View style={styles.settingCol}>
             <Text style={styles.settingLabel}>PROGRESS NOT SYNCED</Text>
-            <Text style={{ color: palette.textTertiary, fontSize: 11, marginTop: 4 }}>
+            <Text style={styles.pauseSub}>
               {syncStatus === 'error' ? syncMessage : pendingCount ? `${pendingCount} results saved on this phone` : 'Tap to reconnect'}
             </Text>
           </View>
@@ -689,7 +780,18 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
         <Text style={styles.settingValue}>›</Text>
       </TouchableOpacity>
 
-      <ProScreen visible={showPro} onClose={() => setShowPro(false)} />
+      <ProScreen
+        visible={showPro}
+        onClose={() => setShowPro(false)}
+        onOpenFriends={() => {
+          setShowPro(false);
+          onNavigate('FRIENDS');
+        }}
+        onOpenHome={() => {
+          setShowPro(false);
+          onNavigate('HOME');
+        }}
+      />
 
       <HistoryScreen visible={showHistory} onClose={() => setShowHistory(false)} />
 
@@ -704,20 +806,91 @@ export const ProfileScreen: React.FC<ProfileProps> = ({ stats, history, onSettin
 };
 
 const makeStyles = (c: Palette) => StyleSheet.create({
-  pauseRowActive: { backgroundColor: c.accentMuted, borderWidth: 1, borderColor: c.accent },
-  pauseActiveLabel: { color: c.accent, fontSize: 13, fontWeight: '900' },
-  pauseSub: { color: c.textTertiary, fontSize: 11, marginTop: 3 },
-  pauseChoices: { flexDirection: 'row', gap: spacing.sm, marginHorizontal: spacing.lg, marginBottom: spacing.md },
-  pauseChip: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: spacing.md,
-    borderRadius: radius.sm,
-    backgroundColor: c.surfaceRaised,
+  root: { flex: 1, backgroundColor: c.bg },
+  content: { paddingTop: spacing.lg, paddingBottom: 48 },
+
+  header: { paddingHorizontal: spacing.xl, paddingBottom: spacing.lg },
+  headerTitle: { color: c.textPrimary, fontSize: 18, fontWeight: '900', letterSpacing: 0.5 },
+
+  athleteCard: {
+    backgroundColor: c.surface,
+    marginHorizontal: spacing.lg,
+    borderRadius: radius.xl,
+    padding: spacing.xl,
+    marginBottom: spacing.md,
     borderWidth: 1,
     borderColor: c.border,
+    overflow: 'hidden',
+    ...cardShadow,
   },
-  pauseChipText: { color: c.textPrimary, fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
+  cardAccentStrip: { position: 'absolute', top: 0, left: 0, right: 0, height: 3, opacity: 0.9 },
+  cardTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.lg },
+  athleteBadge: { borderWidth: 1, paddingHorizontal: spacing.md, paddingVertical: 4, borderRadius: radius.pill, backgroundColor: c.surfaceRaised },
+  athleteBadgeText: { fontSize: 10, fontWeight: '900', letterSpacing: 1 },
+  athleteNo: { color: c.textTertiary, fontSize: 11, fontWeight: '800' },
+
+  cardBody: { flexDirection: 'row', gap: spacing.lg, alignItems: 'center', marginBottom: spacing.lg },
+  avatarWrap: { width: 78, height: 78, borderRadius: radius.lg, overflow: 'hidden', justifyContent: 'center', alignItems: 'center' },
+  avatarBox: { width: '100%', height: '100%', backgroundColor: c.accent, justifyContent: 'center', alignItems: 'center' },
+  avatarImage: { width: '100%', height: '100%' },
+  avatarLetters: { color: c.accentContrast, fontSize: 26, fontWeight: '900' },
+  avatarEditBadge: { position: 'absolute', bottom: -2, right: -2, width: 24, height: 24, borderRadius: 12, backgroundColor: c.surfaceRaised, borderWidth: 2, borderColor: c.surface, justifyContent: 'center', alignItems: 'center' },
+  avatarEditBadgeText: { color: c.textPrimary, fontSize: 11 },
+
+  nameEditHint: { color: c.textTertiary, fontSize: 14 },
+  nameEditRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  nameInput: { flex: 1, color: c.textPrimary, fontSize: 18, fontWeight: '800', borderBottomWidth: 1, borderColor: c.accent, paddingVertical: 2 },
+  nameSaveBtn: { width: 28, height: 28, borderRadius: radius.pill, backgroundColor: c.accent, justifyContent: 'center', alignItems: 'center' },
+  nameSaveBtnText: { color: c.accentContrast, fontSize: 14, fontWeight: '900' },
+  athleteDetails: { flex: 1, overflow: 'hidden' },
+  handleText: { color: c.textPrimary, fontSize: 22, fontWeight: '900', letterSpacing: -0.5 },
+  emailText: { color: c.textTertiary, fontSize: 11, fontWeight: '600', marginTop: 2 },
+  totalLine: { color: c.textSecondary, fontSize: 12, fontWeight: '700', marginTop: 6 },
+
+  rankLabelRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.sm },
+  rankLabel: { color: c.textTertiary, fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
+  rankPct: { color: c.accent, fontSize: 10, fontWeight: '900' },
+  rankBarBg: { height: 6, backgroundColor: c.borderSubtle, borderRadius: radius.pill, overflow: 'hidden' },
+  rankBarFill: { height: '100%', backgroundColor: c.accent, borderRadius: radius.pill },
+
+  quickRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.lg, marginBottom: spacing.lg },
+  quickStat: { flex: 1, alignItems: 'center', backgroundColor: c.surface, borderRadius: radius.md, borderWidth: 1, borderColor: c.border, paddingVertical: spacing.md },
+  quickStatVal: { color: c.textPrimary, fontSize: 17, fontWeight: '900' },
+  quickStatLabel: { color: c.textTertiary, fontSize: 10, fontWeight: '800', letterSpacing: 0.3, marginTop: 4 },
+  accentVal: { color: c.accent },
+
+  proBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: c.accentMuted,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: c.accent,
+    padding: spacing.lg,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.lg,
+    ...cardShadow,
+  },
+  proBannerActive: { backgroundColor: c.surface, borderColor: c.accentDim },
+  proBannerBody: { flex: 1, marginRight: spacing.sm },
+  proBannerTitle: { color: c.accent, fontSize: 14, fontWeight: '900', letterSpacing: 0.4 },
+  proBannerSub: { color: c.textSecondary, fontSize: 11, marginTop: 4, lineHeight: 16 },
+  proBannerArrow: { color: c.accent, fontSize: 16, fontWeight: '900' },
+
+  sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.md },
+  sectionTitle: { color: c.textPrimary, fontSize: 13, fontWeight: '900', letterSpacing: 0.5 },
+  achieveCount: { color: c.accent, fontSize: 12, fontWeight: '800' },
+
+  achieveGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.lg, gap: spacing.sm, marginBottom: spacing.xl },
+  achieveCard: { width: '48%', flexGrow: 1, backgroundColor: c.surface, borderRadius: radius.md, borderWidth: 1, borderColor: c.border, padding: spacing.md },
+  achieveCardLocked: { opacity: 0.5 },
+  achieveTopRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.xs },
+  achieveId: { color: c.textTertiary, fontSize: 10, fontWeight: '800' },
+  achieveIdDone: { color: c.accent },
+  checkMark: { color: c.accent, fontSize: 12, fontWeight: '900' },
+  achieveTitle: { color: c.textPrimary, fontSize: 12, fontWeight: '900', marginBottom: spacing.xs },
+  achieveTitleLocked: { color: c.textSecondary },
+  achieveDesc: { color: c.textTertiary, fontSize: 11, lineHeight: 15 },
 
   analyticsRow: {
     flexDirection: 'row',
@@ -730,9 +903,9 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     marginHorizontal: spacing.lg,
     marginBottom: spacing.xl,
   },
-  analyticsBody: { flex: 1 },
+  analyticsBody: { flex: 1, marginRight: spacing.sm },
   analyticsTitle: { color: c.textPrimary, fontSize: 13, fontWeight: '900', letterSpacing: 0.4 },
-  analyticsSub: { color: c.textTertiary, fontSize: 11, marginTop: 3, lineHeight: 15 },
+  analyticsSub: { color: c.textTertiary, fontSize: 11, marginTop: 3, lineHeight: 16 },
   analyticsArrow: { color: c.accent, fontSize: 15, fontWeight: '900' },
 
   eliteLockRow: {
@@ -761,110 +934,13 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     padding: spacing.md,
     alignItems: 'center',
   },
-  eliteCardLocked: { opacity: 0.45 },
+  eliteCardLocked: { opacity: 0.5 },
   eliteGlyph: { fontSize: 22, fontWeight: '900', marginBottom: 4 },
-  eliteName: { color: c.textSecondary, fontSize: 9, fontWeight: '900', letterSpacing: 0.5, textAlign: 'center' },
-  eliteDesc: { color: c.textFaint, fontSize: 8, lineHeight: 11, textAlign: 'center', marginTop: 3 },
-
-  proBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: c.accentMuted,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: c.accent,
-    padding: spacing.lg,
-    marginHorizontal: spacing.lg,
-    marginBottom: spacing.xl,
-    ...cardShadow,
-  },
-  proBannerActive: { backgroundColor: c.surface, borderColor: c.accentDim },
-  proBannerBody: { flex: 1 },
-  proBannerTitle: { color: c.accent, fontSize: 14, fontWeight: '900', letterSpacing: 0.4 },
-  proBannerSub: { color: c.textTertiary, fontSize: 11, marginTop: 4 },
-  proBannerArrow: { color: c.accent, fontSize: 16, fontWeight: '900' },
-
-  root: { flex: 1, backgroundColor: c.bg },
-  content: { paddingTop: spacing.lg, paddingBottom: 48 },
-
-  header: {
-    paddingHorizontal: spacing.xl,
-    paddingBottom: spacing.xl,
-  },
-  headerTitle: { color: c.textPrimary, fontSize: 18, fontWeight: '900', letterSpacing: 0.5 },
-
-  athleteCard: {
-    backgroundColor: c.surface,
-    marginHorizontal: spacing.lg,
-    borderRadius: radius.xl,
-    padding: spacing.xl,
-    marginBottom: spacing.lg,
-    overflow: 'hidden',
-    ...cardShadow,
-  },
-  heroGlow: {
-    position: 'absolute',
-    top: -80,
-    right: -60,
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    backgroundColor: c.accent,
-    opacity: 0.08,
-  },
-  cardTopRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.lg },
-  athleteBadge: { backgroundColor: c.accentMuted, paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.pill },
-  athleteBadgeText: { color: c.accent, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
-  athleteNo: { color: c.textTertiary, fontSize: 11, fontWeight: '700' },
-
-  cardBody: { flexDirection: 'row', gap: spacing.lg, alignItems: 'center', marginBottom: spacing.lg },
-  avatarBox: { width: 76, height: 76, backgroundColor: c.accent, borderRadius: radius.lg, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
-  avatarImage: { width: 76, height: 76, borderRadius: radius.lg },
-  avatarLetters: { color: c.accentContrast, fontSize: 26, fontWeight: '900' },
-  avatarEditBadge: { position: 'absolute', bottom: -2, right: -2, width: 22, height: 22, borderRadius: 11, backgroundColor: c.surfaceRaised, borderWidth: 2, borderColor: c.surface, justifyContent: 'center', alignItems: 'center' },
-  avatarEditBadgeText: { color: c.textPrimary, fontSize: 11 },
-
-  nameEditHint: { color: c.textFaint, fontSize: 14 },
-  nameEditRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  nameInput: { flex: 1, color: c.textPrimary, fontSize: 18, fontWeight: '800', borderBottomWidth: 1, borderColor: c.accent, paddingVertical: 2 },
-  nameSaveBtn: { width: 28, height: 28, borderRadius: radius.pill, backgroundColor: c.accent, justifyContent: 'center', alignItems: 'center' },
-  nameSaveBtnText: { color: c.accentContrast, fontSize: 14, fontWeight: '900' },
-  athleteDetails: { flex: 1, overflow: 'hidden' },
-  handleText: { color: c.textPrimary, fontSize: 22, fontWeight: '900', letterSpacing: -0.5 },
-  emailText: { color: c.textTertiary, fontSize: 11, fontWeight: '600', marginBottom: spacing.md },
-  threeStats: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
-  tStat: { alignItems: 'center' },
-  tStatVal: { color: c.textPrimary, fontSize: 18, fontWeight: '900' },
-  tStatLabel: { color: c.textTertiary, fontSize: 8, fontWeight: '900', letterSpacing: 0.5 },
-
-  rankLabelRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.sm },
-  rankLabel: { color: c.textTertiary, fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
-  rankPct: { color: c.accent, fontSize: 10, fontWeight: '800' },
-  rankBarBg: { height: 6, backgroundColor: c.borderSubtle, borderRadius: radius.pill, overflow: 'hidden' },
-  rankBarFill: { height: '100%', backgroundColor: c.accent, borderRadius: radius.pill },
-
-  quickRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.lg, marginBottom: spacing.xl },
-  quickStat: { flex: 1, alignItems: 'center', backgroundColor: c.surface, borderRadius: radius.md, paddingVertical: spacing.lg },
-  quickStatVal: { color: c.textPrimary, fontSize: 19, fontWeight: '900' },
-  quickStatLabel: { color: c.textTertiary, fontSize: 9, fontWeight: '800', letterSpacing: 0.3, marginTop: spacing.xs },
-  accentVal: { color: c.accent },
-
-  sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.md },
-  sectionTitle: { color: c.textPrimary, fontSize: 13, fontWeight: '900', letterSpacing: 0.5 },
-  achieveCount: { color: c.accent, fontSize: 12, fontWeight: '800' },
-
-  achieveGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.lg, gap: spacing.sm, marginBottom: spacing.xxl },
-  achieveCard: { width: '47.5%', backgroundColor: c.surface, borderRadius: radius.md, padding: spacing.md },
-  achieveCardLocked: { opacity: 0.4 },
-  achieveTopRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.sm },
-  achieveId: { color: c.textFaint, fontSize: 10, fontWeight: '800' },
-  achieveIdDone: { color: c.accent },
-  checkMark: { color: c.accent, fontSize: 12, fontWeight: '900' },
-  achieveTitle: { color: c.textPrimary, fontSize: 12, fontWeight: '900', marginBottom: spacing.xs },
-  achieveTitleLocked: { color: c.textTertiary },
-  achieveDesc: { color: c.textFaint, fontSize: 10, lineHeight: 14 },
+  eliteName: { color: c.textSecondary, fontSize: 10, fontWeight: '900', letterSpacing: 0.4, textAlign: 'center' },
+  eliteDesc: { color: c.textTertiary, fontSize: 10, lineHeight: 13, textAlign: 'center', marginTop: 3 },
 
   settingsSection: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 1, paddingHorizontal: spacing.xl, marginBottom: spacing.sm },
+  settingsSpaced: { marginTop: spacing.xl },
   settingRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -878,20 +954,36 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     marginBottom: spacing.sm,
     backgroundColor: c.surface,
     borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: c.border,
   },
-  settingLabel: { color: c.textPrimary, fontSize: 13, fontWeight: '700', flexShrink: 1 },
-  settingValue: { color: c.textSecondary, fontSize: 13, fontWeight: '600', flexShrink: 1, marginLeft: 'auto', textAlign: 'right' },
+  settingCol: { flex: 1, marginRight: spacing.sm },
+  settingLabel: { color: c.textPrimary, fontSize: 13, fontWeight: '800', flexShrink: 1 },
+  settingValue: { color: c.textSecondary, fontSize: 12, fontWeight: '700', flexShrink: 1, marginLeft: 'auto', textAlign: 'right' },
+  settingStatus: { color: c.textSecondary, fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
+  settingStatusOn: { color: c.accent },
+  pauseRowActive: { backgroundColor: c.accentMuted, borderColor: c.accent },
+  pauseActiveLabel: { color: c.accent, fontSize: 13, fontWeight: '900' },
+  pauseSub: { color: c.textTertiary, fontSize: 11, marginTop: 3 },
+  pauseChoices: { flexDirection: 'row', gap: spacing.sm, marginHorizontal: spacing.lg, marginBottom: spacing.md },
+  pauseChip: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    borderRadius: radius.sm,
+    backgroundColor: c.surfaceRaised,
+    borderWidth: 1,
+    borderColor: c.border,
+  },
+  pauseChipText: { color: c.textPrimary, fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
+
   signOut: { color: c.danger, fontSize: 13, fontWeight: '900' },
   deleteAccount: { color: c.textTertiary, fontSize: 12, fontWeight: '700' },
 
-  appEditor: { backgroundColor: c.surface, marginHorizontal: spacing.lg, marginTop: -spacing.xs, marginBottom: spacing.md, borderRadius: radius.lg, padding: spacing.md, ...cardShadow },
-  appEditRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: c.surfaceRaised, paddingHorizontal: spacing.lg, paddingVertical: spacing.lg, borderRadius: radius.md, marginBottom: spacing.sm },
+  appEditor: { backgroundColor: c.surface, marginHorizontal: spacing.lg, marginTop: -spacing.xs, marginBottom: spacing.md, borderRadius: radius.lg, padding: spacing.md, borderWidth: 1, borderColor: c.border, ...cardShadow },
   appEditRowOn: { backgroundColor: c.accentMuted },
   appEditLabel: { color: c.textSecondary, fontSize: 14, fontWeight: '700' },
   appEditLabelOn: { color: c.accent },
-  appEditCheck: { width: 20, height: 20, borderRadius: radius.pill, borderWidth: 1.5, borderColor: c.border, justifyContent: 'center', alignItems: 'center' },
-  appEditCheckOn: { backgroundColor: c.accent, borderColor: c.accent },
-  appEditCheckGlyph: { color: c.accentContrast, fontSize: 11, fontWeight: '900' },
   appEditActions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.xs },
   appEditCancel: { flex: 1, height: 46, backgroundColor: c.surfaceRaised, borderRadius: radius.md, justifyContent: 'center', alignItems: 'center' },
   appEditCancelText: { color: c.textSecondary, fontSize: 12, fontWeight: '900', letterSpacing: 0.3 },

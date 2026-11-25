@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useThemedStyles, useTheme } from '../context/ThemeContext';
 import { Palette, radius, spacing, cardShadow } from '../theme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -90,7 +91,7 @@ export const OnboardingScreen: React.FC<OnboardingProps> = ({ onComplete }) => {
     if (step === 1) return selectedApps.length > 0;
     if (step === 2) return hours !== null;
     if (step === 3) return goal !== '';
-    if (step === TOTAL_STEPS) return perms.allGranted;
+    if (step === TOTAL_STEPS) return perms.coreGranted;
     return true;
   };
 
@@ -133,7 +134,7 @@ export const OnboardingScreen: React.FC<OnboardingProps> = ({ onComplete }) => {
   const next = () => (step === TOTAL_STEPS ? finish() : setStep(step + 1));
 
   return (
-    <View style={styles.root}>
+    <SafeAreaView style={styles.root}>
       <View style={styles.progressTrack}>
         <View style={[styles.progressFill, { width: `${(step / TOTAL_STEPS) * 100}%` }]} />
       </View>
@@ -152,8 +153,7 @@ export const OnboardingScreen: React.FC<OnboardingProps> = ({ onComplete }) => {
           <>
             <Text style={styles.title}>WHAT OWNS{'\n'}YOUR ATTENTION?</Text>
             <Text style={styles.sub}>
-              Pick the apps that pull you in. Open one and IRONMIND fires a timed challenge — exit
-              fast or take the loss.
+              Pick the apps that pull you in. IRONMIND challenges you to exit fast — win streaks, earn coins, and beat friends.
             </Text>
             {APPS_LIST.map((app) => {
               const on = selectedApps.includes(app);
@@ -179,8 +179,7 @@ export const OnboardingScreen: React.FC<OnboardingProps> = ({ onComplete }) => {
           <>
             <Text style={styles.title}>HOW MUCH TIME{'\n'}ARE YOU LOSING?</Text>
             <Text style={styles.sub}>
-              Rough guess is fine. This is your starting line — you will see the real number
-              tomorrow.
+              Rough guess is fine. This becomes your starting benchmark so IRONMIND can track how many hours you win back.
             </Text>
             {HOURS.map((h) => {
               const on = hours === h.value;
@@ -202,10 +201,9 @@ export const OnboardingScreen: React.FC<OnboardingProps> = ({ onComplete }) => {
             {hours !== null && (
               <View style={styles.impactCard}>
                 <Text style={styles.impactNum}>{daysPerYear(hours)}</Text>
-                <Text style={styles.impactLabel}>DAYS A YEAR</Text>
+                <Text style={styles.impactLabel}>FULL DAYS A YEAR</Text>
                 <Text style={styles.impactSub}>
-                  At that rate you spend {daysPerYear(hours)} full days a year inside these apps.
-                  IRONMIND exists to take some of that back.
+                  At that pace you lose {daysPerYear(hours)} straight days a year inside these apps. Let's take them back.
                 </Text>
               </View>
             )}
@@ -215,7 +213,7 @@ export const OnboardingScreen: React.FC<OnboardingProps> = ({ onComplete }) => {
         {step === 3 && (
           <>
             <Text style={styles.title}>WHY ARE{'\n'}YOU HERE?</Text>
-            <Text style={styles.sub}>Your reason shows up when a challenge fires. Pick one.</Text>
+            <Text style={styles.sub}>Your reason shows up directly inside your challenge alerts to snap you out of autopilot.</Text>
             {GOALS.map((g) => {
               const on = goal === g.id;
               return (
@@ -240,8 +238,7 @@ export const OnboardingScreen: React.FC<OnboardingProps> = ({ onComplete }) => {
           <>
             <Text style={styles.title}>HOW HARD{'\n'}SHOULD IT PUSH?</Text>
             <Text style={styles.sub}>
-              This sets how long you get to exit and how often challenges fire. You can change it
-              any time in your profile.
+              Sets your exit timer and daily challenges. Change anytime in Profile.
             </Text>
             {INTENSITIES.map((i) => {
               const on = intensity === i.id;
@@ -262,12 +259,9 @@ export const OnboardingScreen: React.FC<OnboardingProps> = ({ onComplete }) => {
             })}
 
             <View style={styles.pauseNote}>
-              <Text style={styles.pauseNoteTitle}>NEED A BREAK? YOU CAN PAUSE</Text>
+              <Text style={styles.pauseNoteTitle}>NEED A BREAK? ONE-TAP PAUSE</Text>
               <Text style={styles.pauseNoteBody}>
-                Exam, work, or something important coming up? Go to{' '}
-                <Text style={styles.pauseNoteStrong}>Profile → Pause monitoring</Text> and choose 1 hour,
-                4 hours or until tomorrow. It turns back on by itself, or tap Resume monitoring to
-                bring it back early.
+                Exam or deep work? Go to <Text style={styles.pauseNoteStrong}>You → Pause monitoring</Text> for 1 hour, 4 hours, or until tomorrow.
               </Text>
             </View>
           </>
@@ -275,11 +269,17 @@ export const OnboardingScreen: React.FC<OnboardingProps> = ({ onComplete }) => {
 
         {step === 5 && (
           <>
-            <Text style={styles.title}>THREE{'\n'}PERMISSIONS.</Text>
+            <Text style={styles.title}>TWO QUICK{'\n'}PERMISSIONS.</Text>
             <Text style={styles.sub}>
-              IRONMIND cannot work without all three. Turn each one green, it takes about twenty seconds.
+              Just two switches — takes 10 seconds. That's all IRONMIND needs for challenges, screen time, and automatic duel sync.
             </Text>
             <PermissionSteps perms={perms} />
+            <View style={styles.reelsHint}>
+              <Text style={styles.reelsHintTitle}>REELS / TIKTOK / SHORTS MODE</Text>
+              <Text style={styles.reelsHintBody}>
+                Want challenges to fire ONLY while scrolling short videos (and stay quiet during DMs)? You can turn on Scroll Detection anytime in the Apps tab.
+              </Text>
+            </View>
           </>
         )}
       </ScrollView>
@@ -295,25 +295,25 @@ export const OnboardingScreen: React.FC<OnboardingProps> = ({ onComplete }) => {
             <ActivityIndicator color={palette.accentContrast} />
           ) : (
             <Text style={styles.ctaText}>
-              {step === TOTAL_STEPS ? 'START TRAINING' : 'CONTINUE'}
+              {step === TOTAL_STEPS ? 'START TRAINING →' : 'CONTINUE'}
             </Text>
           )}
         </TouchableOpacity>
-        {step === TOTAL_STEPS && !perms.allGranted && (
-          <Text style={styles.hint}>Turn all three green to start.</Text>
+        {step === TOTAL_STEPS && !perms.coreGranted && (
+          <Text style={styles.hint}>Turn both permissions READY to start.</Text>
         )}
         {step === 1 && selectedApps.length === 0 && (
           <Text style={styles.hint}>Pick at least one app to continue.</Text>
         )}
       </View>
-    </View>
+    </SafeAreaView>
   );
 };
 
 const makeStyles = (c: Palette) => StyleSheet.create({
   root: { flex: 1, backgroundColor: c.bg },
 
-  progressTrack: { height: 3, backgroundColor: c.surfaceRaised, marginTop: 48 },
+  progressTrack: { height: 3, backgroundColor: c.surfaceRaised, marginTop: spacing.sm },
   progressFill: { height: '100%', backgroundColor: c.accent },
 
   topBar: {
@@ -330,7 +330,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   scrollContent: { paddingHorizontal: spacing.xl, paddingTop: spacing.xl, paddingBottom: spacing.xxl },
 
   title: { color: c.textPrimary, fontSize: 30, fontWeight: '900', letterSpacing: -1, lineHeight: 34 },
-  sub: { color: c.textSecondary, fontSize: 13, lineHeight: 19, marginTop: spacing.md, marginBottom: spacing.xl },
+  sub: { color: c.textSecondary, fontSize: 13, lineHeight: 20, marginTop: spacing.md, marginBottom: spacing.xl },
 
   optionRow: {
     flexDirection: 'row',
@@ -349,7 +349,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   optionLabel: { color: c.textSecondary, fontSize: 14, fontWeight: '800', letterSpacing: 0.2 },
   optionLabelWide: { flex: 1 },
   optionLabelOn: { color: c.textPrimary },
-  optionSub: { color: c.textTertiary, fontSize: 11, marginTop: 3 },
+  optionSub: { color: c.textTertiary, fontSize: 12, marginTop: 3 },
 
   appIcon: { width: 34, height: 34, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
   appIconText: { color: '#FFFFFF', fontSize: 11, fontWeight: '900' },
@@ -372,9 +372,20 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     borderLeftWidth: 3,
     borderLeftColor: c.accent,
   },
-  pauseNoteTitle: { color: c.accent, fontSize: 10, fontWeight: '900', letterSpacing: 1, marginBottom: spacing.sm },
+  pauseNoteTitle: { color: c.accent, fontSize: 10, fontWeight: '900', letterSpacing: 1, marginBottom: spacing.xs },
   pauseNoteBody: { color: c.textSecondary, fontSize: 12, lineHeight: 18 },
   pauseNoteStrong: { color: c.textPrimary, fontWeight: '800' },
+
+  reelsHint: {
+    marginTop: spacing.xs,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: c.surface,
+    borderWidth: 1,
+    borderColor: c.borderSubtle,
+  },
+  reelsHintTitle: { color: c.accent, fontSize: 10, fontWeight: '900', letterSpacing: 0.9, marginBottom: 4 },
+  reelsHintBody: { color: c.textTertiary, fontSize: 11, lineHeight: 16 },
 
   impactCard: {
     backgroundColor: c.surface,
@@ -388,9 +399,9 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   },
   impactNum: { color: c.accent, fontSize: 56, fontWeight: '900', letterSpacing: -2 },
   impactLabel: { color: c.textSecondary, fontSize: 11, fontWeight: '900', letterSpacing: 1.5, marginTop: -spacing.xs },
-  impactSub: { color: c.textTertiary, fontSize: 12, lineHeight: 17, textAlign: 'center', marginTop: spacing.md },
+  impactSub: { color: c.textTertiary, fontSize: 12, lineHeight: 18, textAlign: 'center', marginTop: spacing.md },
 
-  footer: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xxl, paddingTop: spacing.md },
+  footer: { paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, paddingTop: spacing.md },
   cta: {
     backgroundColor: c.accent,
     borderRadius: radius.md,
@@ -399,5 +410,5 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   },
   ctaDisabled: { opacity: 0.3 },
   ctaText: { color: c.accentContrast, fontSize: 13, fontWeight: '900', letterSpacing: 0.8 },
-  hint: { color: c.textFaint, fontSize: 11, textAlign: 'center', marginTop: spacing.md },
+  hint: { color: c.textTertiary, fontSize: 11, textAlign: 'center', marginTop: spacing.sm },
 });

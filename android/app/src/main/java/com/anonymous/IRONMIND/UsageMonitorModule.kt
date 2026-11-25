@@ -6,6 +6,7 @@ import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.Bundle
 import android.provider.Settings
 import android.view.accessibility.AccessibilityManager
 import com.facebook.react.bridge.Arguments
@@ -19,16 +20,6 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
 
     override fun getName(): String = "UsageMonitor"
-
-    private val APP_PACKAGES = mapOf(
-        "Instagram" to "com.instagram.android",
-        "YouTube" to "com.google.android.youtube",
-        "TikTok" to "com.zhiliaoapp.musically",
-        "Facebook" to "com.facebook.katana",
-        "X (Twitter)" to "com.twitter.android",
-        "Reddit" to "com.reddit.frontpage",
-        "Snapchat" to "com.snapchat.android"
-    )
 
     @ReactMethod
     fun getPendingResults(uid: String, promise: Promise) {
@@ -46,6 +37,27 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
     fun isMonitoring(promise: Promise) { promise.resolve(UsageMonitorService.running) }
 
     @ReactMethod
+    fun setUserGoal(goal: String) {
+        reactContext.getSharedPreferences(UsageMonitorService.PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putString("userGoal", goal.trim()).apply()
+    }
+
+    @ReactMethod
+    fun setBackgroundSyncConfig(apiBaseUrl: String, syncToken: String) {
+        reactContext.getSharedPreferences(UsageMonitorService.PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString("apiBaseUrl", apiBaseUrl)
+            .putString("syncToken", syncToken)
+            .apply()
+    }
+
+    @ReactMethod
+    fun clearSyncToken() {
+        reactContext.getSharedPreferences(UsageMonitorService.PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().remove("syncToken").apply()
+    }
+
+    @ReactMethod
     fun getInstagramReelsTest(uid: String, promise: Promise) {
         if (!BuildConfig.IRONMIND_REELS_TEST) {
             promise.resolve(null)
@@ -53,21 +65,37 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
         }
         try {
             val prefs = reactContext.getSharedPreferences(UsageMonitorService.PREFS_NAME, Context.MODE_PRIVATE)
-            val accessibility = reactContext.getSystemService(AccessibilityManager::class.java)
-            val enabled = accessibility.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
-                .any {
-                    val service = it.resolveInfo.serviceInfo
-                    service.packageName == reactContext.packageName &&
-                        service.name == "com.anonymous.IRONMIND.InstagramReelsService"
-                }
+            val enabled = isAccessibilityServiceEnabled()
+            val reelsPrefs = reactContext.getSharedPreferences("ironmind_reels_test", Context.MODE_PRIVATE)
+            val day = TrustedClock.dayKey(reactContext)
+            val today = reelsPrefs.getString("day", null) == day
+            val countToday = if (today) reelsPrefs.getInt("reminders", 0) else 0
+            val sentAt = reelsPrefs.getLong("sentAt", 0L)
+            val now = TrustedClock.now(reactContext)
+            val cooldownMs = if (sentAt > 0L) maxOf(0L, 600_000L - (now - sentAt)) else 0L
+
             promise.resolve(Arguments.createMap().apply {
                 putBoolean("consented", ShortVideoTarget.INSTAGRAM.hasConsent(prefs, uid))
                 putBoolean("expandedConsented", prefs.getString(ShortVideoTarget.EXPANDED_CONSENT_UID, null) == uid)
                 putBoolean("enabled", enabled)
+                putBoolean("connected", ShortVideoTarget.serviceConnected)
+                putInt("countToday", countToday)
+                putInt("maxPerDay", 3)
+                putDouble("cooldownRemainingMs", cooldownMs.toDouble())
             })
         } catch (error: Exception) {
             promise.reject("REELS_TEST_SETTINGS", error)
         }
+    }
+
+    private fun isAccessibilityServiceEnabled(): Boolean {
+        val accessibility = reactContext.getSystemService(AccessibilityManager::class.java)
+        return accessibility.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
+            .any {
+                val service = it.resolveInfo.serviceInfo
+                service.packageName == reactContext.packageName &&
+                    service.name == "com.anonymous.IRONMIND.InstagramReelsService"
+            }
     }
 
     @ReactMethod
@@ -105,23 +133,34 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
     @ReactMethod
     fun openInstagramReelsTestSettings(uid: String, promise: Promise) {
         val prefs = reactContext.getSharedPreferences(UsageMonitorService.PREFS_NAME, Context.MODE_PRIVATE)
-        if (!BuildConfig.IRONMIND_REELS_TEST ||
-            !ShortVideoTarget.INSTAGRAM.hasConsent(prefs, uid)
-        ) {
+        if (!BuildConfig.IRONMIND_REELS_TEST || !ShortVideoTarget.INSTAGRAM.hasConsent(prefs, uid)) {
             promise.resolve(false)
             return
         }
+        val componentKey = "${reactContext.packageName}/com.anonymous.IRONMIND.InstagramReelsService"
         try {
-            reactContext.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            val args = Bundle().apply { putString(":settings:fragment_args_key", componentKey) }
+            val direct = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                putExtra(":settings:fragment_args_key", componentKey)
+                putExtra(":settings:show_fragment_args", args)
+            }
+            reactContext.startActivity(direct)
             promise.resolve(true)
-        } catch (error: Exception) {
-            promise.reject("REELS_TEST_SETTINGS", error)
+        } catch (_: Exception) {
+            try {
+                reactContext.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                promise.resolve(true)
+            } catch (error: Exception) {
+                promise.reject("REELS_TEST_SETTINGS", error)
+            }
         }
     }
 
     @ReactMethod
     fun setChallengeTimeZone(timeZoneId: String) {
-        reactContext.getSharedPreferences(UsageMonitorService.PREFS_NAME, Context.MODE_PRIVATE).edit().putString("accountTimeZone", timeZoneId).apply()
+        reactContext.getSharedPreferences(UsageMonitorService.PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putString("accountTimeZone", timeZoneId).apply()
     }
 
     @ReactMethod
@@ -149,11 +188,15 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
     ) {
         if (uid.isNullOrBlank()) return
         val appList = Array(apps.size()) { apps.getString(it) }
+        if (appList.isEmpty()) {
+            stopMonitoring()
+            return
+        }
         val intent = Intent(reactContext, UsageMonitorService::class.java).apply {
             putExtra("apps", appList)
             putExtra("challengeWindowSeconds", challengeWindowSeconds)
             putExtra("dailyLimit", dailyLimit)
-            putExtra("uid", uid ?: "")
+            putExtra("uid", uid)
             putExtra("appLimits", appLimitsJson ?: "{}")
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -165,6 +208,8 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun stopMonitoring() {
+        reactContext.getSharedPreferences(UsageMonitorService.PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putStringSet("apps", emptySet()).apply()
         val intent = Intent(reactContext, UsageMonitorService::class.java)
         reactContext.stopService(intent)
     }
@@ -174,7 +219,7 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
         try {
             val pm = reactContext.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
             promise.resolve(pm.isIgnoringBatteryOptimizations(reactContext.packageName))
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             promise.resolve(false)
         }
     }
@@ -182,14 +227,14 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
     @ReactMethod
     fun requestIgnoreBatteryOptimizations() {
         try {
-            val intent = Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
                 data = android.net.Uri.parse("package:${reactContext.packageName}")
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
             }
             reactContext.startActivity(intent)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             try {
-                val fallback = Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
+                val fallback = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK
                 }
                 reactContext.startActivity(fallback)
@@ -233,10 +278,7 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
     @ReactMethod
     fun getChallengeCountToday(promise: Promise) {
         try {
-            val prefs = reactContext.getSharedPreferences(
-                UsageMonitorService.PREFS_NAME,
-                Context.MODE_PRIVATE
-            )
+            val prefs = reactContext.getSharedPreferences(UsageMonitorService.PREFS_NAME, Context.MODE_PRIVATE)
             val todayKey = TrustedClock.dayKey(reactContext)
             val count = if (prefs.getString("date", null) == todayKey) prefs.getInt("count", 0) else 0
 
@@ -263,18 +305,21 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
             val result = Arguments.createMap()
             for (i in 0 until names.size()) {
                 val name = names.getString(i) ?: continue
-                val pkg = APP_PACKAGES[name] ?: byLabel[name] ?: continue
-                try {
-                    val drawable = pm.getApplicationIcon(pkg)
-                    val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
-                    val canvas = android.graphics.Canvas(bitmap)
-                    drawable.setBounds(0, 0, size, size)
-                    drawable.draw(canvas)
-                    val out = java.io.ByteArrayOutputStream()
-                    bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
-                    val encoded = android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.NO_WRAP)
-                    result.putString(name, "data:image/png;base64,$encoded")
-                } catch (_: Exception) {}
+                val candidates = UsageMonitorService.packagesForApp(name) + listOfNotNull(byLabel[name])
+                for (pkg in candidates) {
+                    try {
+                        val drawable = pm.getApplicationIcon(pkg)
+                        val bitmap = android.graphics.Bitmap.createBitmap(size, size, android.graphics.Bitmap.Config.ARGB_8888)
+                        val canvas = android.graphics.Canvas(bitmap)
+                        drawable.setBounds(0, 0, size, size)
+                        drawable.draw(canvas)
+                        val out = java.io.ByteArrayOutputStream()
+                        bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+                        val encoded = android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.NO_WRAP)
+                        result.putString(name, "data:image/png;base64,$encoded")
+                        break
+                    } catch (_: Exception) {}
+                }
             }
             promise.resolve(result)
         } catch (e: Exception) {
@@ -292,7 +337,7 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
                 reactContext.packageName
             )
             promise.resolve(mode == AppOpsManager.MODE_ALLOWED)
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             promise.resolve(false)
         }
     }
@@ -300,7 +345,7 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
     private fun foregroundTimesFor(startMs: Long, endMs: Long): Map<String, Long> {
         val usm = reactContext.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
         val cutoff = minOf(endMs, System.currentTimeMillis())
-        val eventsQuery = usm?.queryEvents(maxOf(0L, startMs - 86400000L), cutoff) ?: return emptyMap()
+        val eventsQuery = usm?.queryEvents(maxOf(0L, startMs - 86_400_000L), cutoff) ?: return emptyMap()
         val timeline = UsageTimeline(startMs, cutoff)
         val event = android.app.usage.UsageEvents.Event()
         while (eventsQuery.hasNextEvent()) {
@@ -315,22 +360,23 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
         try {
             val foregroundTimes = foregroundTimesFor(startMs.toLong(), endMs.toLong())
             val pm = reactContext.packageManager
-            val result = Arguments.createArray()
+            val merged = mutableMapOf<String, Long>()
+            for ((pkg, timeMs) in foregroundTimes) {
+                if (timeMs <= 0L) continue
+                val friendlyName = UsageMonitorService.appNameForPackage(pkg) ?: try {
+                    pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+                } catch (_: Exception) { continue }
+                merged[friendlyName] = (merged[friendlyName] ?: 0L) + timeMs
+            }
 
-            foregroundTimes
-                .filter { it.value > 0L }
-                .entries
+            val result = Arguments.createArray()
+            merged.entries
                 .sortedByDescending { it.value }
-                .forEach { (pkg, timeMs) ->
-                    try {
-                        val appInfo = pm.getApplicationInfo(pkg, 0)
-                        val label = pm.getApplicationLabel(appInfo).toString()
-                        val friendlyName = APP_PACKAGES.entries.find { it.value == pkg }?.key ?: label
-                        val map = Arguments.createMap()
-                        map.putString("app", friendlyName)
-                        map.putDouble("minutes", timeMs / 60000.0)
-                        result.pushMap(map)
-                    } catch (_: Exception) {}
+                .forEach { (name, timeMs) ->
+                    val map = Arguments.createMap()
+                    map.putString("app", name)
+                    map.putDouble("minutes", timeMs / 60_000.0)
+                    result.pushMap(map)
                 }
 
             promise.resolve(result)
@@ -351,40 +397,30 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
             val now = System.currentTimeMillis()
 
             val foregroundTimes = foregroundTimesFor(startOfDay, now)
-
             val pm = reactContext.packageManager
-
             val homeIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
             val launcherPackage = pm.resolveActivity(homeIntent, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)
                 ?.activityInfo?.packageName
+            val nonAppPackages = setOf("android", "com.android.systemui", launcherPackage)
 
-            val NON_APP_PACKAGES = setOf(
-                "android",
-                "com.android.systemui",
-                launcherPackage
-            )
-
-            fun isRealUserApp(pkg: String): Boolean {
-                if (NON_APP_PACKAGES.contains(pkg)) return false
-                return pm.getLaunchIntentForPackage(pkg) != null
+            val merged = mutableMapOf<String, Long>()
+            for ((pkg, timeMs) in foregroundTimes) {
+                if (timeMs <= 0L || pkg in nonAppPackages) continue
+                if (pm.getLaunchIntentForPackage(pkg) == null) continue
+                val friendlyName = UsageMonitorService.appNameForPackage(pkg) ?: try {
+                    pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+                } catch (_: Exception) { continue }
+                merged[friendlyName] = (merged[friendlyName] ?: 0L) + timeMs
             }
 
             val result = Arguments.createArray()
-
-            foregroundTimes
-                .filter { it.value > 0L && isRealUserApp(it.key) }
-                .entries
+            merged.entries
                 .sortedByDescending { it.value }
-                .forEach { (pkg, timeMs) ->
-                    try {
-                        val appInfo = pm.getApplicationInfo(pkg, 0)
-                        val label = pm.getApplicationLabel(appInfo).toString()
-                        val friendlyName = APP_PACKAGES.entries.find { it.value == pkg }?.key ?: label
-                        val map = Arguments.createMap()
-                        map.putString("app", friendlyName)
-                        map.putDouble("minutes", timeMs / 60000.0)
-                        result.pushMap(map)
-                    } catch (_: Exception) {}
+                .forEach { (name, timeMs) ->
+                    val map = Arguments.createMap()
+                    map.putString("app", name)
+                    map.putDouble("minutes", timeMs / 60_000.0)
+                    result.pushMap(map)
                 }
 
             promise.resolve(result)

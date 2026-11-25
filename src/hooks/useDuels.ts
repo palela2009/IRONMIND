@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { NativeModules, Platform, AppState } from 'react-native';
+import { NativeModules, Platform } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE_URL } from '../config/api';
 import { authedFetch } from '../utils/authFetch';
@@ -34,10 +34,10 @@ export interface Duel {
 }
 
 export const DUEL_REACTIONS: { id: string; text: string }[] = [
-  { id: 'fire', text: '🔥 Nice streak' },
-  { id: 'comeon', text: '💪 Come on' },
-  { id: 'winning', text: "😈 I'm winning this duel" },
-  { id: 'gg', text: '👏 GG' },
+  { id: 'fire', text: '🔥 Put the phone down' },
+  { id: 'comeon', text: '📉 The feed owns you' },
+  { id: 'winning', text: '🧊 Too easy so far' },
+  { id: 'gg', text: '🤝 Respect. Rematch?' },
 ];
 
 export const reactionText = (id: string | null): string | null =>
@@ -80,7 +80,7 @@ export const reportActiveDuels = async (): Promise<void> => {
   } catch {}
 };
 
-export const useDuels = () => {
+export const useDuels = (pollEnabled = true) => {
   const { fbUser } = useAuth();
   const [duels, setDuels] = useState<Duel[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -134,9 +134,9 @@ export const useDuels = () => {
     load();
   }, [load]);
 
-  useLiveRefresh(load, !!fbUser?.uid);
+  useLiveRefresh(load, !!fbUser?.uid && pollEnabled);
 
-  const challenge = async (toUid: string, apps: string[], stake = 100): Promise<string | null> => {
+  const challenge = async (toUid: string, apps: string[], stake = 50): Promise<string | null> => {
     setError('');
     try {
       const res = await authedFetch(API_URL, {
@@ -152,39 +152,41 @@ export const useDuels = () => {
     }
   };
 
-  const cancel = async (id: string): Promise<boolean> => {
+  const cancel = async (id: string): Promise<string | null> => {
     setError('');
     try {
       const res = await authedFetch(`${API_URL}/${id}/cancel`, { method: 'POST' });
+      const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        setError(body.message ?? 'Could not cancel duel');
-        return false;
+        const msg = body.message ?? 'Could not cancel duel';
+        setError(msg);
+        return msg;
       }
       await load();
-      return true;
+      return null;
     } catch {
-      setError('Network error — try again');
-      return false;
+      const msg = 'Network error — try again';
+      setError(msg);
+      return msg;
     }
   };
 
-  const respond = async (id: string, action: 'accept' | 'decline'): Promise<boolean> => {
+  const respond = async (id: string, action: 'accept' | 'decline'): Promise<string | null> => {
     setError('');
     try {
       const res = await authedFetch(`${API_URL}/${id}/${action}`, { method: 'POST' });
+      const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        console.error(`[IRONMIND] Duel ${action} failed:`, res.status, body);
-        setError(body.message ?? `Could not ${action} duel`);
-        return false;
+        const msg = body.message ?? `Could not ${action} duel`;
+        setError(msg);
+        return msg;
       }
       await load();
-      return true;
-    } catch (e) {
-      console.error(`[IRONMIND] Duel ${action} error:`, e);
-      setError('Network error — try again');
-      return false;
+      return null;
+    } catch {
+      const msg = 'Network error — try again';
+      setError(msg);
+      return msg;
     }
   };
 

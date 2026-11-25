@@ -4,6 +4,7 @@ import Purchases, { PRODUCT_CATEGORY, PurchasesStoreProduct, SubscriptionOption 
 
 const apiKey: string = Constants.expoConfig?.extra?.revenuecatAndroidKey ?? '';
 let configured = false;
+let identifyPromise: Promise<void> = Promise.resolve();
 
 export type PurchaseOutcome = 'purchased' | 'cancelled' | 'failed';
 
@@ -11,21 +12,25 @@ export const purchasesAvailable = (): boolean => Platform.OS === 'android' && !!
 
 export const identifyPurchaser = (uid: string | null) => {
   if (!purchasesAvailable()) return;
-  try {
-    if (!configured) {
-      Purchases.configure({ apiKey, appUserID: uid ?? undefined });
-      configured = true;
-      return;
-    }
-    if (uid) Purchases.logIn(uid).catch(() => {});
-    else Purchases.logOut().catch(() => {});
-  } catch {}
+  identifyPromise = (async () => {
+    try {
+      if (!configured) {
+        Purchases.configure({ apiKey, appUserID: uid ?? undefined });
+        configured = true;
+        return;
+      }
+      if (uid) await Purchases.logIn(uid);
+      else await Purchases.logOut();
+    } catch {}
+  })();
 };
 
 const baseId = (product: PurchasesStoreProduct) => product.identifier.split(':')[0];
 
 export const loadProducts = async (productIds: string[]): Promise<Record<string, PurchasesStoreProduct>> => {
-  if (!purchasesAvailable() || !configured) return {};
+  if (!purchasesAvailable()) return {};
+  await identifyPromise;
+  if (!configured) return {};
   const oneTime = productIds.filter((id) => id.includes('lifetime'));
   const subscriptions = productIds.filter((id) => !id.includes('lifetime'));
   try {
@@ -60,6 +65,7 @@ export const priceOf = (product: PurchasesStoreProduct, offerTag?: string): stri
 
 export const buyProduct = async (product: PurchasesStoreProduct, offerTag?: string): Promise<PurchaseOutcome> => {
   try {
+    await identifyPromise;
     const option = optionFor(product, offerTag);
     if (option) await Purchases.purchaseSubscriptionOption(option);
     else await Purchases.purchaseStoreProduct(product);
@@ -70,7 +76,9 @@ export const buyProduct = async (product: PurchasesStoreProduct, offerTag?: stri
 };
 
 export const restorePurchases = async (): Promise<'found' | 'none' | 'failed'> => {
-  if (!purchasesAvailable() || !configured) return 'failed';
+  if (!purchasesAvailable()) return 'failed';
+  await identifyPromise;
+  if (!configured) return 'failed';
   try {
     const info = await Purchases.restorePurchases();
     return info.entitlements.active.pro ? 'found' : 'none';
