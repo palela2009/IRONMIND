@@ -5,20 +5,26 @@ import { useThemedStyles, useTheme } from '../context/ThemeContext';
 import { Palette, radius, spacing } from '../theme';
 import { usePermissions } from '../hooks/usePermissions';
 import { PermissionSteps } from './PermissionSteps';
+import type { ShortVideoController } from '../hooks/useInstagramReelsTest';
 
-export const PermissionGate: React.FC = () => {
+interface Props {
+  reelsTest?: ShortVideoController | null;
+}
+
+export const PermissionGate: React.FC<Props> = ({ reelsTest }) => {
   const styles = useThemedStyles(makeStyles);
   const palette = useTheme();
   const perms = usePermissions();
   const [checking, setChecking] = useState(false);
   const checkingRef = useRef(false);
-  const visible = perms.checked && !perms.coreGranted;
+  const needsScroll = Boolean(reelsTest) && !reelsTest!.isActive;
+  const visible = perms.checked && (!perms.coreGranted || needsScroll) && !reelsTest?.guideVisible;
 
   const checkAgain = async () => {
     if (checkingRef.current) return;
     checkingRef.current = true;
     setChecking(true);
-    try { await perms.refresh(); }
+    try { await Promise.all([perms.refresh(), reelsTest?.refresh()]); }
     finally { checkingRef.current = false; setChecking(false); }
   };
 
@@ -31,9 +37,9 @@ export const PermissionGate: React.FC = () => {
           </View>
           <Text style={styles.title}>RECONNECT{'\n'}IRONMIND.</Text>
           <Text style={styles.sub}>
-            Switch the item marked NEEDED back on so challenges and automatic duel tracking keep working.
+            Switch every item marked NEEDED on so Scroll Challenges, Screen Time, and automatic Duel tracking stay active.
           </Text>
-          <PermissionSteps perms={perms} showOptionalTips={false} />
+          <PermissionSteps perms={perms} reelsTest={reelsTest} showOptionalTips={false} />
           <TouchableOpacity
             onPress={checkAgain}
             style={[styles.checkButton, checking && styles.checkButtonBusy]}

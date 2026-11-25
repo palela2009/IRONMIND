@@ -351,13 +351,10 @@ export const OnboardingScreen: React.FC<OnboardingProps> = ({ onComplete, reelsT
             </Text>
           )}
         </TouchableOpacity>
-        {step === TOTAL_STEPS && perms.coreGranted && reelsTest && !reelsTest.isActive && (
-          <TouchableOpacity style={styles.skipScrollBtn} onPress={finish} disabled={saving} activeOpacity={0.8}>
-            <Text style={styles.skipScrollText}>SKIP SCROLL CHALLENGES FOR NOW (TURN ON LATER)</Text>
-          </TouchableOpacity>
-        )}
-        {step === TOTAL_STEPS && !perms.coreGranted && (
-          <Text style={styles.hint}>Turn on Notifications and Usage Access to continue.</Text>
+        {step === TOTAL_STEPS && !allThreeReady && (
+          <Text style={styles.hint}>
+            Turn on all {totalPerms} switches above to launch IRONMIND.
+          </Text>
         )}
         {step === 1 && selectedApps.length === 0 && (
           <Text style={styles.hint}>Pick at least one app to continue.</Text>
@@ -492,7 +489,5 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   },
   ctaDisabled: { opacity: 0.3 },
   ctaText: { color: c.accentContrast, fontSize: 13, fontWeight: '900', letterSpacing: 0.8 },
-  skipScrollBtn: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: spacing.xs },
-  skipScrollText: { color: c.textTertiary, fontSize: 10, fontWeight: '800', letterSpacing: 0.6 },
   hint: { color: c.textTertiary, fontSize: 11, textAlign: 'center', marginTop: spacing.sm },
 });

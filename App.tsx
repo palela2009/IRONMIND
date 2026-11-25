@@ -439,7 +439,7 @@ function RootNavigator() {
       <ProIntroScreen />
       <InviteRewardOverlay />
       <WelcomeGiftScreen />
-      <PermissionGate />
+      <PermissionGate reelsTest={reelsTest} />
       <ShortVideoSetupModal controller={reelsTest} />
 
       <MilestoneOverlay

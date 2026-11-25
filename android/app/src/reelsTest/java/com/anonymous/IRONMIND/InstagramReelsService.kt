@@ -43,6 +43,8 @@ class InstagramReelsService : AccessibilityService() {
     private var lastTraceAt = -5_000L
     private var feedTarget: ShortVideoTarget? = null
     private var feedWindow = -1
+    private var lastFeedConfirmedAt = 0L
+    private var unknownFeedSince: Long? = null
     private var lastKnownSurface = Surface.UNKNOWN
     private var lastKnownAt = 0L
     private var attempt: Attempt? = null
@@ -57,13 +59,16 @@ class InstagramReelsService : AccessibilityService() {
         }
         val root = rootInActiveWindow
         val surface = classifySurface(root, target, now)
-        if (surface != Surface.REELS || root?.windowId != feedWindow) {
+        val transientUnknown = surface == Surface.UNKNOWN &&
+            root?.packageName?.toString() in target.packageIds &&
+            now - lastFeedConfirmedAt <= 2_500L
+        if ((surface != Surface.REELS && !transientUnknown) || (surface == Surface.REELS && root?.windowId != feedWindow)) {
             updateAttempt(uid, surface, now)
             clearFeed()
         } else {
             val scroll = session.settleScroll(now)
             val wasInChallenge = attempt != null
-            updateAttempt(uid, surface, now, scroll.advanced)
+            updateAttempt(uid, Surface.REELS, now, scroll.advanced)
             if (!wasInChallenge && scroll.shouldRemind && startIfAllowed(uid, target, now)) {
                 session.markReminded()
             }
@@ -99,10 +104,6 @@ class InstagramReelsService : AccessibilityService() {
         val uid = monitorPrefs.getString("uid", null)
         val apps = monitorPrefs.getStringSet("apps", emptySet()).orEmpty()
         val watched = ShortVideoTarget.entries.filter { it.appName in apps && uid != null && it.hasConsent(monitorPrefs, uid) }
-        serviceInfo?.let { info ->
-            info.packageNames = watched.flatMap { it.packageIds }.ifEmpty { listOf(packageName) }.toTypedArray()
-            serviceInfo = info
-        }
         if (attempt?.target?.let { it !in watched } == true) stopAttempt()
         if (feedTarget?.let { it !in watched } == true) clearFeed()
     }
@@ -122,14 +123,22 @@ class InstagramReelsService : AccessibilityService() {
         if (surface != Surface.REELS) {
             updateAttempt(uid, surface, now)
             if (event.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED) traceScroll(target, event, false)
-            clearFeed()
+            if (surface == Surface.UNKNOWN) {
+                if (unknownFeedSince == null) unknownFeedSince = now
+                if (now - (unknownFeedSince ?: now) >= 3_000L) clearFeed()
+            } else {
+                clearFeed()
+            }
             return
         }
+        unknownFeedSince = null
+        lastFeedConfirmedAt = now
         if (root?.windowId != event.windowId) return
         if (feedWindow != event.windowId || feedTarget != target) {
             clearFeed()
             feedWindow = event.windowId
             feedTarget = target
+            lastFeedConfirmedAt = now
         }
         session.observeFeed(now)
         if (event.eventType != AccessibilityEvent.TYPE_VIEW_SCROLLED) return
@@ -155,7 +164,7 @@ class InstagramReelsService : AccessibilityService() {
             return
         }
         if (deltaX != -1 && deltaX != 0 && !vertical) return
-        val offset = event.scrollY.takeIf { it >= 0 && event.maxScrollY > 0 }
+        val offset = event.scrollY.takeIf { it >= 0 && (event.maxScrollY > 0 || it > 0) }
         if (!session.queueScroll(event.fromIndex, if (vertical) deltaY else 0, offset, height)) return
         handler.removeCallbacks(settlePage)
         handler.postDelayed(settlePage, 350L)
@@ -230,7 +239,6 @@ class InstagramReelsService : AccessibilityService() {
         }
 
     private fun activeAttemptAccount(target: ShortVideoTarget): String? {
-        if (!UsageMonitorService.running) return null
         val prefs = monitorPrefs
         if (target.appName !in prefs.getStringSet("apps", emptySet()).orEmpty()) return null
         if (System.currentTimeMillis() < prefs.getLong("pausedUntil", 0L)) return null
@@ -386,6 +394,7 @@ class InstagramReelsService : AccessibilityService() {
         handler.removeCallbacks(settlePage)
         feedTarget = null
         feedWindow = -1
+        unknownFeedSince = null
         session.leaveFeed()
     }
 

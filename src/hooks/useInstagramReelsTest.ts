@@ -20,6 +20,7 @@ export type ShortVideoController = {
   acceptAndOpenSettings: () => Promise<void>;
   openSettingsOnly: () => Promise<void>;
   turnOff: () => Promise<void>;
+  refresh: () => Promise<void>;
   guideVisible: boolean;
   status: 'ON' | 'FINISH SETUP' | 'INSTAGRAM ONLY' | 'OFF';
   isActive: boolean;
@@ -124,6 +125,8 @@ export function useInstagramReelsTest(uid: string | undefined, _showDuringSetup 
       : 'FINISH SETUP'
     : 'OFF';
 
+  const isActive = settings.consented && settings.expandedConsented && settings.enabled;
+
   return {
     open,
     openGuide,
@@ -131,10 +134,11 @@ export function useInstagramReelsTest(uid: string | undefined, _showDuringSetup 
     acceptAndOpenSettings,
     openSettingsOnly,
     turnOff,
+    refresh,
     guideVisible,
     status,
-    isActive: settings.consented && settings.enabled,
-    needsSetup: settings.consented && !settings.enabled,
+    isActive,
+    needsSetup: settings.consented && !isActive,
     connected: Boolean(settings.connected ?? settings.enabled),
     countToday: Number(settings.countToday ?? 0),
     maxPerDay: Number(settings.maxPerDay ?? 5),
