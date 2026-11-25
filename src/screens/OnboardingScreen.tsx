@@ -15,9 +15,11 @@ import { syncAppMonitor } from '../hooks/useAppMonitor';
 import { deviceTimeZone } from '../utils/challengeTime';
 import { usePermissions } from '../hooks/usePermissions';
 import { PermissionSteps } from '../components/PermissionSteps';
+import type { ShortVideoController } from '../hooks/useInstagramReelsTest';
 
 interface OnboardingProps {
   onComplete: () => void;
+  reelsTest?: ShortVideoController | null;
 }
 
 const ONBOARDING_URL = `${API_BASE_URL}/api/user/onboarding`;
@@ -74,7 +76,7 @@ const INTENSITIES: {
 const daysPerYear = (hoursPerDay: number): number => Math.round((hoursPerDay * 365) / 24);
 const monthsPerDecade = (hoursPerDay: number): number => Math.round((hoursPerDay * 3650) / (24 * 30));
 
-export const OnboardingScreen: React.FC<OnboardingProps> = ({ onComplete }) => {
+export const OnboardingScreen: React.FC<OnboardingProps> = ({ onComplete, reelsTest }) => {
   const styles = useThemedStyles(makeStyles);
   const palette = useTheme();
   const { fbUser } = useAuth();
@@ -90,11 +92,15 @@ export const OnboardingScreen: React.FC<OnboardingProps> = ({ onComplete }) => {
   const toggleApp = (app: string) =>
     setSelectedApps((prev) => (prev.includes(app) ? prev.filter((a) => a !== app) : [...prev, app]));
 
+  const allThreeReady = perms.coreGranted && (!reelsTest || reelsTest.isActive);
+  const readyCount = (perms.status.notifications ? 1 : 0) + (perms.status.usage ? 1 : 0) + (reelsTest?.isActive ? 1 : 0);
+  const totalPerms = reelsTest ? 3 : 2;
+
   const canAdvance = (): boolean => {
     if (step === 1) return selectedApps.length > 0;
     if (step === 2) return hours !== null;
     if (step === 3) return goal !== '';
-    if (step === TOTAL_STEPS) return perms.coreGranted;
+    if (step === TOTAL_STEPS) return allThreeReady;
     return true;
   };
 
@@ -319,11 +325,13 @@ export const OnboardingScreen: React.FC<OnboardingProps> = ({ onComplete }) => {
 
         {step === 5 && (
           <>
-            <Text style={styles.title}>TWO QUICK{'\n'}PERMISSIONS.</Text>
+            <Text style={styles.title}>{reelsTest ? 'THREE QUICK\nSWITCHES.' : 'TWO QUICK\nPERMISSIONS.'}</Text>
             <Text style={styles.sub}>
-              Just two switches to enter the app — powers your Screen Time, Leaderboard, and automatic Duel sync. Right on Home, tap Activate Scroll Challenges to turn on doomscroll detection.
+              {reelsTest
+                ? `${readyCount} of ${totalPerms} ready — turn all three green (~20 seconds) so your very first Reels, TikTok, Shorts or Spotlight scroll works immediately.`
+                : 'Just two switches to enter the app — powers your Screen Time, Leaderboard, and automatic Duel sync.'}
             </Text>
-            <PermissionSteps perms={perms} />
+            <PermissionSteps perms={perms} reelsTest={reelsTest} />
           </>
         )}
       </ScrollView>
@@ -343,8 +351,13 @@ export const OnboardingScreen: React.FC<OnboardingProps> = ({ onComplete }) => {
             </Text>
           )}
         </TouchableOpacity>
+        {step === TOTAL_STEPS && perms.coreGranted && reelsTest && !reelsTest.isActive && (
+          <TouchableOpacity style={styles.skipScrollBtn} onPress={finish} disabled={saving} activeOpacity={0.8}>
+            <Text style={styles.skipScrollText}>SKIP SCROLL CHALLENGES FOR NOW (TURN ON LATER)</Text>
+          </TouchableOpacity>
+        )}
         {step === TOTAL_STEPS && !perms.coreGranted && (
-          <Text style={styles.hint}>Turn both permissions READY to start.</Text>
+          <Text style={styles.hint}>Turn on Notifications and Usage Access to continue.</Text>
         )}
         {step === 1 && selectedApps.length === 0 && (
           <Text style={styles.hint}>Pick at least one app to continue.</Text>
@@ -479,5 +492,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   },
   ctaDisabled: { opacity: 0.3 },
   ctaText: { color: c.accentContrast, fontSize: 13, fontWeight: '900', letterSpacing: 0.8 },
+  skipScrollBtn: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: spacing.xs },
+  skipScrollText: { color: c.textTertiary, fontSize: 10, fontWeight: '800', letterSpacing: 0.6 },
   hint: { color: c.textTertiary, fontSize: 11, textAlign: 'center', marginTop: spacing.sm },
 });

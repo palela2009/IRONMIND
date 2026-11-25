@@ -133,6 +133,10 @@ export const usePermissions = () => {
 
   const openUsageAccess = useCallback(async () => {
     try {
+      if (Platform.OS === 'android' && native?.openUsageAccessSettings) {
+        native.openUsageAccessSettings();
+        return;
+      }
       if (Platform.OS === 'android') await Linking.sendIntent('android.settings.USAGE_ACCESS_SETTINGS');
       else await Linking.openSettings();
     } catch {

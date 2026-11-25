@@ -96,22 +96,37 @@ export const WELCOME_PLANS: ProPlan[] = [
 export const PRO_FEATURES = [
   {
     icon: '❄',
-    title: '20 Streak Freezes a Month',
-    body: 'Each freeze absorbs one failed challenge automatically, so a single slip never wipes out a long run.',
+    title: '20 Streak Freezes / Month',
+    body: 'Each freeze automatically shields one missed challenge so a single slip never kills a long streak.',
+  },
+  {
+    icon: '◉',
+    title: 'Double Coins (2×)',
+    body: 'Earn twice the coins on every challenge win and perfect day — unlock frames and name effects twice as fast.',
   },
   {
     icon: '◑',
-    title: 'Exclusive Themes',
-    body: 'Cyberpunk and other dark UI themes, plus Pro-only accent colours.',
+    title: 'All 9 Themes + Aurora Frame',
+    body: 'Instant access to every dark palette plus the Pro-exclusive Aurora prism avatar frame.',
+  },
+  {
+    icon: '⚔',
+    title: 'High-Stakes Duels (◉ 100 & ◉ 250)',
+    body: 'Raise the stakes against friends for up to ◉ 500 pots on 24-hour screen-time showdowns.',
   },
   {
     icon: '✦',
-    title: '7 Elite Badges',
-    body: 'Pro-only badges for milestones like a 7-win run or a lightning-fast exit, shown next to your name on the leaderboard.',
+    title: '7 Pinnable Elite Badges & 30-Day Analytics',
+    body: 'Pin any earned elite badge next to your name on the leaderboard, plus deep 30-day charts and weekly fight grades.',
   },
-  {
-    icon: '◈',
-    title: 'Advanced Analytics',
-    body: 'Full screen-time history, per-app trends and detailed progress reports.',
-  },
+];
+
+export const PRO_COMPARISON: { label: string; free: string; pro: string }[] = [
+  { label: 'Scroll-Only Protection (Big 5)', free: 'Full', pro: 'Full' },
+  { label: 'Streak Freezes', free: 'Buy (◉ 100)', pro: '20 / month' },
+  { label: 'Coins per Win', free: '1× (+10)', pro: '2× (+20)' },
+  { label: 'Themes & Exclusive Frame', free: '1 free gift', pro: 'All 9 + Aurora' },
+  { label: 'Duel Max Stake', free: 'Free / ◉ 50', pro: 'Up to ◉ 250' },
+  { label: 'Leaderboard Elite Badge', free: '—', pro: 'Pin any of 7' },
+  { label: 'Analytics & Fight Grade', free: '7-day', pro: '30-day + Coach' },
 ];

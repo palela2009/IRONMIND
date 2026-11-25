@@ -71,10 +71,23 @@ export const ELITE_BADGES: Badge[] = [
   },
 ];
 
+export const badgeById = (id: string | null | undefined): Badge | null =>
+  id ? ELITE_BADGES.find((b) => b.id === id) ?? null : null;
+
 export const earnedBadges = (s: UserStats, unlockAll = false): Badge[] =>
   unlockAll ? ELITE_BADGES : ELITE_BADGES.filter((b) => b.earned(s));
 
-export const topBadgeFor = (s: UserStats, isPro: boolean, unlockAll = false): Badge | null => {
+export const topBadgeFor = (
+  s: UserStats,
+  isPro: boolean,
+  unlockAll = false,
+  pinnedBadgeId?: string | null,
+): Badge | null => {
+  if (!isPro && !unlockAll) return null;
+  if (pinnedBadgeId) {
+    const pinned = badgeById(pinnedBadgeId);
+    if (pinned && (unlockAll || pinned.earned(s))) return pinned;
+  }
   if (unlockAll) return ELITE_BADGES[0];
-  return isPro ? ELITE_BADGES.find((b) => b.earned(s)) ?? null : null;
+  return ELITE_BADGES.find((b) => b.earned(s)) ?? null;
 };

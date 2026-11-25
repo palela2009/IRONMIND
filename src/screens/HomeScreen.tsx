@@ -26,6 +26,8 @@ interface HomeProps {
   reportedHours?: number | null;
   reelsTest?: ShortVideoController | null;
   onNavigate: (state: TrainingState) => void;
+  onOpenPro?: () => void;
+  onOpenFreeze?: () => void;
 }
 
 const DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -132,12 +134,14 @@ export const HomeScreen: React.FC<HomeProps> = ({
   reportedHours,
   reelsTest,
   onNavigate,
+  onOpenPro,
+  onOpenFreeze,
 }) => {
   const styles = useThemedStyles(makeStyles);
   const palette = useTheme();
   const scrollRef = useRef<any>(null);
   useTabScrollReset('HOME', scrollRef);
-  const { coins, streakFreezes, equippedFrame } = usePro();
+  const { coins, streakFreezes, equippedFrame, isPro } = usePro();
   const [showShop, setShowShop] = useState<boolean>(false);
   const [visibleCount, setVisibleCount] = useState<number>(RECENT_PAGE);
   const firedToday = useFiredToday(history.length + dailyChallengeLimit);
@@ -226,10 +230,25 @@ export const HomeScreen: React.FC<HomeProps> = ({
                 </View>
               </View>
               <View style={styles.headerRight}>
-                <TouchableOpacity style={styles.freezeChip} onPress={() => setShowShop(true)} activeOpacity={0.8}>
+                <TouchableOpacity style={styles.coinChip} onPress={() => setShowShop(true)} activeOpacity={0.8}>
+                  <Text style={styles.coinChipText}>◉ {coins}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.freezeChip, streakFreezes > 0 && styles.freezeChipShielded]}
+                  onPress={() => (onOpenFreeze ? onOpenFreeze() : setShowShop(true))}
+                  activeOpacity={0.8}
+                >
                   <Text style={styles.freezeChipText}>❄ {streakFreezes}</Text>
                 </TouchableOpacity>
-                <Text style={styles.dateText}>{dateStr}</Text>
+                <TouchableOpacity
+                  style={[styles.proPill, isPro && styles.proPillActive]}
+                  onPress={() => (onOpenPro ? onOpenPro() : onNavigate('PROFILE'))}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.proPillText, isPro && styles.proPillTextActive]}>
+                    {isPro ? '★ PRO' : 'PRO'}
+                  </Text>
+                </TouchableOpacity>
                 <TouchableOpacity
                   style={[
                     styles.avatarBtn,
@@ -252,7 +271,7 @@ export const HomeScreen: React.FC<HomeProps> = ({
               <View style={styles.heroTopRow}>
                 <Text style={styles.metaChipText}>SCREEN TIME TODAY</Text>
                 <View style={styles.weekPill}>
-                  <Text style={styles.weekPillText}>WK {weekNum}</Text>
+                  <Text style={styles.weekPillText}>{dateStr} · WK {weekNum}</Text>
                 </View>
               </View>
 
@@ -374,6 +393,36 @@ export const HomeScreen: React.FC<HomeProps> = ({
                   <View style={[styles.xpBarFill, { width: `${xpPct}%` }]} />
                 </View>
                 <Text style={styles.xpLabel}>{stats.currentXP % XP_PER_LEVEL} / {XP_PER_LEVEL} XP</Text>
+                <TouchableOpacity
+                  style={[
+                    styles.shieldPill,
+                    streakFreezes > 0
+                      ? styles.shieldPillOn
+                      : stats.currentStreak >= 1
+                      ? styles.shieldPillWarn
+                      : styles.shieldPillNeutral,
+                  ]}
+                  onPress={() => (onOpenFreeze ? onOpenFreeze() : setShowShop(true))}
+                  activeOpacity={0.85}
+                >
+                  <Text
+                    style={[
+                      styles.shieldPillText,
+                      streakFreezes > 0
+                        ? styles.shieldPillTextOn
+                        : stats.currentStreak >= 1
+                        ? styles.shieldPillTextWarn
+                        : styles.shieldPillTextNeutral,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {streakFreezes > 0
+                      ? `❄ ${streakFreezes} SHIELDED`
+                      : stats.currentStreak >= 1
+                      ? '⚠ UNPROTECTED · GET'
+                      : '❄ STREAK SHIELD'}
+                  </Text>
+                </TouchableOpacity>
               </View>
 
               <View style={styles.halfCard}>
@@ -491,7 +540,7 @@ export const HomeScreen: React.FC<HomeProps> = ({
           </>
         )}
       />
-      <ShopScreen visible={showShop} onClose={() => setShowShop(false)} />
+      <ShopScreen visible={showShop} onClose={() => setShowShop(false)} onOpenPro={onOpenPro} />
     </>
   );
 };
@@ -511,20 +560,45 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   logoBox: { width: 32, height: 32, borderRadius: radius.sm },
   brandName: { color: c.textPrimary, fontSize: 15, fontWeight: '900', letterSpacing: 1.4 },
   brandRank: { fontSize: 10, fontWeight: '900', letterSpacing: 0.7, marginTop: 1 },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  dateText: { color: c.textTertiary, fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
-  freezeChip: {
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  coinChip: {
     paddingVertical: 5,
-    paddingHorizontal: 10,
+    paddingHorizontal: 9,
     borderRadius: radius.pill,
     backgroundColor: c.surface,
     borderWidth: 1,
     borderColor: c.border,
   },
-  freezeChipText: { color: '#9FD8FF', fontSize: 12, fontWeight: '900' },
+  coinChipText: { color: c.accent, fontSize: 11, fontWeight: '900' },
+  freezeChip: {
+    paddingVertical: 5,
+    paddingHorizontal: 9,
+    borderRadius: radius.pill,
+    backgroundColor: c.surface,
+    borderWidth: 1,
+    borderColor: c.border,
+  },
+  freezeChipShielded: {
+    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+    borderColor: 'rgba(56, 189, 248, 0.45)',
+  },
+  freezeChipText: { color: '#9FD8FF', fontSize: 11, fontWeight: '900' },
+  proPill: {
+    paddingVertical: 5,
+    paddingHorizontal: 9,
+    borderRadius: radius.pill,
+    backgroundColor: c.accent,
+  },
+  proPillActive: {
+    backgroundColor: c.accentMuted,
+    borderWidth: 1,
+    borderColor: c.accent,
+  },
+  proPillText: { color: c.accentContrast, fontSize: 10, fontWeight: '900', letterSpacing: 0.6 },
+  proPillTextActive: { color: c.accent },
   avatarBtn: {
-    width: 36,
-    height: 36,
+    width: 34,
+    height: 34,
     borderRadius: radius.pill,
     backgroundColor: c.accent,
     justifyContent: 'center',
@@ -657,6 +731,21 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   xpBarBg: { height: 6, backgroundColor: c.borderSubtle, borderRadius: radius.pill, marginBottom: spacing.xs, overflow: 'hidden' },
   xpBarFill: { height: '100%', backgroundColor: c.accent, borderRadius: radius.pill },
   xpLabel: { color: c.textTertiary, fontSize: 11, fontWeight: '700' },
+  shieldPill: {
+    marginTop: 8,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+  },
+  shieldPillOn: { backgroundColor: 'rgba(56, 189, 248, 0.14)', borderColor: 'rgba(56, 189, 248, 0.5)' },
+  shieldPillWarn: { backgroundColor: 'rgba(255, 162, 59, 0.14)', borderColor: 'rgba(255, 162, 59, 0.55)' },
+  shieldPillNeutral: { backgroundColor: c.surfaceRaised, borderColor: c.border },
+  shieldPillText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.5 },
+  shieldPillTextOn: { color: '#9FD8FF' },
+  shieldPillTextWarn: { color: '#FFA23B' },
+  shieldPillTextNeutral: { color: '#9FD8FF' },
 
   todayLabel: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 1, marginBottom: spacing.xs },
   todayOf: { fontSize: 15, color: c.textTertiary, fontWeight: '700' },

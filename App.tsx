@@ -8,6 +8,7 @@ import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { ProProvider, usePro } from './src/context/ProContext';
 import { initCrashReporting, setCrashUser, wrapWithCrashReporting } from './src/config/sentry';
 import { StreakReclaimModal } from './src/components/StreakReclaimModal';
+import { StreakFreezeModal } from './src/components/StreakFreezeModal';
 import { StreakSavedOverlay } from './src/components/StreakSavedOverlay';
 import { MilestoneOverlay } from './src/components/MilestoneOverlay';
 import { ShortVideoSetupModal } from './src/components/ShortVideoSetupModal';
@@ -116,6 +117,7 @@ function RootNavigator() {
     dismissLostStreak, savedStreak, dismissSavedStreak,
   } = useStats();
   const [showPro, setShowPro] = useState<boolean>(false);
+  const [showFreeze, setShowFreeze] = useState<boolean>(false);
   const { refresh: refreshEntitlement, welcomeOffer, welcomeGiftAvailable } = usePro();
   const [notificationTarget, setNotificationTarget] = useState<TrainingState | null>(null);
   useNotifications(fbUser?.uid, setNotificationTarget);
@@ -297,7 +299,14 @@ function RootNavigator() {
   }
 
   if (!fbUser) return <LoginScreen />;
-  if (!isOnboarded) return <OnboardingScreen onComplete={handleOnboardingComplete} />;
+  if (!isOnboarded) {
+    return (
+      <>
+        <OnboardingScreen onComplete={handleOnboardingComplete} reelsTest={reelsTest} />
+        <ShortVideoSetupModal controller={reelsTest} />
+      </>
+    );
+  }
 
   const suppressMilestone =
     welcomeGiftAvailable || welcomeOffer || lostStreak > 0 || savedStreak !== null || Boolean(reelsTest?.guideVisible);
@@ -314,7 +323,14 @@ function RootNavigator() {
           />
         );
       case 'FRIENDS':
-        return <FriendsScreen stats={stats} isActive={screen === 'FRIENDS'} onNavigate={goToTab} />;
+        return (
+          <FriendsScreen
+            stats={stats}
+            isActive={screen === 'FRIENDS'}
+            onNavigate={goToTab}
+            onOpenPro={() => setShowPro(true)}
+          />
+        );
       case 'PROFILE':
         return (
           <ProfileScreen
@@ -327,6 +343,7 @@ function RootNavigator() {
             pendingCount={pendingCount}
             onRetrySync={retrySync}
             onNavigate={goToTab}
+            onOpenFreeze={() => setShowFreeze(true)}
             reelsTest={reelsTest}
           />
         );
@@ -340,6 +357,8 @@ function RootNavigator() {
             reportedHours={reportedHours}
             reelsTest={reelsTest}
             onNavigate={goToTab}
+            onOpenPro={() => setShowPro(true)}
+            onOpenFreeze={() => setShowFreeze(true)}
           />
         );
     }
@@ -423,9 +442,17 @@ function RootNavigator() {
         onDone={dismissSavedStreak}
       />
 
+      <StreakFreezeModal
+        visible={showFreeze}
+        streak={stats.currentStreak}
+        onClose={() => setShowFreeze(false)}
+        onOpenPro={() => setShowPro(true)}
+      />
+
       <ProScreen
         visible={showPro}
         onClose={() => setShowPro(false)}
+        currentStreak={stats.currentStreak}
         onOpenFriends={() => {
           setShowPro(false);
           goToTab('FRIENDS');

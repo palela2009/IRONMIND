@@ -17,7 +17,7 @@ import { ProScreen } from './ProScreen';
 import { StatusCard } from '../components/StatusCard';
 import { CoachCard } from '../components/CoachCard';
 import { NotificationSettings } from '../components/NotificationSettings';
-import { ELITE_BADGES, earnedBadges } from '../constants/badges';
+import { ELITE_BADGES, earnedBadges, topBadgeFor } from '../constants/badges';
 import { rankForLevel } from '../constants/ranks';
 import { frameById, nameEffectById, glowStyle } from '../constants/cosmetics';
 import { signOut, updateProfile } from 'firebase/auth';
@@ -31,6 +31,8 @@ import { XP_PER_LEVEL } from '../constants/leveling';
 import { spacing, radius, cardShadow, Palette } from '../theme';
 import type { ShortVideoController } from '../hooks/useInstagramReelsTest';
 
+type ProfileTab = 'OVERVIEW' | 'TROPHIES' | 'SETTINGS';
+
 interface ProfileProps {
   stats: UserStats;
   history: ChallengeItem[];
@@ -41,6 +43,7 @@ interface ProfileProps {
   onRetrySync: () => Promise<void>;
   onSettingsChanged?: () => void;
   onNavigate: (state: any) => void;
+  onOpenFreeze?: () => void;
   reelsTest?: ShortVideoController | null;
 }
 
@@ -82,16 +85,61 @@ const hadPerfectDay = (history: ChallengeItem[], dailyLimit: number, zone: strin
   return false;
 };
 
-const getAchievements = (s: UserStats, history: ChallengeItem[], dailyLimit: number, zone: string) => [
-  { id: '01', title: 'FIRST STEP', desc: 'Completed your first challenge', done: s.totalChallenges >= 1 },
-  { id: '02', title: 'SPEED DEMON', desc: 'Exit in under 5 seconds', done: s.bestReactionTime > 0 && s.bestReactionTime < 5.0 },
-  { id: '03', title: 'REFLEXES OF STEEL', desc: 'Exit in under 3 seconds', done: s.bestReactionTime > 0 && s.bestReactionTime < 3.0 },
-  { id: '04', title: 'ON A ROLL', desc: '5 challenges won in a row', done: s.longestStreak >= 5 },
-  { id: '05', title: 'IRON DISCIPLINE', desc: '15 challenges won in a row', done: s.longestStreak >= 15 },
-  { id: '06', title: 'DEDICATED', desc: '50 challenges completed', done: s.totalChallenges >= 50 },
-  { id: '07', title: 'PERFECT DAY', desc: `All ${dailyLimit} daily challenges won`, done: hadPerfectDay(history, dailyLimit, zone) },
-  { id: '08', title: 'CENTURY', desc: '100 challenges completed', done: s.totalChallenges >= 100 },
-];
+interface AchievementItem {
+  id: string;
+  icon: string;
+  title: string;
+  desc: string;
+  done: boolean;
+  progress: number;
+  label: string;
+}
+
+const getAchievements = (s: UserStats, history: ChallengeItem[], dailyLimit: number, zone: string): AchievementItem[] => {
+  const scrollWins = history.filter((h) => h.wasSuccessful && Boolean(h.challengeKind)).length;
+  const perfect = hadPerfectDay(history, dailyLimit, zone);
+  const sub5 = s.bestReactionTime > 0 && s.bestReactionTime < 5.0;
+  const sub2 = s.bestReactionTime > 0 && s.bestReactionTime < 2.0;
+
+  return [
+    {
+      id: '01', icon: '⚡', title: 'FIRST STEP', desc: 'Complete your first challenge',
+      done: s.totalChallenges >= 1, progress: Math.min(s.totalChallenges, 1), label: `${Math.min(s.totalChallenges, 1)} / 1`,
+    },
+    {
+      id: '02', icon: '🏎', title: 'SPEED DEMON', desc: 'Exit in under 5.0 seconds',
+      done: sub5, progress: sub5 ? 1 : 0, label: s.bestReactionTime > 0 ? `Best ${s.bestReactionTime.toFixed(1)}s` : 'No exit yet',
+    },
+    {
+      id: '03', icon: '⚔', title: 'SUB-2S REFLEX', desc: 'Exit in under 2.0 seconds',
+      done: sub2, progress: sub2 ? 1 : 0, label: s.bestReactionTime > 0 ? `Best ${s.bestReactionTime.toFixed(2)}s` : 'No exit yet',
+    },
+    {
+      id: '04', icon: '🔥', title: 'ON A ROLL', desc: '5 challenges won in a row',
+      done: s.longestStreak >= 5, progress: Math.min(s.longestStreak / 5, 1), label: `${Math.min(s.longestStreak, 5)} / 5`,
+    },
+    {
+      id: '05', icon: '🛡', title: 'SCROLL SLAYER', desc: 'Win 10 short-video scroll exits',
+      done: scrollWins >= 10, progress: Math.min(scrollWins / 10, 1), label: `${Math.min(scrollWins, 10)} / 10`,
+    },
+    {
+      id: '06', icon: '💎', title: 'IRON DISCIPLINE', desc: '15 challenges won in a row',
+      done: s.longestStreak >= 15, progress: Math.min(s.longestStreak / 15, 1), label: `${Math.min(s.longestStreak, 15)} / 15`,
+    },
+    {
+      id: '07', icon: '★', title: 'PERFECT DAY', desc: `Win all ${dailyLimit} daily challenges`,
+      done: perfect, progress: perfect ? 1 : 0, label: perfect ? 'Completed' : `0 / 1 day`,
+    },
+    {
+      id: '08', icon: '🎯', title: 'DEDICATED', desc: '50 challenges completed',
+      done: s.totalChallenges >= 50, progress: Math.min(s.totalChallenges / 50, 1), label: `${Math.min(s.totalChallenges, 50)} / 50`,
+    },
+    {
+      id: '09', icon: '👑', title: 'CENTURY', desc: '100 challenges completed',
+      done: s.totalChallenges >= 100, progress: Math.min(s.totalChallenges / 100, 1), label: `${Math.min(s.totalChallenges, 100)} / 100`,
+    },
+  ];
+};
 
 export const ProfileScreen: React.FC<ProfileProps> = ({
   stats,
@@ -99,6 +147,7 @@ export const ProfileScreen: React.FC<ProfileProps> = ({
   challengeTimeZone,
   onSettingsChanged,
   onNavigate,
+  onOpenFreeze,
   syncStatus,
   syncMessage,
   pendingCount,
@@ -111,7 +160,8 @@ export const ProfileScreen: React.FC<ProfileProps> = ({
   const palette = useTheme();
 
   const { fbUser, refreshUser } = useAuth();
-  const { isPro, isOwner, streakFreezes, equippedFrame, equippedNameEffect } = usePro();
+  const { isPro, isOwner, streakFreezes, equippedFrame, equippedNameEffect, pinnedBadge, equipCosmetic } = usePro();
+  const [tab, setTab] = useState<ProfileTab>('OVERVIEW');
   const [showPro, setShowPro] = useState<boolean>(false);
   const [showAnalytics, setShowAnalytics] = useState<boolean>(false);
   const [showHistory, setShowHistory] = useState<boolean>(false);
@@ -132,9 +182,10 @@ export const ProfileScreen: React.FC<ProfileProps> = ({
   const frame = frameById(equippedFrame);
   const nameFx = nameEffectById(equippedNameEffect);
   const rank = rankForLevel(stats.level);
+  const activeBadge = topBadgeFor(stats, isPro, isOwner, pinnedBadge);
 
   useEffect(() => {
-    if (equippedFrame !== 'galactic') {
+    if (equippedFrame !== 'galactic' && equippedFrame !== 'aurora') {
       framePulse.setValue(1);
       return;
     }
@@ -418,10 +469,23 @@ export const ProfileScreen: React.FC<ProfileProps> = ({
       }
     : null;
 
+  const settingsAlertCount =
+    (reelsTest && !reelsTest.isActive ? 1 : 0) +
+    (syncStatus === 'offline' || syncStatus === 'error' ? 1 : 0);
+
   return (
     <ScrollView ref={scrollRef} style={styles.root} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>YOU</Text>
+        <TouchableOpacity
+          style={[styles.headerProPill, isPro && styles.headerProPillActive]}
+          onPress={() => setShowPro(true)}
+          activeOpacity={0.85}
+        >
+          <Text style={[styles.headerProText, isPro && styles.headerProTextActive]}>
+            {isPro ? '★ PRO ACTIVE' : '★ UNLOCK PRO'}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.athleteCard}>
@@ -465,7 +529,10 @@ export const ProfileScreen: React.FC<ProfileProps> = ({
                 </TouchableOpacity>
               </View>
             ) : (
-              <TouchableOpacity onPress={openNameEditor} activeOpacity={0.7}>
+              <TouchableOpacity onPress={openNameEditor} activeOpacity={0.7} style={styles.handleRow}>
+                {activeBadge && (
+                  <Text style={[styles.handleGlyph, { color: activeBadge.color }]}>{activeBadge.glyph}</Text>
+                )}
                 <Text
                   style={[
                     styles.handleText,
@@ -506,252 +573,377 @@ export const ProfileScreen: React.FC<ProfileProps> = ({
         ))}
       </View>
 
-      <TouchableOpacity
-        style={[styles.proBanner, isPro && styles.proBannerActive]}
-        onPress={() => setShowPro(true)}
-        activeOpacity={0.85}
-      >
-        <View style={styles.proBannerBody}>
-          <Text style={styles.proBannerTitle}>{isPro ? 'IRONMIND PRO' : 'UNLOCK IRONMIND PRO'}</Text>
-          <Text style={styles.proBannerSub}>
-            {isPro
-              ? `${streakFreezes} streak ${streakFreezes === 1 ? 'freeze' : 'freezes'} remaining`
-              : 'Freezes, themes, elite badges & full analytics — earn free via invites or coins'}
-          </Text>
-        </View>
-        <Text style={styles.proBannerArrow}>{isPro ? '✓' : '→'}</Text>
-      </TouchableOpacity>
-
-      <CoachCard isPro={isPro} stats={stats} onUnlock={() => setShowPro(true)} />
-
-      <View style={styles.sectionRow}>
-        <Text style={styles.sectionTitle}>ACHIEVEMENTS</Text>
-        <Text style={styles.achieveCount}>{doneCount} / {achievements.length}</Text>
-      </View>
-
-      <View style={styles.achieveGrid}>
-        {achievements.map((a) => (
-          <View key={a.id} style={[styles.achieveCard, !a.done && styles.achieveCardLocked]}>
-            <View style={styles.achieveTopRow}>
-              <Text style={[styles.achieveId, a.done && styles.achieveIdDone]}>#{a.id}</Text>
-              {a.done && <Text style={styles.checkMark}>✓</Text>}
-            </View>
-            <Text style={[styles.achieveTitle, !a.done && styles.achieveTitleLocked]}>{a.title}</Text>
-            <Text style={styles.achieveDesc}>{a.desc}</Text>
-          </View>
-        ))}
-      </View>
-
-      <TouchableOpacity
-        style={styles.analyticsRow}
-        onPress={() => (isPro ? setShowAnalytics(true) : setShowPro(true))}
-        activeOpacity={0.85}
-      >
-        <View style={styles.analyticsBody}>
-          <Text style={styles.analyticsTitle}>ADVANCED ANALYTICS</Text>
-          <Text style={styles.analyticsSub}>
-            {isPro
-              ? '30-day trends, app breakdown and escape speed history'
-              : 'Unlock 30-day charts and per-app trends with Pro'}
-          </Text>
-        </View>
-        <Text style={styles.analyticsArrow}>{isPro ? '→' : '🔒'}</Text>
-      </TouchableOpacity>
-
-      <View style={styles.sectionRow}>
-        <Text style={styles.sectionTitle}>ELITE BADGES</Text>
-        <Text style={styles.achieveCount}>
-          {isPro ? `${earnedElite.length} / ${ELITE_BADGES.length}` : 'PRO'}
-        </Text>
-      </View>
-
-      {!isPro && (
-        <TouchableOpacity style={styles.eliteLockRow} onPress={() => setShowPro(true)} activeOpacity={0.85}>
-          <Text style={styles.eliteLockText}>
-            Elite badges shine next to your name on the leaderboard. Unlock with Pro →
-          </Text>
-        </TouchableOpacity>
-      )}
-
-      <View style={styles.eliteGrid}>
-        {ELITE_BADGES.map((b) => {
-          const earned = isOwner || (isPro && b.earned(stats));
+      <View style={styles.tabSwitch}>
+        {([
+          { id: 'OVERVIEW' as ProfileTab, label: 'OVERVIEW', dot: false },
+          { id: 'TROPHIES' as ProfileTab, label: `TROPHIES (${doneCount})`, dot: false },
+          { id: 'SETTINGS' as ProfileTab, label: 'SETTINGS', dot: settingsAlertCount > 0 },
+        ]).map((t) => {
+          const on = tab === t.id;
           return (
-            <View key={b.id} style={[styles.eliteCard, !earned && styles.eliteCardLocked]}>
-              <Text style={[styles.eliteGlyph, { color: earned ? b.color : palette.textFaint }]}>{b.glyph}</Text>
-              <Text style={[styles.eliteName, earned && { color: b.color }]}>{b.name}</Text>
-              <Text style={styles.eliteDesc}>{b.desc}</Text>
-            </View>
+            <TouchableOpacity
+              key={t.id}
+              style={[styles.tabPill, on && styles.tabPillOn]}
+              onPress={() => setTab(t.id)}
+              activeOpacity={0.85}
+            >
+              <Text style={[styles.tabPillText, on && styles.tabPillTextOn]}>{t.label}</Text>
+              {t.dot && <View style={[styles.tabWarnDot, on && styles.tabWarnDotOn]} />}
+            </TouchableOpacity>
           );
         })}
       </View>
 
-      <Text style={styles.settingsSection}>PERMISSIONS & MONITORING</Text>
-      <StatusCard />
+      {tab === 'OVERVIEW' && (
+        <>
+          <TouchableOpacity
+            style={[styles.shieldCard, streakFreezes > 0 ? styles.shieldCardArmed : styles.shieldCardWarn]}
+            onPress={() => (onOpenFreeze ? onOpenFreeze() : setShowPro(true))}
+            activeOpacity={0.85}
+          >
+            <View style={[styles.shieldIconBox, streakFreezes > 0 && styles.shieldIconBoxArmed]}>
+              <Text style={styles.shieldIconGlyph}>❄</Text>
+            </View>
+            <View style={styles.shieldBody}>
+              <View style={styles.shieldHeadRow}>
+                <Text style={styles.shieldTitle}>STREAK SHIELD</Text>
+                <View style={[styles.shieldStatePill, streakFreezes > 0 ? styles.shieldStateOn : styles.shieldStateOff]}>
+                  <Text style={[styles.shieldStateText, streakFreezes > 0 ? styles.shieldStateTextOn : styles.shieldStateTextOff]}>
+                    {streakFreezes > 0 ? `${streakFreezes} ARMED` : 'UNPROTECTED'}
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.shieldSub}>
+                {streakFreezes > 0
+                  ? 'Auto-protects your streak if you ever miss a scroll challenge. Tap to top up.'
+                  : 'One missed challenge resets your streak to 0. Tap to arm a freeze shield.'}
+              </Text>
+            </View>
+          </TouchableOpacity>
 
-      <Text style={[styles.settingsSection, styles.settingsSpaced]}>SETTINGS</Text>
+          <CoachCard isPro={isPro} stats={stats} onUnlock={() => setShowPro(true)} />
 
-      {reelsTest && (
-        <TouchableOpacity style={styles.settingRow} onPress={reelsTest.open} accessibilityRole="button">
-          <View style={styles.settingCol}>
-            <Text style={styles.settingLabel}>SCROLL CHALLENGES</Text>
-            <Text style={styles.pauseSub}>Instagram Reels, TikTok, Shorts, FB Reels & Spotlight</Text>
-          </View>
-          <Text style={[styles.settingStatus, reelsTest.isActive && styles.settingStatusOn]}>
-            {reelsTest.status} ›
-          </Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.proBanner, isPro && styles.proBannerActive]}
+            onPress={() => setShowPro(true)}
+            activeOpacity={0.85}
+          >
+            <View style={styles.proBannerBody}>
+              <Text style={styles.proBannerTitle}>{isPro ? '★ IRONMIND PRO ACTIVE' : '★ UNLOCK IRONMIND PRO'}</Text>
+              <Text style={styles.proBannerSub}>
+                {isPro
+                  ? `${streakFreezes} freezes left · 2× coins · Aurora frame · High-stakes duels`
+                  : '20 freezes/mo, 2× coins, Aurora frame & high-stakes duels — free via 7-win streak, invites, or 500 coins'}
+              </Text>
+            </View>
+            <Text style={styles.proBannerArrow}>{isPro ? '✓' : '→'}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.analyticsRow}
+            onPress={() => (isPro ? setShowAnalytics(true) : setShowPro(true))}
+            activeOpacity={0.85}
+          >
+            <View style={styles.analyticsBody}>
+              <Text style={styles.analyticsTitle}>ADVANCED ANALYTICS</Text>
+              <Text style={styles.analyticsSub}>
+                {isPro
+                  ? '30-day trends, app breakdown and escape speed history'
+                  : 'Unlock 30-day charts and per-app trends with Pro'}
+              </Text>
+            </View>
+            <Text style={styles.analyticsArrow}>{isPro ? '→' : '🔒'}</Text>
+          </TouchableOpacity>
+        </>
       )}
 
-      {paused && (
-        <TouchableOpacity style={[styles.settingRow, styles.pauseRowActive]} onPress={resumeMonitoring} activeOpacity={0.8}>
-          <View style={styles.settingCol}>
-            <Text style={styles.pauseActiveLabel}>RESUME MONITORING</Text>
-            <Text style={styles.pauseSub}>Paused · resumes automatically in {remaining}</Text>
+      {tab === 'TROPHIES' && (
+        <>
+          <View style={styles.sectionRow}>
+            <Text style={styles.sectionTitle}>ACHIEVEMENTS</Text>
+            <Text style={styles.achieveCount}>{doneCount} / {achievements.length}</Text>
           </View>
-          <Text style={styles.pauseActiveLabel}>▶</Text>
-        </TouchableOpacity>
-      )}
 
-      <TouchableOpacity style={styles.settingRow} onPress={openDifficultyEditor} activeOpacity={0.7}>
-        <Text style={styles.settingLabel}>CHALLENGE WINDOW</Text>
-        <Text style={styles.settingValue}>
-          {DIFFICULTY_WINDOW_SECONDS[difficulty]}s · {DIFFICULTIES.find((d) => d.id === difficulty)?.label} ›
-        </Text>
-      </TouchableOpacity>
-
-      {editingDifficulty && (
-        <View style={styles.appEditor}>
-          {DIFFICULTIES.map((d) => {
-            const on = pendingDifficulty === d.id;
-            return (
-              <TouchableOpacity
-                key={d.id}
-                style={[styles.diffRow, on && styles.appEditRowOn]}
-                onPress={() => setPendingDifficulty(d.id)}
-                activeOpacity={0.75}
-              >
-                <View style={styles.diffLeft}>
-                  <Text style={[styles.appEditLabel, on && styles.appEditLabelOn]}>{d.label}</Text>
-                  <Text style={styles.diffDesc}>{d.desc}</Text>
+          <View style={styles.achieveGrid}>
+            {achievements.map((a) => (
+              <View key={a.id} style={[styles.achieveCard, a.done ? styles.achieveCardDone : styles.achieveCardLocked]}>
+                <View style={styles.achieveTopRow}>
+                  <Text style={styles.achieveIcon}>{a.icon}</Text>
+                  <Text style={[styles.achieveStatusTag, a.done && styles.achieveStatusDone]}>
+                    {a.done ? 'DONE ✓' : a.label}
+                  </Text>
                 </View>
-                <View style={[styles.radioOuter, on && styles.radioOuterOn]}>
-                  {on && <View style={styles.radioInner} />}
+                <Text style={[styles.achieveTitle, !a.done && styles.achieveTitleLocked]}>{a.title}</Text>
+                <Text style={styles.achieveDesc}>{a.desc}</Text>
+                <View style={styles.achieveBarBg}>
+                  <View style={[styles.achieveBarFill, { width: `${Math.round(a.progress * 100)}%` }, a.done && styles.achieveBarDone]} />
                 </View>
-              </TouchableOpacity>
-            );
-          })}
-          <View style={styles.appEditActions}>
-            <TouchableOpacity
-              style={styles.appEditCancel}
-              onPress={() => setEditingDifficulty(false)}
-              activeOpacity={0.8}
-              disabled={savingDifficulty}
-            >
-              <Text style={styles.appEditCancelText}>CANCEL</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.appEditSave}
-              onPress={saveDifficulty}
-              activeOpacity={0.85}
-              disabled={savingDifficulty}
-            >
-              {savingDifficulty ? (
-                <ActivityIndicator color={palette.accentContrast} size="small" />
-              ) : (
-                <Text style={styles.appEditSaveText}>SAVE</Text>
-              )}
-            </TouchableOpacity>
+              </View>
+            ))}
           </View>
-        </View>
-      )}
 
-      <TouchableOpacity style={styles.settingRow} onPress={openDailyLimitEditor} activeOpacity={0.7}>
-        <Text style={styles.settingLabel}>DAILY CHALLENGES</Text>
-        <Text style={styles.settingValue}>
-          {dailyLimit} / DAY · {DAILY_LIMITS.find((d) => d.id === dailyLimitLevelFor(dailyLimit))?.label} ›
-        </Text>
-      </TouchableOpacity>
-
-      {editingDailyLimit && (
-        <View style={styles.appEditor}>
-          {DAILY_LIMITS.map((d) => {
-            const on = pendingDailyLimit === d.id;
-            return (
-              <TouchableOpacity
-                key={d.id}
-                style={[styles.diffRow, on && styles.appEditRowOn]}
-                onPress={() => setPendingDailyLimit(d.id)}
-                activeOpacity={0.75}
-              >
-                <View style={styles.diffLeft}>
-                  <Text style={[styles.appEditLabel, on && styles.appEditLabelOn]}>{d.label}</Text>
-                  <Text style={styles.diffDesc}>{d.desc}</Text>
-                </View>
-                <View style={[styles.radioOuter, on && styles.radioOuterOn]}>
-                  {on && <View style={styles.radioInner} />}
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-          <View style={styles.appEditActions}>
-            <TouchableOpacity
-              style={styles.appEditCancel}
-              onPress={() => setEditingDailyLimit(false)}
-              activeOpacity={0.8}
-              disabled={savingDailyLimit}
-            >
-              <Text style={styles.appEditCancelText}>CANCEL</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.appEditSave}
-              onPress={saveDailyLimit}
-              activeOpacity={0.85}
-              disabled={savingDailyLimit}
-            >
-              {savingDailyLimit ? (
-                <ActivityIndicator color={palette.accentContrast} size="small" />
-              ) : (
-                <Text style={styles.appEditSaveText}>SAVE</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-
-      {(syncStatus === 'offline' || syncStatus === 'error') && (
-        <TouchableOpacity style={styles.settingRow} onPress={onRetrySync}>
-          <View style={styles.settingCol}>
-            <Text style={styles.settingLabel}>PROGRESS NOT SYNCED</Text>
-            <Text style={styles.pauseSub}>
-              {syncStatus === 'error' ? syncMessage : pendingCount ? `${pendingCount} results saved on this phone` : 'Tap to reconnect'}
+          <View style={styles.sectionRow}>
+            <Text style={styles.sectionTitle}>ELITE BADGES</Text>
+            <Text style={styles.achieveCount}>
+              {isPro ? `${earnedElite.length} / ${ELITE_BADGES.length}` : 'PRO'}
             </Text>
           </View>
-          <Text style={styles.settingValue}>RETRY ›</Text>
-        </TouchableOpacity>
+
+          {!isPro ? (
+            <TouchableOpacity style={styles.eliteLockRow} onPress={() => setShowPro(true)} activeOpacity={0.85}>
+              <Text style={styles.eliteLockText}>
+                Pin any earned Elite Badge next to your name on Friends. Unlock with IronMind Pro →
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <Text style={styles.elitePinHint}>
+              Tap any earned badge to pin it next to your name on the Friends leaderboard.
+            </Text>
+          )}
+
+          <View style={styles.eliteGrid}>
+            {ELITE_BADGES.map((b) => {
+              const earned = isOwner || (isPro && b.earned(stats));
+              const isPinned = activeBadge?.id === b.id;
+              const explicitPin = pinnedBadge === b.id;
+              return (
+                <TouchableOpacity
+                  key={b.id}
+                  style={[
+                    styles.eliteCard,
+                    !earned && styles.eliteCardLocked,
+                    earned && isPinned && { borderColor: b.color, borderWidth: 1.5 },
+                  ]}
+                  onPress={() => {
+                    if (!isPro) {
+                      setShowPro(true);
+                      return;
+                    }
+                    if (!earned) return;
+                    void equipCosmetic('badge', explicitPin ? null : b.id);
+                  }}
+                  activeOpacity={earned || !isPro ? 0.85 : 1}
+                >
+                  <Text style={[styles.eliteGlyph, { color: earned ? b.color : palette.textFaint }]}>{b.glyph}</Text>
+                  <Text style={[styles.eliteName, earned && { color: b.color }]}>{b.name}</Text>
+                  <Text style={styles.eliteDesc}>{b.desc}</Text>
+                  {earned && (
+                    <Text style={[styles.elitePinTag, isPinned && { color: b.color }]}>
+                      {isPinned ? '★ PINNED' : 'TAP TO PIN'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </>
       )}
-      <NotificationSettings />
 
-      <TouchableOpacity style={styles.settingRow} onPress={handleSignOut}>
-        <Text style={styles.signOut}>SIGN OUT</Text>
-      </TouchableOpacity>
+      {tab === 'SETTINGS' && (
+        <>
+          <Text style={styles.settingsSection}>PERMISSIONS & MONITORING</Text>
+          <StatusCard />
 
-      <TouchableOpacity style={styles.settingRow} onPress={handleDeleteAccount} disabled={deletingAccount}>
-        {deletingAccount ? (
-          <ActivityIndicator color={palette.danger} size="small" />
-        ) : (
-          <Text style={styles.deleteAccount}>DELETE ACCOUNT</Text>
-        )}
-      </TouchableOpacity>
+          <Text style={[styles.settingsSection, styles.settingsSpaced]}>CHALLENGE CONTROLS</Text>
 
-      <TouchableOpacity style={styles.settingRow} onPress={() => setShowHistory(true)} activeOpacity={0.8}>
-        <Text style={styles.settingLabel}>THE STORY OF IRONMIND</Text>
-        <Text style={styles.settingValue}>›</Text>
-      </TouchableOpacity>
+          {reelsTest && (
+            <TouchableOpacity
+              style={[
+                styles.settingRow,
+                !reelsTest.isActive && (reelsTest.needsSetup ? styles.scrollRowWarn : styles.scrollRowOff),
+              ]}
+              onPress={reelsTest.open}
+              accessibilityRole="button"
+              activeOpacity={0.85}
+            >
+              <View style={styles.settingCol}>
+                <Text style={styles.settingLabel}>SCROLL CHALLENGES</Text>
+                <Text style={styles.pauseSub}>Instagram Reels, TikTok, Shorts, FB Reels & Spotlight</Text>
+              </View>
+              <View
+                style={[
+                  styles.scrollBadge,
+                  reelsTest.isActive
+                    ? styles.scrollBadgeOn
+                    : reelsTest.needsSetup
+                    ? styles.scrollBadgeWarn
+                    : styles.scrollBadgeOff,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.scrollBadgeText,
+                    reelsTest.isActive
+                      ? styles.scrollBadgeTextOn
+                      : reelsTest.needsSetup
+                      ? styles.scrollBadgeTextWarn
+                      : styles.scrollBadgeTextOff,
+                  ]}
+                >
+                  {reelsTest.status} ›
+                </Text>
+              </View>
+            </TouchableOpacity>
+          )}
+
+          {paused && (
+            <TouchableOpacity style={[styles.settingRow, styles.pauseRowActive]} onPress={resumeMonitoring} activeOpacity={0.8}>
+              <View style={styles.settingCol}>
+                <Text style={styles.pauseActiveLabel}>RESUME MONITORING</Text>
+                <Text style={styles.pauseSub}>Paused · resumes automatically in {remaining}</Text>
+              </View>
+              <Text style={styles.pauseActiveLabel}>▶</Text>
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity style={styles.settingRow} onPress={openDifficultyEditor} activeOpacity={0.7}>
+            <Text style={styles.settingLabel}>CHALLENGE WINDOW</Text>
+            <Text style={styles.settingValue}>
+              {DIFFICULTY_WINDOW_SECONDS[difficulty]}s · {DIFFICULTIES.find((d) => d.id === difficulty)?.label} ›
+            </Text>
+          </TouchableOpacity>
+
+          {editingDifficulty && (
+            <View style={styles.appEditor}>
+              {DIFFICULTIES.map((d) => {
+                const on = pendingDifficulty === d.id;
+                return (
+                  <TouchableOpacity
+                    key={d.id}
+                    style={[styles.diffRow, on && styles.appEditRowOn]}
+                    onPress={() => setPendingDifficulty(d.id)}
+                    activeOpacity={0.75}
+                  >
+                    <View style={styles.diffLeft}>
+                      <Text style={[styles.appEditLabel, on && styles.appEditLabelOn]}>{d.label}</Text>
+                      <Text style={styles.diffDesc}>{d.desc}</Text>
+                    </View>
+                    <View style={[styles.radioOuter, on && styles.radioOuterOn]}>
+                      {on && <View style={styles.radioInner} />}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+              <View style={styles.appEditActions}>
+                <TouchableOpacity
+                  style={styles.appEditCancel}
+                  onPress={() => setEditingDifficulty(false)}
+                  activeOpacity={0.8}
+                  disabled={savingDifficulty}
+                >
+                  <Text style={styles.appEditCancelText}>CANCEL</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.appEditSave}
+                  onPress={saveDifficulty}
+                  activeOpacity={0.85}
+                  disabled={savingDifficulty}
+                >
+                  {savingDifficulty ? (
+                    <ActivityIndicator color={palette.accentContrast} size="small" />
+                  ) : (
+                    <Text style={styles.appEditSaveText}>SAVE</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          <TouchableOpacity style={styles.settingRow} onPress={openDailyLimitEditor} activeOpacity={0.7}>
+            <Text style={styles.settingLabel}>DAILY CHALLENGES</Text>
+            <Text style={styles.settingValue}>
+              {dailyLimit} / DAY · {DAILY_LIMITS.find((d) => d.id === dailyLimitLevelFor(dailyLimit))?.label} ›
+            </Text>
+          </TouchableOpacity>
+
+          {editingDailyLimit && (
+            <View style={styles.appEditor}>
+              {DAILY_LIMITS.map((d) => {
+                const on = pendingDailyLimit === d.id;
+                return (
+                  <TouchableOpacity
+                    key={d.id}
+                    style={[styles.diffRow, on && styles.appEditRowOn]}
+                    onPress={() => setPendingDailyLimit(d.id)}
+                    activeOpacity={0.75}
+                  >
+                    <View style={styles.diffLeft}>
+                      <Text style={[styles.appEditLabel, on && styles.appEditLabelOn]}>{d.label}</Text>
+                      <Text style={styles.diffDesc}>{d.desc}</Text>
+                    </View>
+                    <View style={[styles.radioOuter, on && styles.radioOuterOn]}>
+                      {on && <View style={styles.radioInner} />}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+              <View style={styles.appEditActions}>
+                <TouchableOpacity
+                  style={styles.appEditCancel}
+                  onPress={() => setEditingDailyLimit(false)}
+                  activeOpacity={0.8}
+                  disabled={savingDailyLimit}
+                >
+                  <Text style={styles.appEditCancelText}>CANCEL</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.appEditSave}
+                  onPress={saveDailyLimit}
+                  activeOpacity={0.85}
+                  disabled={savingDailyLimit}
+                >
+                  {savingDailyLimit ? (
+                    <ActivityIndicator color={palette.accentContrast} size="small" />
+                  ) : (
+                    <Text style={styles.appEditSaveText}>SAVE</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {(syncStatus === 'offline' || syncStatus === 'error') && (
+            <TouchableOpacity style={styles.settingRow} onPress={onRetrySync}>
+              <View style={styles.settingCol}>
+                <Text style={styles.settingLabel}>PROGRESS NOT SYNCED</Text>
+                <Text style={styles.pauseSub}>
+                  {syncStatus === 'error' ? syncMessage : pendingCount ? `${pendingCount} results saved on this phone` : 'Tap to reconnect'}
+                </Text>
+              </View>
+              <Text style={styles.settingValue}>RETRY ›</Text>
+            </TouchableOpacity>
+          )}
+
+          <NotificationSettings />
+
+          <Text style={[styles.settingsSection, styles.settingsSpaced]}>ABOUT & ACCOUNT</Text>
+
+          <TouchableOpacity style={styles.storyRow} onPress={() => setShowHistory(true)} activeOpacity={0.85}>
+            <View style={styles.settingCol}>
+              <Text style={styles.storyTitle}>THE STORY OF IRONMIND</Text>
+              <Text style={styles.pauseSub}>Why two builders created a scroll-only discipline trainer</Text>
+            </View>
+            <Text style={styles.storyArrow}>→</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.settingRow} onPress={handleSignOut}>
+            <Text style={styles.signOut}>SIGN OUT</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.settingRow} onPress={handleDeleteAccount} disabled={deletingAccount}>
+            {deletingAccount ? (
+              <ActivityIndicator color={palette.danger} size="small" />
+            ) : (
+              <Text style={styles.deleteAccount}>DELETE ACCOUNT</Text>
+            )}
+          </TouchableOpacity>
+        </>
+      )}
 
       <ProScreen
         visible={showPro}
         onClose={() => setShowPro(false)}
+        currentStreak={stats.currentStreak}
         onOpenFriends={() => {
           setShowPro(false);
           onNavigate('FRIENDS');
@@ -778,8 +970,27 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   root: { flex: 1, backgroundColor: c.bg },
   content: { paddingTop: spacing.lg, paddingBottom: 48 },
 
-  header: { paddingHorizontal: spacing.xl, paddingBottom: spacing.lg },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.md,
+  },
   headerTitle: { color: c.textPrimary, fontSize: 18, fontWeight: '900', letterSpacing: 0.5 },
+  headerProPill: {
+    backgroundColor: c.accent,
+    paddingHorizontal: 11,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+  },
+  headerProPillActive: {
+    backgroundColor: c.accentMuted,
+    borderWidth: 1,
+    borderColor: c.accent,
+  },
+  headerProText: { color: c.accentContrast, fontSize: 10, fontWeight: '900', letterSpacing: 0.6 },
+  headerProTextActive: { color: c.accent },
 
   athleteCard: {
     backgroundColor: c.surface,
@@ -806,13 +1017,15 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   avatarEditBadge: { position: 'absolute', bottom: -2, right: -2, width: 24, height: 24, borderRadius: 12, backgroundColor: c.surfaceRaised, borderWidth: 2, borderColor: c.surface, justifyContent: 'center', alignItems: 'center' },
   avatarEditBadgeText: { color: c.textPrimary, fontSize: 11 },
 
+  handleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  handleGlyph: { fontSize: 18, fontWeight: '900' },
   nameEditHint: { color: c.textTertiary, fontSize: 14 },
   nameEditRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   nameInput: { flex: 1, color: c.textPrimary, fontSize: 18, fontWeight: '800', borderBottomWidth: 1, borderColor: c.accent, paddingVertical: 2 },
   nameSaveBtn: { width: 28, height: 28, borderRadius: radius.pill, backgroundColor: c.accent, justifyContent: 'center', alignItems: 'center' },
   nameSaveBtnText: { color: c.accentContrast, fontSize: 14, fontWeight: '900' },
   athleteDetails: { flex: 1, overflow: 'hidden' },
-  handleText: { color: c.textPrimary, fontSize: 22, fontWeight: '900', letterSpacing: -0.5 },
+  handleText: { color: c.textPrimary, fontSize: 21, fontWeight: '900', letterSpacing: -0.5, flexShrink: 1 },
   emailText: { color: c.textTertiary, fontSize: 11, fontWeight: '600', marginTop: 2 },
   totalLine: { color: c.textSecondary, fontSize: 12, fontWeight: '700', marginTop: 6 },
 
@@ -822,11 +1035,72 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   rankBarBg: { height: 6, backgroundColor: c.borderSubtle, borderRadius: radius.pill, overflow: 'hidden' },
   rankBarFill: { height: '100%', backgroundColor: c.accent, borderRadius: radius.pill },
 
-  quickRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.lg, marginBottom: spacing.lg },
+  quickRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.lg, marginBottom: spacing.md },
   quickStat: { flex: 1, alignItems: 'center', backgroundColor: c.surface, borderRadius: radius.md, borderWidth: 1, borderColor: c.border, paddingVertical: spacing.md },
-  quickStatVal: { color: c.textPrimary, fontSize: 17, fontWeight: '900' },
-  quickStatLabel: { color: c.textTertiary, fontSize: 10, fontWeight: '800', letterSpacing: 0.3, marginTop: 4 },
+  quickStatVal: { color: c.textPrimary, fontSize: 16, fontWeight: '900' },
+  quickStatLabel: { color: c.textTertiary, fontSize: 9, fontWeight: '800', letterSpacing: 0.3, marginTop: 4 },
   accentVal: { color: c.accent },
+
+  tabSwitch: {
+    flexDirection: 'row',
+    backgroundColor: c.surface,
+    borderRadius: radius.md,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: c.border,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  tabPill: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingVertical: 10,
+    borderRadius: radius.sm,
+  },
+  tabPillOn: { backgroundColor: c.accent },
+  tabPillText: { color: c.textSecondary, fontSize: 10, fontWeight: '900', letterSpacing: 0.6 },
+  tabPillTextOn: { color: c.accentContrast },
+  tabWarnDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: c.danger },
+  tabWarnDotOn: { backgroundColor: c.accentContrast },
+
+  shieldCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.lg,
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+    backgroundColor: c.surface,
+    borderWidth: 1.5,
+  },
+  shieldCardArmed: { borderColor: 'rgba(56, 189, 248, 0.55)', backgroundColor: 'rgba(56, 189, 248, 0.08)' },
+  shieldCardWarn: { borderColor: 'rgba(255, 162, 59, 0.55)', backgroundColor: 'rgba(255, 162, 59, 0.08)' },
+  shieldIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: c.surfaceRaised,
+    borderWidth: 1,
+    borderColor: c.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  shieldIconBoxArmed: { backgroundColor: 'rgba(56, 189, 248, 0.16)', borderColor: '#38BDF8' },
+  shieldIconGlyph: { color: '#9FD8FF', fontSize: 22, fontWeight: '900' },
+  shieldBody: { flex: 1 },
+  shieldHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 },
+  shieldTitle: { color: c.textPrimary, fontSize: 13, fontWeight: '900', letterSpacing: 0.5 },
+  shieldStatePill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill },
+  shieldStateOn: { backgroundColor: 'rgba(56, 189, 248, 0.2)' },
+  shieldStateOff: { backgroundColor: 'rgba(255, 162, 59, 0.2)' },
+  shieldStateText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.6 },
+  shieldStateTextOn: { color: '#7DD3FC' },
+  shieldStateTextOff: { color: '#FFA23B' },
+  shieldSub: { color: c.textSecondary, fontSize: 12, lineHeight: 17 },
 
   proBanner: {
     flexDirection: 'row',
@@ -842,24 +1116,36 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   },
   proBannerActive: { backgroundColor: c.surface, borderColor: c.accentDim },
   proBannerBody: { flex: 1, marginRight: spacing.sm },
-  proBannerTitle: { color: c.accent, fontSize: 14, fontWeight: '900', letterSpacing: 0.4 },
+  proBannerTitle: { color: c.accent, fontSize: 13, fontWeight: '900', letterSpacing: 0.4 },
   proBannerSub: { color: c.textSecondary, fontSize: 11, marginTop: 4, lineHeight: 16 },
   proBannerArrow: { color: c.accent, fontSize: 16, fontWeight: '900' },
 
   sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.md },
-  sectionTitle: { color: c.textPrimary, fontSize: 13, fontWeight: '900', letterSpacing: 0.5 },
-  achieveCount: { color: c.accent, fontSize: 12, fontWeight: '800' },
+  sectionTitle: { color: c.textPrimary, fontSize: 12, fontWeight: '900', letterSpacing: 0.8 },
+  achieveCount: { color: c.accent, fontSize: 12, fontWeight: '900' },
 
   achieveGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.lg, gap: spacing.sm, marginBottom: spacing.xl },
-  achieveCard: { width: '48%', flexGrow: 1, backgroundColor: c.surface, borderRadius: radius.md, borderWidth: 1, borderColor: c.border, padding: spacing.md },
-  achieveCardLocked: { opacity: 0.5 },
-  achieveTopRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.xs },
-  achieveId: { color: c.textTertiary, fontSize: 10, fontWeight: '800' },
-  achieveIdDone: { color: c.accent },
-  checkMark: { color: c.accent, fontSize: 12, fontWeight: '900' },
-  achieveTitle: { color: c.textPrimary, fontSize: 12, fontWeight: '900', marginBottom: spacing.xs },
+  achieveCard: {
+    width: '48%',
+    flexGrow: 1,
+    backgroundColor: c.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: c.border,
+    padding: spacing.md,
+  },
+  achieveCardDone: { borderColor: c.accentDim },
+  achieveCardLocked: { opacity: 0.82 },
+  achieveTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  achieveIcon: { fontSize: 16 },
+  achieveStatusTag: { color: c.textTertiary, fontSize: 9, fontWeight: '900', letterSpacing: 0.4 },
+  achieveStatusDone: { color: c.accent },
+  achieveTitle: { color: c.textPrimary, fontSize: 12, fontWeight: '900', marginBottom: 3 },
   achieveTitleLocked: { color: c.textSecondary },
-  achieveDesc: { color: c.textTertiary, fontSize: 11, lineHeight: 15 },
+  achieveDesc: { color: c.textTertiary, fontSize: 11, lineHeight: 15, marginBottom: 10 },
+  achieveBarBg: { height: 5, borderRadius: 3, backgroundColor: c.borderSubtle, overflow: 'hidden' },
+  achieveBarFill: { height: 5, borderRadius: 3, backgroundColor: c.textTertiary },
+  achieveBarDone: { backgroundColor: c.accent },
 
   analyticsRow: {
     flexDirection: 'row',
@@ -883,8 +1169,11 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     padding: spacing.md,
     borderRadius: radius.sm,
     backgroundColor: c.accentMuted,
+    borderWidth: 1,
+    borderColor: c.accentDim,
   },
   eliteLockText: { color: c.accent, fontSize: 11, lineHeight: 16, fontWeight: '700' },
+  elitePinHint: { color: c.textTertiary, fontSize: 11, paddingHorizontal: spacing.xl, marginBottom: spacing.md },
 
   eliteGrid: {
     flexDirection: 'row',
@@ -903,10 +1192,11 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     padding: spacing.md,
     alignItems: 'center',
   },
-  eliteCardLocked: { opacity: 0.5 },
+  eliteCardLocked: { opacity: 0.45 },
   eliteGlyph: { fontSize: 22, fontWeight: '900', marginBottom: 4 },
   eliteName: { color: c.textSecondary, fontSize: 10, fontWeight: '900', letterSpacing: 0.4, textAlign: 'center' },
   eliteDesc: { color: c.textTertiary, fontSize: 10, lineHeight: 13, textAlign: 'center', marginTop: 3 },
+  elitePinTag: { color: c.textTertiary, fontSize: 8, fontWeight: '900', letterSpacing: 0.5, marginTop: 6 },
 
   settingsSection: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 1, paddingHorizontal: spacing.xl, marginBottom: spacing.sm },
   settingsSpaced: { marginTop: spacing.xl },
@@ -926,25 +1216,39 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     borderWidth: 1,
     borderColor: c.border,
   },
+  scrollRowOff: { borderColor: c.danger, backgroundColor: c.dangerMuted },
+  scrollRowWarn: { borderColor: '#FFA23B', backgroundColor: 'rgba(255, 162, 59, 0.1)' },
+  scrollBadge: { borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1 },
+  scrollBadgeOn: { backgroundColor: c.accentMuted, borderColor: c.accentDim },
+  scrollBadgeWarn: { backgroundColor: 'rgba(255, 162, 59, 0.2)', borderColor: '#FFA23B' },
+  scrollBadgeOff: { backgroundColor: c.danger, borderColor: c.danger },
+  scrollBadgeText: { fontSize: 10, fontWeight: '900', letterSpacing: 0.6 },
+  scrollBadgeTextOn: { color: c.accent },
+  scrollBadgeTextWarn: { color: '#FFA23B' },
+  scrollBadgeTextOff: { color: '#FFFFFF' },
+
+  storyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+    backgroundColor: c.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: c.accentDim,
+  },
+  storyTitle: { color: c.accent, fontSize: 13, fontWeight: '900', letterSpacing: 0.4 },
+  storyArrow: { color: c.accent, fontSize: 16, fontWeight: '900' },
+
   settingCol: { flex: 1, marginRight: spacing.sm },
   settingLabel: { color: c.textPrimary, fontSize: 13, fontWeight: '800', flexShrink: 1 },
   settingValue: { color: c.textSecondary, fontSize: 12, fontWeight: '700', flexShrink: 1, marginLeft: 'auto', textAlign: 'right' },
-  settingStatus: { color: c.textSecondary, fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
-  settingStatusOn: { color: c.accent },
   pauseRowActive: { backgroundColor: c.accentMuted, borderColor: c.accent },
   pauseActiveLabel: { color: c.accent, fontSize: 13, fontWeight: '900' },
   pauseSub: { color: c.textTertiary, fontSize: 11, marginTop: 3 },
-  pauseChoices: { flexDirection: 'row', gap: spacing.sm, marginHorizontal: spacing.lg, marginBottom: spacing.md },
-  pauseChip: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: spacing.md,
-    borderRadius: radius.sm,
-    backgroundColor: c.surfaceRaised,
-    borderWidth: 1,
-    borderColor: c.border,
-  },
-  pauseChipText: { color: c.textPrimary, fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
 
   signOut: { color: c.danger, fontSize: 13, fontWeight: '900' },
   deleteAccount: { color: c.textTertiary, fontSize: 12, fontWeight: '700' },

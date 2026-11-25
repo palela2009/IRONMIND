@@ -6,6 +6,7 @@ export interface Frame {
   ring: string;
   glow: string | null;
   price: number;
+  proOnly?: boolean;
 }
 
 export interface NameEffect {
@@ -18,6 +19,7 @@ export interface NameEffect {
 }
 
 export const FRAMES: Frame[] = [
+  { id: 'aurora', name: 'AURORA', desc: 'Exclusive Pro prism aura', ring: '#00F5D4', glow: '#A855F7', price: 0, proOnly: true },
   { id: 'bronze', name: 'BRONZE', desc: 'A warm bronze edge', ring: '#CD7F32', glow: null, price: 30 },
   { id: 'steel', name: 'STEEL', desc: 'Brushed steel, quietly sharp', ring: '#B8C4D0', glow: null, price: 60 },
   { id: 'gold', name: 'GOLD', desc: 'A shining golden border', ring: '#FFD700', glow: '#FFD700', price: 100 },
@@ -36,6 +38,8 @@ export const NAME_EFFECTS: NameEffect[] = [
 ];
 
 export const PRO_WEEK_PRICE = 500;
+export const FREE_MAX_DUEL_STAKE = 50;
+export const DUEL_STAKES = [0, 50, 100, 250] as const;
 
 export const frameById = (id: string | null | undefined): Frame | null =>
   id ? FRAMES.find((f) => f.id === id) ?? null : null;

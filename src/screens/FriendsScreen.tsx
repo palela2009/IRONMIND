@@ -16,7 +16,7 @@ import { useAuth } from '../context/AuthContext';
 import { TrainingState, UserStats } from '../types/training';
 import { rankForLevel, PODIUM } from '../constants/ranks';
 import { Badge, topBadgeFor } from '../constants/badges';
-import { frameById, nameEffectById, glowStyle } from '../constants/cosmetics';
+import { frameById, nameEffectById, glowStyle, FREE_MAX_DUEL_STAKE, DUEL_STAKES } from '../constants/cosmetics';
 import { usePro } from '../context/ProContext';
 
 const DUEL_STAKE = 50;
@@ -32,6 +32,7 @@ interface FriendsProps {
   stats: UserStats;
   isActive?: boolean;
   onNavigate: (state: TrainingState) => void;
+  onOpenPro?: () => void;
 }
 
 interface Entry {
@@ -126,14 +127,14 @@ const RankBadge: React.FC<{ level: number }> = ({ level }) => {
   );
 };
 
-export const FriendsScreen: React.FC<FriendsProps> = ({ stats, isActive = true, onNavigate }) => {
+export const FriendsScreen: React.FC<FriendsProps> = ({ stats, isActive = true, onNavigate, onOpenPro }) => {
   const styles = useThemedStyles(makeStyles);
   const scrollRef = useRef<any>(null);
   useTabScrollReset('FRIENDS', scrollRef);
   const palette = useTheme();
 
   const { fbUser } = useAuth();
-  const { isPro, isOwner, coins, equippedFrame, equippedNameEffect } = usePro();
+  const { isPro, isOwner, coins, equippedFrame, equippedNameEffect, pinnedBadge } = usePro();
   const { code, friends, requests, loading, error, addByCode, acceptRequest, rejectRequest, removeFriend, refresh: refreshFriends } = useFriends(isActive);
   const { duels, challenge, respond, cancel: cancelDuel, react, refresh: refreshDuels } = useDuels(isActive);
   const [subTab, setSubTab] = useState<SubTab>('BOARD');
@@ -171,7 +172,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats, isActive = true, 
       level: stats.level,
       currentXP: stats.currentXP,
       isMe: true,
-      badge: topBadgeFor(stats, isPro, isOwner),
+      badge: topBadgeFor(stats, isPro, isOwner, pinnedBadge),
       frame: equippedFrame,
       nameEffect: equippedNameEffect,
       todayMinutes: totalToday,
@@ -206,7 +207,8 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats, isActive = true, 
           level: f.level,
         },
         f.isPro,
-        f.isOwner
+        f.isOwner,
+        f.pinnedBadge
       ),
       frame: f.frame,
       nameEffect: f.nameEffect,
@@ -228,7 +230,7 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats, isActive = true, 
       if (a.hasTodayData !== b.hasTodayData) return a.hasTodayData ? -1 : 1;
       return a.todayMinutes - b.todayMinutes || b.currentStreak - a.currentStreak || b.level - a.level;
     });
-  }, [fbUser?.uid, fbUser?.displayName, fbUser?.photoURL, stats, friends, isPro, isOwner, equippedFrame, equippedNameEffect, totalToday, myWeekAvg, monitoredApps, sortLane]);
+  }, [fbUser?.uid, fbUser?.displayName, fbUser?.photoURL, stats, friends, isPro, isOwner, equippedFrame, equippedNameEffect, pinnedBadge, totalToday, myWeekAvg, monitoredApps, sortLane]);
 
   const handleCopy = async () => {
     if (!code) return;
@@ -280,8 +282,9 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats, isActive = true, 
       return;
     }
     setProfile(null);
-    const nextStake = presetStake !== undefined
-      ? (coins >= presetStake ? presetStake : FREE_STAKE)
+    const cappedPreset = presetStake !== undefined && !isPro && presetStake > FREE_MAX_DUEL_STAKE ? DUEL_STAKE : presetStake;
+    const nextStake = cappedPreset !== undefined
+      ? (coins >= cappedPreset ? cappedPreset : FREE_STAKE)
       : (coins >= DUEL_STAKE ? DUEL_STAKE : FREE_STAKE);
     const validPreset = (presetApps ?? []).filter((a) => monitoredApps.includes(a));
     setDuelStake(nextStake);
@@ -866,30 +869,60 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats, isActive = true, 
               </Text>
 
               <Text style={styles.modalLabel}>STAKE</Text>
-              <View style={styles.stakeRow}>
-                <TouchableOpacity
-                  style={[styles.stakeChip, duelStake === FREE_STAKE && styles.stakeChipOn]}
-                  onPress={() => setDuelStake(FREE_STAKE)}
-                  activeOpacity={0.85}
-                >
-                  <Text style={[styles.stakeText, duelStake === FREE_STAKE && styles.stakeTextOn]}>FREE</Text>
-                  <Text style={[styles.stakeSub, duelStake === FREE_STAKE && styles.stakeSubOn]}>bragging rights</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
-                    styles.stakeChip,
-                    duelStake === DUEL_STAKE && styles.stakeChipOn,
-                    coins < DUEL_STAKE && styles.stakeChipDisabled,
-                  ]}
-                  onPress={() => coins >= DUEL_STAKE && setDuelStake(DUEL_STAKE)}
-                  activeOpacity={coins < DUEL_STAKE ? 1 : 0.85}
-                >
-                  <Text style={[styles.stakeText, duelStake === DUEL_STAKE && styles.stakeTextOn]}>◉ {DUEL_STAKE}</Text>
-                  <Text style={[styles.stakeSub, duelStake === DUEL_STAKE && styles.stakeSubOn]}>
-                    {coins < DUEL_STAKE ? `you have ${coins}` : `win ${DUEL_STAKE * 2}`}
-                  </Text>
-                </TouchableOpacity>
+              <View style={styles.stakeGrid}>
+                {DUEL_STAKES.map((amount) => {
+                  const proLocked = amount > FREE_MAX_DUEL_STAKE && !isPro;
+                  const shortCoins = amount > 0 && coins < amount;
+                  const selected = duelStake === amount;
+                  const onTapStake = () => {
+                    if (proLocked) {
+                      appAlert(
+                        'High-Stakes Duels (Pro)',
+                        `◉ ${amount} stakes (win ◉ ${amount * 2}) require IronMind Pro. Unlock Pro free via a 7-win streak, invites, or 500 coins.`,
+                        onOpenPro
+                          ? [
+                              { text: 'Not now', style: 'cancel' },
+                              { text: 'View Pro', onPress: () => { setDuelTarget(null); onOpenPro(); } },
+                            ]
+                          : undefined
+                      );
+                      return;
+                    }
+                    if (!shortCoins) setDuelStake(amount);
+                  };
+                  return (
+                    <TouchableOpacity
+                      key={amount}
+                      style={[
+                        styles.stakeChip,
+                        selected && styles.stakeChipOn,
+                        (proLocked || shortCoins) && styles.stakeChipDisabled,
+                      ]}
+                      onPress={onTapStake}
+                      activeOpacity={0.85}
+                    >
+                      <View style={styles.stakeTopRow}>
+                        <Text style={[styles.stakeText, selected && styles.stakeTextOn]}>
+                          {amount === 0 ? 'FREE' : `◉ ${amount}`}
+                        </Text>
+                        {amount > FREE_MAX_DUEL_STAKE && (
+                          <View style={styles.stakeProTag}>
+                            <Text style={styles.stakeProTagText}>{proLocked ? '🔒 PRO' : 'PRO'}</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={[styles.stakeSub, selected && styles.stakeSubOn]}>
+                        {amount === 0
+                          ? 'bragging rights'
+                          : proLocked
+                          ? `win ◉ ${amount * 2}`
+                          : shortCoins
+                          ? `you have ${coins}`
+                          : `win ◉ ${amount * 2}`}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
 
               <Text style={styles.modalLabel}>PICK THE APPS · {duelApps.length} SELECTED</Text>
@@ -940,7 +973,12 @@ export const FriendsScreen: React.FC<FriendsProps> = ({ stats, isActive = true, 
               <View style={styles.profileHead}>
                 <Avatar entry={profile} size={72} />
                 <View style={styles.profileHeadBody}>
-                  <EntryName entry={profile} style={styles.profileName} />
+                  <View style={styles.nameRow}>
+                    {profile.badge && (
+                      <Text style={[styles.eliteGlyph, { color: profile.badge.color }]}>{profile.badge.glyph}</Text>
+                    )}
+                    <EntryName entry={profile} style={styles.profileName} />
+                  </View>
                   <View style={styles.friendMeta}>
                     <RankBadge level={profile.level} />
                     <Text style={styles.friendSub}>LV {profile.level} · {profile.currentXP} XP</Text>
@@ -1299,18 +1337,30 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   modalScroll: { flexGrow: 0 },
   modalTitle: { color: c.textPrimary, fontSize: 16, fontWeight: '900', letterSpacing: 0.3, marginBottom: 6 },
   modalSub: { color: c.textSecondary, fontSize: 12, lineHeight: 18, marginBottom: 16 },
-  stakeRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
+  stakeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
   stakeChip: {
-    flex: 1,
+    width: '48%',
+    flexGrow: 1,
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 11,
+    paddingHorizontal: 8,
     borderRadius: radius.sm,
     backgroundColor: c.surfaceRaised,
     borderWidth: 1.5,
     borderColor: c.border,
   },
+  stakeTopRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  stakeProTag: {
+    backgroundColor: c.accentMuted,
+    borderWidth: 1,
+    borderColor: c.accentDim,
+    borderRadius: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+  },
+  stakeProTagText: { color: c.accent, fontSize: 8, fontWeight: '900', letterSpacing: 0.4 },
   stakeChipOn: { borderColor: c.accent, backgroundColor: c.accentMuted },
-  stakeChipDisabled: { opacity: 0.4 },
+  stakeChipDisabled: { opacity: 0.55 },
   stakeText: { color: c.textPrimary, fontSize: 14, fontWeight: '900' },
   stakeTextOn: { color: c.accent },
   stakeSub: { color: c.textTertiary, fontSize: 10, fontWeight: '700', marginTop: 2 },

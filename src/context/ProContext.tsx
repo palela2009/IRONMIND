@@ -27,6 +27,8 @@ export interface Entitlement {
   ownedNameEffects: string[];
   equippedFrame: string | null;
   equippedNameEffect: string | null;
+  pinnedBadge: string | null;
+  streakTrialClaimed: boolean;
   onTrial: boolean;
   trialEndsAt: string | null;
   plan: ProPlanId | null;
@@ -37,7 +39,7 @@ export interface Entitlement {
   themeId: string;
 }
 
-const FREE: Entitlement = { isPro: false, isOwner: false, welcomeOffer: false, welcomeGiftAvailable: false, welcomeGiftTheme: null, coins: 0, unlockedThemes: [], ownedFrames: [], ownedNameEffects: [], equippedFrame: null, equippedNameEffect: null, onTrial: false, trialEndsAt: null, plan: null, source: null, referralRewards: [], expiresAt: null, streakFreezes: 0, themeId: 'default' };
+const FREE: Entitlement = { isPro: false, isOwner: false, welcomeOffer: false, welcomeGiftAvailable: false, welcomeGiftTheme: null, coins: 0, unlockedThemes: [], ownedFrames: [], ownedNameEffects: [], equippedFrame: null, equippedNameEffect: null, pinnedBadge: null, streakTrialClaimed: false, onTrial: false, trialEndsAt: null, plan: null, source: null, referralRewards: [], expiresAt: null, streakFreezes: 0, themeId: 'default' };
 
 interface ProContextValue extends Entitlement {
   loading: boolean;
@@ -52,7 +54,7 @@ interface ProContextValue extends Entitlement {
     item: 'freeze' | 'reclaim' | 'theme' | 'frame' | 'nameEffect' | 'proWeek',
     opts?: { themeId?: string; cosmeticId?: string }
   ) => Promise<{ ok: boolean; message?: string }>;
-  equipCosmetic: (slot: 'frame' | 'nameEffect', cosmeticId: string | null) => Promise<void>;
+  equipCosmetic: (slot: 'frame' | 'nameEffect' | 'badge', cosmeticId: string | null) => Promise<void>;
 }
 
 const normalize = (raw: Partial<Entitlement> | null | undefined): Entitlement => ({
@@ -225,16 +227,20 @@ export const ProProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } finally { shopRunning.current.delete(flight); }
   };
 
-  const equipCosmetic = async (slot: 'frame' | 'nameEffect', cosmeticId: string | null) => {
-    await persist({
-      ...entitlementRef.current,
-      ...(slot === 'frame' ? { equippedFrame: cosmeticId } : { equippedNameEffect: cosmeticId }),
-    });
+  const equipCosmetic = async (slot: 'frame' | 'nameEffect' | 'badge', cosmeticId: string | null) => {
+    const patch =
+      slot === 'frame'
+        ? { equippedFrame: cosmeticId }
+        : slot === 'nameEffect'
+        ? { equippedNameEffect: cosmeticId }
+        : { pinnedBadge: cosmeticId };
+    await persist({ ...entitlementRef.current, ...patch });
     try {
-      await authedFetch(`${COINS_URL}/equip`, {
+      const res = await authedFetch(`${COINS_URL}/equip`, {
         method: 'POST',
         body: JSON.stringify({ slot, cosmeticId }),
       });
+      if (!res.ok) await refresh();
     } catch {}
   };
 

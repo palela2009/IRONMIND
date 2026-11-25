@@ -22,6 +22,7 @@ export interface Friend {
   isOwner: boolean;
   frame: string | null;
   nameEffect: string | null;
+  pinnedBadge?: string | null;
   todayMinutes: number;
   hasTodayData?: boolean;
   weekAvgMinutes: number;

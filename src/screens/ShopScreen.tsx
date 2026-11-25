@@ -11,13 +11,14 @@ import { FRAMES, NAME_EFFECTS, PRO_WEEK_PRICE, frameById, nameEffectById, glowSt
 interface Props {
   visible: boolean;
   onClose: () => void;
+  onOpenPro?: () => void;
 }
 
 type ShopTab = 'ALL' | 'THEMES' | 'FRAMES' | 'NAMES' | 'BOOSTS';
 
 export const PRICES = { freeze: 100, reclaim: 200, theme: 200 };
 
-export const ShopScreen: React.FC<Props> = ({ visible, onClose }) => {
+export const ShopScreen: React.FC<Props> = ({ visible, onClose, onOpenPro }) => {
   const styles = useThemedStyles(makeStyles);
   const activePalette = useTheme();
   const { fbUser } = useAuth();
@@ -298,11 +299,19 @@ export const ShopScreen: React.FC<Props> = ({ visible, onClose }) => {
               </View>
               <View style={styles.grid}>
                 {FRAMES.map((f) => {
-                  const owned = ownedFrames.includes(f.id);
+                  const owned = f.proOnly ? isPro : ownedFrames.includes(f.id);
                   const active = equippedFrame === f.id;
                   const previewed = previewFrameId === f.id;
                   const isBusy = busy === busyKey('frame', f.id);
                   const isRare = f.price >= 400;
+                  const openProFromShop = () => {
+                    if (onOpenPro) {
+                      onClose();
+                      onOpenPro();
+                    } else {
+                      appAlert('Pro Exclusive Frame', 'AURORA is free with IronMind Pro. Unlock Pro via a 7-win streak, invites, or 500 coins.');
+                    }
+                  };
 
                   return (
                     <TouchableOpacity
@@ -322,10 +331,10 @@ export const ShopScreen: React.FC<Props> = ({ visible, onClose }) => {
                       activeOpacity={0.85}
                       disabled={busy !== null}
                     >
-                      {isRare && (
+                      {(f.proOnly || isRare) && (
                         <View style={[styles.rareTag, { borderColor: f.ring }]}>
                           <Text style={[styles.rareTagText, { color: f.ring }]}>
-                            {f.id === 'galactic' ? 'LEGENDARY' : 'RARE'}
+                            {f.proOnly ? 'PRO ONLY' : f.id === 'galactic' ? 'LEGENDARY' : 'RARE'}
                           </Text>
                         </View>
                       )}
@@ -352,11 +361,15 @@ export const ShopScreen: React.FC<Props> = ({ visible, onClose }) => {
                             ? { backgroundColor: activePalette.surfaceRaised, borderColor: f.ring }
                             : owned
                             ? { backgroundColor: activePalette.surfaceRaised, borderColor: activePalette.border }
+                            : f.proOnly
+                            ? { backgroundColor: 'rgba(0, 245, 212, 0.14)', borderColor: f.ring }
                             : { backgroundColor: activePalette.accent, borderColor: activePalette.accent },
                         ]}
                         onPress={() =>
                           owned
                             ? (setPreviewFrameId(null), void equipCosmetic('frame', active ? null : f.id))
+                            : f.proOnly
+                            ? openProFromShop()
                             : confirmBuy(`the ${f.name} frame`, f.price, 'frame', f.id)
                         }
                         disabled={busy !== null}
@@ -368,6 +381,8 @@ export const ShopScreen: React.FC<Props> = ({ visible, onClose }) => {
                           <Text style={[styles.tileActionText, { color: f.ring }]}>WORN ✓</Text>
                         ) : owned ? (
                           <Text style={[styles.tileActionText, { color: activePalette.textPrimary }]}>WEAR</Text>
+                        ) : f.proOnly ? (
+                          <Text style={[styles.tileActionText, { color: f.ring }]}>★ PRO</Text>
                         ) : (
                           <Text style={[styles.tileActionText, { color: activePalette.accentContrast }]}>◉ {f.price}</Text>
                         )}
@@ -486,7 +501,7 @@ export const ShopScreen: React.FC<Props> = ({ visible, onClose }) => {
                   </View>
                   <View style={styles.itemBody}>
                     <Text style={styles.itemName}>IRONMIND PRO · 7 DAYS</Text>
-                    <Text style={styles.itemDesc}>All themes, 20 freezes, double coins & analytics · 1x/month</Text>
+                    <Text style={styles.itemDesc}>All 9 themes, Aurora frame, 20 freezes, 2× coins & high-stakes duels · 1x/mo</Text>
                   </View>
                   <View style={styles.boostPricePill}>
                     {busy === busyKey('proWeek') ? (

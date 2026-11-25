@@ -132,6 +132,30 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
     }
 
     @ReactMethod
+    fun openUsageAccessSettings() {
+        try {
+            val args = Bundle().apply { putString(":settings:fragment_args_key", reactContext.packageName) }
+            val direct = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
+                data = android.net.Uri.parse("package:${reactContext.packageName}")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                putExtra(":settings:fragment_args_key", reactContext.packageName)
+                putExtra(":settings:show_fragment_args", args)
+            }
+            reactContext.startActivity(direct)
+        } catch (_: Exception) {
+            try {
+                val args = Bundle().apply { putString(":settings:fragment_args_key", reactContext.packageName) }
+                val fallback = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    putExtra(":settings:fragment_args_key", reactContext.packageName)
+                    putExtra(":settings:show_fragment_args", args)
+                }
+                reactContext.startActivity(fallback)
+            } catch (_: Exception) {}
+        }
+    }
+
+    @ReactMethod
     fun openInstagramReelsTestSettings(uid: String, promise: Promise) {
         val prefs = reactContext.getSharedPreferences(UsageMonitorService.PREFS_NAME, Context.MODE_PRIVATE)
         if (!BuildConfig.IRONMIND_REELS_TEST || !ShortVideoTarget.INSTAGRAM.hasConsent(prefs, uid)) {

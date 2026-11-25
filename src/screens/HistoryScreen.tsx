@@ -1,7 +1,9 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Modal, Dimensions } from 'react-native';
-import { useThemedStyles, useTheme } from '../context/ThemeContext';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Modal, Dimensions, Share } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useThemedStyles } from '../context/ThemeContext';
 import { Palette, radius, spacing, cardShadow, glowFor } from '../theme';
+import { fetchInviteCode, inviteMessage } from '../hooks/useInvites';
 
 interface Props {
   visible: boolean;
@@ -9,32 +11,37 @@ interface Props {
 }
 
 const { width } = Dimensions.get('window');
-
-const PHOTO_W = width - spacing.xl * 2;
+const PHOTO_W = width - spacing.xl * 2 - 28;
 const fullHeight = (ratio: number) => Math.round(PHOTO_W * ratio);
 const visibleHeight = (ratio: number, cropTop: number) => Math.round(fullHeight(ratio) * (1 - cropTop));
+
+const TIMELINE = [
+  { num: '01', title: 'THE LATE-NIGHT PROBLEM', body: 'Two students at Komarovi losing hours to Reels and Shorts — realizing screen-time charts only show damage after it happens.' },
+  { num: '02', title: 'BUILT FOR REAL LIFE', body: 'Hard app blockers got uninstalled in a day because you still need DMs and YouTube lectures. So we built scroll-only detection.' },
+  { num: '03', title: 'TURNED INTO A GAME', body: 'Timed reflex challenges, streaks, freezes, coin-staked friend duels, and a community taking their attention back together.' },
+];
 
 const CREATORS = [
   {
     name: 'Alexander Palelashvili',
-    role: 'WEB & MOBILE DEVELOPER',
+    role: 'ENGINEERING & ANDROID',
     photo: require('../../assets/alexander.jpg'),
-    ratio: 2.09,
-    cropTop: 0.3,
+    ratio: 1.9,
+    cropTop: 0.25,
     lines: [
-      'Built IRONMIND end to end — the app you are holding, the Android service that notices the moment you open a distraction, and the backend behind streaks, duels and friends.',
-      'Works across web and mobile.',
+      'Built IRONMIND end to end — the app in your hands, the Android scroll-detection engine, and the backend powering streaks, duels, and friends.',
+      'Ships across mobile and web.',
     ],
   },
   {
     name: 'Luka Berikelashvili',
-    role: 'MARKETING & STRATEGY',
+    role: 'GROWTH & STRATEGY',
     photo: require('../../assets/luka.jpg'),
-    ratio: 1.65,
+    ratio: 1.5,
     cropTop: 0,
     lines: [
-      'Shapes how IRONMIND reaches people and what it says when it gets there — the positioning, the words, and the reason someone gives it a try at all.',
-      'A national AI olympiad competitor, and the more confident half of the pair.',
+      'Shapes how IRONMIND reaches people and what it stands for — the positioning, the voice, and why someone decides to fight back against the feed.',
+      'National AI Olympiad competitor, and the louder half of the pair.',
     ],
   },
 ];
@@ -42,49 +49,66 @@ const CREATORS = [
 export const HistoryScreen: React.FC<Props> = ({ visible, onClose }) => {
   const styles = useThemedStyles(makeStyles);
 
+  const handleShare = async () => {
+    const code = await fetchInviteCode();
+    const message = code
+      ? inviteMessage(code)
+      : 'Check out IRONMIND — catches you mid-doomscroll on Reels, TikTok, Shorts & Spotlight without blocking DMs: https://play.google.com/store/apps/details?id=com.palelastudio.ironmind';
+    try {
+      await Share.share({ message });
+    } catch {}
+  };
+
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View style={styles.root}>
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <SafeAreaView style={styles.root}>
+        <View style={styles.topBar}>
+          <Text style={styles.topBarTitle}>OUR STORY</Text>
           <TouchableOpacity style={styles.close} onPress={onClose} activeOpacity={0.8}>
             <Text style={styles.closeText}>✕</Text>
           </TouchableOpacity>
+        </View>
 
-          <View style={styles.hero}>
-            <Image source={require('../../assets/icon.png')} style={styles.logo} />
-            <Text style={styles.kicker}>EST. 2026 · TBILISI</Text>
-            <Text style={styles.title}>THE STORY{'\n'}OF IRONMIND</Text>
-            <View style={styles.rule} />
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <View style={styles.heroCard}>
+            <View style={styles.heroAccentBar} />
+            <View style={styles.heroTop}>
+              <Image source={require('../../assets/icon.png')} style={styles.logo} />
+              <View style={styles.originPill}>
+                <Text style={styles.originText}>EST. 2026 · TBILISI</Text>
+              </View>
+            </View>
+            <Text style={styles.title}>THE STORY{'\n'}OF IRONMIND.</Text>
             <Text style={styles.lead}>
-              Built by two students who were tired of losing hours to their own phones, and
-              decided the fix was not another screen-time chart but a challenge you have to beat.
+              Built late at night by two students tired of losing hours to their own phones — who decided the cure wasn't another guilt chart, but a reflex game you have to beat mid-scroll.
             </Text>
           </View>
 
           <View style={styles.quoteBlock}>
             <Text style={styles.quote}>
-              Every app we tried showed us numbers after the damage was done. Nothing ever stood
-              between us and the next scroll.
+              "Every app showed us numbers after the damage was done. Nothing stood between us and the next scroll — without locking us out of our own phones."
             </Text>
           </View>
 
-          <Text style={styles.body}>
-            So we built something that does. Open a distracting app and IRONMIND starts a timer.
-            Beat it and your streak grows. Lose and it does not. Simple, and much harder to
-            ignore than a weekly report.
-          </Text>
-
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>THE TWO OF US</Text>
-            <View style={styles.dividerLine} />
+          <Text style={styles.sectionLabel}>HOW IT HAPPENED</Text>
+          <View style={styles.timelineCard}>
+            {TIMELINE.map((t, idx) => (
+              <View key={t.num} style={[styles.timelineRow, idx > 0 && styles.timelineDivided]}>
+                <View style={styles.timelineNum}>
+                  <Text style={styles.timelineNumText}>{t.num}</Text>
+                </View>
+                <View style={styles.timelineBody}>
+                  <Text style={styles.timelineTitle}>{t.title}</Text>
+                  <Text style={styles.timelineDesc}>{t.body}</Text>
+                </View>
+              </View>
+            ))}
           </View>
 
+          <Text style={styles.sectionLabel}>THE TWO FOUNDERS</Text>
           {CREATORS.map((creator, i) => (
-            <View key={creator.name} style={styles.person}>
-              <View
-                style={[styles.photoWrap, { height: visibleHeight(creator.ratio, creator.cropTop) }]}
-              >
+            <View key={creator.name} style={styles.personCard}>
+              <View style={[styles.photoWrap, { height: visibleHeight(creator.ratio, creator.cropTop) }]}>
                 <Image
                   source={creator.photo}
                   style={[
@@ -101,21 +125,17 @@ export const HistoryScreen: React.FC<Props> = ({ visible, onClose }) => {
                 </View>
               </View>
 
-              <Text style={styles.personName}>{creator.name}</Text>
-              <Text style={styles.personRole}>{creator.role}</Text>
+              <View style={styles.personHead}>
+                <Text style={styles.personName}>{creator.name}</Text>
+                <View style={styles.rolePill}>
+                  <Text style={styles.personRole}>{creator.role}</Text>
+                </View>
+              </View>
               {creator.lines.map((line, k) => (
-                <Text key={k} style={styles.personBio}>
-                  {line}
-                </Text>
+                <Text key={k} style={styles.personBio}>{line}</Text>
               ))}
             </View>
           ))}
-
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>WHERE WE ARE</Text>
-            <View style={styles.dividerLine} />
-          </View>
 
           <View style={styles.factRow}>
             <View style={styles.fact}>
@@ -124,89 +144,123 @@ export const HistoryScreen: React.FC<Props> = ({ visible, onClose }) => {
             </View>
             <View style={styles.factDivider} />
             <View style={styles.fact}>
-              <Text style={styles.factNum}>26/27</Text>
-              <Text style={styles.factLabel}>FINAL YEAR</Text>
+              <Text style={styles.factNum}>KOMAROVI</Text>
+              <Text style={styles.factLabel}>TBILISI</Text>
             </View>
             <View style={styles.factDivider} />
             <View style={styles.fact}>
               <Text style={styles.factNum}>2</Text>
-              <Text style={styles.factLabel}>OF US</Text>
+              <Text style={styles.factLabel}>BUILDERS</Text>
             </View>
           </View>
 
-          <Text style={styles.body}>
-            We are in our final year at Komarovi in Tbilisi. IRONMIND was built around school,
-            mostly late at night. We are aiming for good universities next, and building this
-            taught us more than we expected about shipping something real to people who never
-            asked for it.
-          </Text>
-
           <View style={styles.thanks}>
+            <Text style={styles.thanksTitle}>THANK YOU FOR BEING HERE.</Text>
             <Text style={styles.thanksText}>
-              Thanks for using IRONMIND. Every streak in this app is someone taking a bit of
-              their attention back.
+              We're building IRONMIND around our final year at Komarovi while aiming for great universities next. Every streak you protect here means the world to us.
             </Text>
             <Text style={styles.sign}>— Alexander & Luka</Text>
+            <TouchableOpacity style={styles.shareBtn} onPress={handleShare} activeOpacity={0.85}>
+              <Text style={styles.shareBtnText}>SHARE IRONMIND WITH A FRIEND →</Text>
+            </TouchableOpacity>
           </View>
         </ScrollView>
-      </View>
+      </SafeAreaView>
     </Modal>
   );
 };
 
 const makeStyles = (c: Palette) => StyleSheet.create({
   root: { flex: 1, backgroundColor: c.bg },
-  content: { paddingHorizontal: spacing.xl, paddingTop: 60, paddingBottom: 72 },
-
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
+  },
+  topBarTitle: { color: c.textTertiary, fontSize: 11, fontWeight: '900', letterSpacing: 1.4 },
   close: {
-    position: 'absolute',
-    top: 52,
-    right: spacing.lg,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: c.surfaceRaised,
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 2,
   },
   closeText: { color: c.textSecondary, fontSize: 14, fontWeight: '900' },
 
-  hero: { marginBottom: spacing.xxl },
-  logo: { width: 52, height: 52, borderRadius: 14, marginBottom: spacing.lg },
-  kicker: { color: c.accent, fontSize: 10, fontWeight: '900', letterSpacing: 2 },
-  title: {
-    color: c.textPrimary,
-    fontSize: 36,
-    fontWeight: '900',
-    letterSpacing: -1.5,
-    lineHeight: 39,
-    marginTop: spacing.sm,
+  content: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: 64 },
+
+  heroCard: {
+    backgroundColor: c.surface,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: c.border,
+    padding: spacing.xl,
+    marginBottom: spacing.lg,
+    overflow: 'hidden',
+    ...cardShadow,
   },
-  rule: { width: 48, height: 3, borderRadius: 2, backgroundColor: c.accent, marginVertical: spacing.lg },
-  lead: { color: c.textSecondary, fontSize: 15, lineHeight: 23 },
+  heroAccentBar: { position: 'absolute', top: 0, left: 0, right: 0, height: 3, backgroundColor: c.accent },
+  heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.lg },
+  logo: { width: 46, height: 46, borderRadius: 13 },
+  originPill: { backgroundColor: c.accentMuted, borderWidth: 1, borderColor: c.accentDim, borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 4 },
+  originText: { color: c.accent, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
+  title: { color: c.textPrimary, fontSize: 32, fontWeight: '900', letterSpacing: -1.2, lineHeight: 36, marginBottom: spacing.md },
+  lead: { color: c.textSecondary, fontSize: 14, lineHeight: 22 },
 
   quoteBlock: {
     borderLeftWidth: 3,
     borderLeftColor: c.accent,
     paddingLeft: spacing.lg,
+    paddingVertical: 4,
     marginBottom: spacing.xl,
   },
-  quote: { color: c.textPrimary, fontSize: 17, lineHeight: 26, fontWeight: '600', fontStyle: 'italic' },
+  quote: { color: c.textPrimary, fontSize: 16, lineHeight: 24, fontWeight: '700', fontStyle: 'italic' },
 
-  body: { color: c.textSecondary, fontSize: 14, lineHeight: 22, marginBottom: spacing.xl },
+  sectionLabel: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 1.2, marginBottom: spacing.md },
 
-  divider: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.xl },
-  dividerLine: { flex: 1, height: 1, backgroundColor: c.border },
-  dividerText: { color: c.textTertiary, fontSize: 10, fontWeight: '900', letterSpacing: 1.6 },
-
-  person: { marginBottom: spacing.xxl },
-  photoWrap: {
-    marginBottom: spacing.lg,
+  timelineCard: {
+    backgroundColor: c.surface,
     borderRadius: radius.lg,
-    overflow: 'hidden',
-    borderWidth: 2,
+    borderWidth: 1,
     borderColor: c.border,
+    padding: spacing.lg,
+    marginBottom: spacing.xl,
+  },
+  timelineRow: { flexDirection: 'row', gap: spacing.md, paddingVertical: spacing.sm },
+  timelineDivided: { borderTopWidth: 1, borderColor: c.borderSubtle, paddingTop: spacing.md, marginTop: spacing.xs },
+  timelineNum: {
+    width: 28,
+    height: 28,
+    borderRadius: 9,
+    backgroundColor: c.accentMuted,
+    borderWidth: 1,
+    borderColor: c.accentDim,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  timelineNumText: { color: c.accent, fontSize: 11, fontWeight: '900' },
+  timelineBody: { flex: 1 },
+  timelineTitle: { color: c.textPrimary, fontSize: 12, fontWeight: '900', letterSpacing: 0.6 },
+  timelineDesc: { color: c.textSecondary, fontSize: 12, lineHeight: 18, marginTop: 3 },
+
+  personCard: {
+    backgroundColor: c.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: c.border,
+    padding: 14,
+    marginBottom: spacing.lg,
+    ...cardShadow,
+  },
+  photoWrap: {
+    marginBottom: spacing.md,
+    borderRadius: radius.md,
+    overflow: 'hidden',
     backgroundColor: c.surfaceRaised,
   },
   photo: { width: PHOTO_W },
@@ -217,21 +271,15 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     backgroundColor: c.accent,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.md,
-    paddingVertical: 5,
+    paddingVertical: 4,
     ...glowFor(c),
   },
   photoBadgeText: { color: c.accentContrast, fontSize: 11, fontWeight: '900', letterSpacing: 0.6 },
-
-  personName: { color: c.textPrimary, fontSize: 22, fontWeight: '900', letterSpacing: -0.6 },
-  personRole: {
-    color: c.accent,
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1.4,
-    marginTop: 4,
-    marginBottom: spacing.md,
-  },
-  personBio: { color: c.textTertiary, fontSize: 13, lineHeight: 21, marginBottom: spacing.sm },
+  personHead: { marginBottom: spacing.sm },
+  personName: { color: c.textPrimary, fontSize: 20, fontWeight: '900', letterSpacing: -0.4 },
+  rolePill: { alignSelf: 'flex-start', backgroundColor: c.accentMuted, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, marginTop: 6 },
+  personRole: { color: c.accent, fontSize: 10, fontWeight: '900', letterSpacing: 1 },
+  personBio: { color: c.textSecondary, fontSize: 13, lineHeight: 20, marginBottom: spacing.xs },
 
   factRow: {
     flexDirection: 'row',
@@ -241,19 +289,23 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     borderColor: c.border,
     paddingVertical: spacing.lg,
     marginBottom: spacing.xl,
-    ...cardShadow,
   },
   fact: { flex: 1, alignItems: 'center' },
-  factNum: { color: c.textPrimary, fontSize: 20, fontWeight: '900', letterSpacing: -0.5 },
-  factLabel: { color: c.textFaint, fontSize: 8, fontWeight: '900', letterSpacing: 0.8, marginTop: 3 },
+  factNum: { color: c.accent, fontSize: 17, fontWeight: '900', letterSpacing: -0.3 },
+  factLabel: { color: c.textTertiary, fontSize: 9, fontWeight: '900', letterSpacing: 0.8, marginTop: 4 },
   factDivider: { width: 1, backgroundColor: c.borderSubtle },
 
   thanks: {
-    backgroundColor: c.accentMuted,
-    borderRadius: radius.md,
+    backgroundColor: c.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: c.accentDim,
     padding: spacing.xl,
     alignItems: 'center',
   },
+  thanksTitle: { color: c.accent, fontSize: 12, fontWeight: '900', letterSpacing: 1, marginBottom: spacing.sm },
   thanksText: { color: c.textSecondary, fontSize: 13, lineHeight: 20, textAlign: 'center' },
-  sign: { color: c.accent, fontSize: 14, fontWeight: '900', marginTop: spacing.lg },
+  sign: { color: c.textPrimary, fontSize: 14, fontWeight: '900', marginTop: spacing.md, marginBottom: spacing.lg },
+  shareBtn: { alignSelf: 'stretch', backgroundColor: c.accent, borderRadius: radius.md, paddingVertical: 14, alignItems: 'center' },
+  shareBtnText: { color: c.accentContrast, fontSize: 12, fontWeight: '900', letterSpacing: 0.7 },
 });

@@ -9,11 +9,11 @@ import { PRO_WEEK_PRICE } from '../constants/cosmetics';
 import { fetchInviteCode, inviteMessage, useInvites } from '../hooks/useInvites';
 
 const PERKS = [
-  { icon: '❄', title: '20 streak freezes a month', body: 'One slip never wipes out your run.' },
-  { icon: '✦', title: '7 elite badges', body: 'Shown next to your name on the leaderboard.' },
-  { icon: '◑', title: 'Exclusive themes', body: 'Cyberpunk, Blood, Matrix and more.' },
-  { icon: '◈', title: 'Advanced analytics', body: '30-day trends, history and escape speed charts.' },
-  { icon: '◉', title: 'Double coins', body: 'Every challenge win pays twice as much.' },
+  { icon: '❄', title: '20 streak freezes a month', body: 'One slip never wipes out your streak.' },
+  { icon: '◉', title: 'Double coins (2×)', body: 'Every challenge win and perfect day pays twice as much.' },
+  { icon: '◑', title: 'All 9 themes + Aurora frame', body: 'Every dark palette plus the exclusive prism frame.' },
+  { icon: '⚔', title: 'High-stakes duels (◉ 100 & ◉ 250)', body: 'Play friends for up to ◉ 500 pots.' },
+  { icon: '✦', title: '7 pinnable elite badges & 30-day charts', body: 'Pin your earned trophy next to your name on Friends.' },
 ];
 
 export const ProIntroScreen: React.FC = () => {
@@ -85,7 +85,17 @@ export const ProIntroScreen: React.FC = () => {
           </Animated.View>
 
           <Animated.View style={enter(2)}>
-            <Text style={styles.section}>TWO WAYS TO EARN IT</Text>
+            <Text style={styles.section}>THREE WAYS TO EARN IT</Text>
+
+            <View style={styles.way}>
+              <View style={styles.wayHead}>
+                <Text style={styles.wayTitle}>🔥 HIT A 7-WIN STREAK</Text>
+                <Text style={styles.wayReward}>3 DAYS FREE</Text>
+              </View>
+              <Text style={styles.wayText}>
+                Win 7 scroll challenges in a row and 3 days of IronMind Pro unlock automatically.
+              </Text>
+            </View>
 
             <View style={[styles.way, styles.wayFeatured]}>
               <View style={styles.wayHead}>

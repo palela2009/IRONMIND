@@ -2,17 +2,26 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useThemedStyles } from '../context/ThemeContext';
 import { Palette, radius, spacing } from '../theme';
-import { usePermissions, isXiaomiFamily } from '../hooks/usePermissions';
+import { usePermissions, isXiaomiFamily, getDeviceBrand } from '../hooks/usePermissions';
 import { appAlert } from './AppDialog';
+import type { ShortVideoController } from '../hooks/useInstagramReelsTest';
 
 type Perms = ReturnType<typeof usePermissions>;
 
 interface Props {
   perms: Perms;
+  reelsTest?: ShortVideoController | null;
   showOptionalTips?: boolean;
 }
 
-export const PermissionSteps: React.FC<Props> = ({ perms, showOptionalTips = true }) => {
+const scrollPathHint = () => {
+  const brand = getDeviceBrand();
+  if (brand === 'samsung') return 'Tap Installed apps → IRONMIND — Scroll Detection → ON.';
+  if (brand === 'xiaomi' || brand === 'oneplus') return 'Tap Downloaded apps → IRONMIND — Scroll Detection → ON.';
+  return 'Find IRONMIND — Scroll Detection under Downloaded apps → ON.';
+};
+
+export const PermissionSteps: React.FC<Props> = ({ perms, reelsTest, showOptionalTips = true }) => {
   const styles = useThemedStyles(makeStyles);
   const { status, requestNotifications, openUsageAccess, requestBatteryExemption, openAutostart } = perms;
   const xiaomi = isXiaomiFamily();
@@ -30,12 +39,12 @@ export const PermissionSteps: React.FC<Props> = ({ perms, showOptionalTips = tru
     );
   };
 
-  const coreSteps = [
+  const steps = [
     {
       key: 'notifications',
       title: 'NOTIFICATIONS',
       done: status.notifications,
-      desc: 'One tap. Lets IRONMIND send you timed challenges and duel updates.',
+      desc: 'One tap. Lets IRONMIND send scroll challenges and duel alerts.',
       doneDesc: 'Ready. Challenges will reach you instantly.',
       action: 'ALLOW NOTIFICATIONS →',
       onPress: requestNotifications,
@@ -45,17 +54,30 @@ export const PermissionSteps: React.FC<Props> = ({ perms, showOptionalTips = tru
       title: 'USAGE ACCESS',
       done: status.usage,
       desc: xiaomi
-        ? 'Lets IRONMIND see when a tracked app opens and auto-sync duels in the background. (Wait 10s on Xiaomi prompt & tap OK.)'
-        : 'Lets IRONMIND see when a tracked app opens and auto-sync screen time & duels in the background.',
-      doneDesc: 'Ready. App tracking & background duel sync are active.',
+        ? 'Powers all-apps Screen Time, Leaderboard & automatic duel sync. (Wait 10s on Xiaomi prompt & tap OK.)'
+        : 'Powers all-apps Screen Time, Leaderboard & automatic background duel sync.',
+      doneDesc: 'Ready. Screen time & background duel sync are active.',
       action: 'OPEN USAGE ACCESS →',
       onPress: startUsageAccess,
     },
+    ...(reelsTest
+      ? [
+          {
+            key: 'scroll',
+            title: 'SCROLL CHALLENGES',
+            done: reelsTest.isActive,
+            desc: `Detects doomscrolling on Reels, TikTok, Shorts & Spotlight — silent during DMs & YouTube study. ${scrollPathHint()}`,
+            doneDesc: 'Ready. Scroll-only challenges are active for all 5 apps.',
+            action: reelsTest.needsSetup ? 'FINISH SCROLL SETUP →' : 'TURN ON SCROLL CHALLENGES →',
+            onPress: reelsTest.openGuide,
+          },
+        ]
+      : []),
   ];
 
   return (
     <View>
-      {coreSteps.map((s, i) => (
+      {steps.map((s, i) => (
         <View key={s.key} style={[styles.card, s.done && styles.cardDone]}>
           <View style={styles.head}>
             <View style={[styles.num, s.done && styles.numDone]}>
@@ -80,9 +102,9 @@ export const PermissionSteps: React.FC<Props> = ({ perms, showOptionalTips = tru
       {showOptionalTips && !status.battery && (
         <TouchableOpacity style={styles.optionalRow} onPress={requestBatteryExemption} activeOpacity={0.85}>
           <View style={styles.optionalBody}>
-            <Text style={styles.optionalKicker}>OPTIONAL · 1-TAP BOOST</Text>
+            <Text style={styles.optionalKicker}>OPTIONAL · 1-TAP RELIABILITY</Text>
             <Text style={styles.optionalTitle}>Unrestricted battery</Text>
-            <Text style={styles.optionalDesc}>Prevents Android from sleeping IRONMIND overnight. Skip if you prefer.</Text>
+            <Text style={styles.optionalDesc}>Prevents Android from sleeping IRONMIND overnight.</Text>
           </View>
           <Text style={styles.optionalCta}>ALLOW →</Text>
         </TouchableOpacity>
@@ -102,7 +124,7 @@ export const PermissionSteps: React.FC<Props> = ({ perms, showOptionalTips = tru
       <View style={styles.privacy}>
         <Text style={styles.privacyTitle}>🔒 PRIVACY FIRST</Text>
         <Text style={styles.privacyText}>
-          IRONMIND only sees which app is open and how many minutes you spend in it. Never your messages, photos, passwords, or anything you type.
+          Everything stays on your phone. IRONMIND never reads your messages, snaps, photos, passwords, or anything you type.
         </Text>
       </View>
     </View>
