@@ -94,7 +94,7 @@ export const ShortVideoSetupModal: React.FC<Props> = ({ controller }) => {
       <SafeAreaView style={styles.root}>
         <View style={styles.topBar}>
           <View style={styles.pill}>
-            <Text style={styles.pillText}>OPTIONAL · 4 APPS</Text>
+            <Text style={styles.pillText}>SCROLL CHALLENGES · BIG 5</Text>
           </View>
           <TouchableOpacity style={styles.closeBtn} onPress={controller.closeGuide} activeOpacity={0.8}>
             <Text style={styles.closeText}>✕</Text>
@@ -102,23 +102,23 @@ export const ShortVideoSetupModal: React.FC<Props> = ({ controller }) => {
         </View>
 
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          <Text style={styles.title}>SCROLL-ONLY{'\n'}DETECTION.</Text>
+          <Text style={styles.title}>SCROLL-ONLY{'\n'}CHALLENGES.</Text>
           <Text style={styles.sub}>
-            Catches doomscrolling on Instagram Reels, TikTok, YouTube Shorts and Facebook Reels — while staying completely silent during normal use.
+            Catches doomscrolling on Instagram Reels, TikTok, YouTube Shorts, Facebook Reels & Snapchat Spotlight — completely silent during normal use.
           </Text>
 
           <View style={styles.rulesCard}>
             <View style={styles.ruleRow}>
               <Text style={styles.ruleGood}>✓</Text>
               <Text style={styles.ruleText}>
-                <Text style={styles.ruleBold}>Fires ONLY when scrolling</Text> — after 15+ seconds and 3+ swipes in a short-video feed.
+                <Text style={styles.ruleBold}>Fires ONLY when scrolling</Text> — after 15+ seconds and 3+ swipes in Reels, TikTok, Shorts, or Spotlight.
               </Text>
             </View>
             <View style={styles.ruleDivider} />
             <View style={styles.ruleRow}>
               <Text style={styles.ruleQuiet}>✕</Text>
               <Text style={styles.ruleText}>
-                <Text style={styles.ruleBold}>Silent for DMs & 1 shared video</Text> — messaging friends, reading comments, or watching a single reel never triggers it.
+                <Text style={styles.ruleBold}>Silent for DMs, Snaps & study videos</Text> — messaging friends, studying on YouTube, sending Snaps, or watching 1 shared reel never triggers it.
               </Text>
             </View>
           </View>
@@ -154,7 +154,7 @@ export const ShortVideoSetupModal: React.FC<Props> = ({ controller }) => {
           <View style={styles.privacyBox}>
             <Text style={styles.privacyTitle}>🔒 PRIVACY & ACCESSIBILITY DISCLOSURE</Text>
             <Text style={styles.privacyText}>
-              IRONMIND uses Android Accessibility solely to recognize short-video feeds (Instagram Reels, Facebook Reels, TikTok, YouTube Shorts) in your tracked apps. Screen labels and swipe activity stay on your phone. IRONMIND never reads messages, captions, passwords, or screenshots. Challenge wins/losses sync to your account. Optional — turn off anytime.
+              IRONMIND uses Android Accessibility solely to recognize short-video scrolling (Instagram Reels, TikTok, YouTube Shorts, Facebook Reels, Snapchat Spotlight) in your selected apps. Screen labels and swipe activity stay on your phone. IRONMIND never reads messages, snaps, captions, passwords, or screenshots. Only challenge wins/losses sync to your account. Turn off anytime.
             </Text>
           </View>
         </ScrollView>
@@ -171,7 +171,7 @@ export const ShortVideoSetupModal: React.FC<Props> = ({ controller }) => {
             ) : (
               <Text style={styles.primaryText}>
                 {settings.enabled
-                  ? 'AGREE & ENABLE FOR ALL 4 APPS'
+                  ? 'AGREE & ENABLE FOR ALL 5 APPS'
                   : alreadyConsented
                   ? 'OPEN ACCESSIBILITY SETTINGS →'
                   : 'AGREE & OPEN SETTINGS →'}

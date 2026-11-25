@@ -2,7 +2,10 @@ package com.anonymous.IRONMIND
 
 import kotlin.math.abs
 
-internal class ReelsChallenge(private val startedAt: Long) {
+internal class ReelsChallenge(
+    private val startedAt: Long,
+    private val exitWindowMs: Long = EXIT_WINDOW_MS
+) {
     enum class Screen { FEED, AWAY, UNKNOWN }
 
     sealed interface Outcome {
@@ -17,7 +20,7 @@ internal class ReelsChallenge(private val startedAt: Long) {
 
     fun observe(screen: Screen, now: Long, swipedInFeed: Boolean = false): Outcome? {
         val exit = leftAt
-        val deadline = if (exit == null) startedAt + EXIT_WINDOW_MS else exit + REENTRY_WINDOW_MS
+        val deadline = if (exit == null) startedAt + exitWindowMs else exit + REENTRY_WINDOW_MS
         val uncertain = uncertainSince
         if (screen == Screen.UNKNOWN) {
             if (uncertain == null) uncertainSince = now
@@ -37,7 +40,7 @@ internal class ReelsChallenge(private val startedAt: Long) {
                 leftAt = now
                 lastClearScreen = Screen.AWAY
             } else if (now >= deadline) {
-                return Outcome.Scored(won = false, elapsedMs = EXIT_WINDOW_MS)
+                return Outcome.Scored(won = false, elapsedMs = exitWindowMs)
             } else {
                 lastClearScreen = Screen.FEED
             }

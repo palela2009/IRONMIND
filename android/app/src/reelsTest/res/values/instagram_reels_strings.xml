@@ -1,4 +1,4 @@
 <resources>
     <string name="instagram_reels_service_title">IRONMIND — Scroll Detection</string>
-    <string name="instagram_reels_service_description">Optional scroll detection. In the apps you select, IRONMIND checks screen identifiers, navigation labels and swipes locally on this device to recognize Instagram Reels, Facebook Reels, TikTok feeds and YouTube Shorts. Message text, captions and screenshots are never read. Only challenge results sync.</string>
+    <string name="instagram_reels_service_description">Scroll-only anti-doomscroll detection. In the apps you select, IRONMIND checks screen identifiers, navigation labels and swipes locally on this device to recognize Instagram Reels, TikTok, YouTube Shorts, Facebook Reels and Snapchat Spotlight. Message text, captions and screenshots are never read. Only challenge results sync.</string>
 </resources>

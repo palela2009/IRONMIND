@@ -21,7 +21,7 @@ def enableMinifyInReleaseBuilds = (findProperty('android.enableMinifyInReleaseBu
 
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
-def includeReelsInRelease = System.getenv('IRONMIND_REELS_INTERNAL_TEST') == '1'
+def includeReelsInRelease = true
 
 android {
     ndkVersion rootProject.ext.ndkVersion

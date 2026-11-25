@@ -101,8 +101,8 @@ export function useInstagramReelsTest(uid: string | undefined, _showDuringSetup 
     if (!uid || !settings) return;
     if (settings.consented && settings.expandedConsented && settings.enabled) {
       appAlert(
-        'Scroll Detection is active',
-        'Challenges fire only when you actively scroll Instagram Reels, Facebook Reels, TikTok, or YouTube Shorts — never while messaging or watching a single shared video.',
+        'Scroll Challenges are active',
+        'Challenges fire ONLY when you actively scroll Instagram Reels, TikTok, YouTube Shorts, Facebook Reels, or Snapchat Spotlight — never during DMs, Snaps, studying on YouTube, or watching 1 shared video.',
         [
           { text: 'Keep on', style: 'cancel' },
           { text: 'Open Settings', onPress: () => void openSettingsOnly() },
@@ -137,7 +137,7 @@ export function useInstagramReelsTest(uid: string | undefined, _showDuringSetup 
     needsSetup: settings.consented && !settings.enabled,
     connected: Boolean(settings.connected ?? settings.enabled),
     countToday: Number(settings.countToday ?? 0),
-    maxPerDay: Number(settings.maxPerDay ?? 3),
+    maxPerDay: Number(settings.maxPerDay ?? 5),
     cooldownRemainingMs: Number(settings.cooldownRemainingMs ?? 0),
     settings,
   };

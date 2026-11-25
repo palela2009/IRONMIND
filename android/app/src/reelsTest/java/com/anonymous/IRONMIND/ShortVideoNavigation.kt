@@ -126,5 +126,20 @@ internal class ShortVideoNavigation private constructor(
             playerClasses = emptySet(),
             requiresDedicatedPager = true
         )
+
+        val snapchat = ShortVideoNavigation(
+            feedTabs = setOf("spotlight", "spotlight tab", "სპოტლაითი"),
+            awayTabs = setOf(
+                "map", "snap map", "chat", "chats", "camera", "stories", "discover", "memories", "profile", "friends", "search",
+                "რუკა", "ჩატი", "კამერა", "სთორები", "პროფილი", "მეგობრები", "ძებნა"
+            ),
+            feedTabIds = setOf("ngs_spotlight_icon_container", "hova_nav_spotlight_icon", "spotlight_tab", "spotlight_feed_tab"),
+            awayPanelIds = setOf(
+                "chat_input_text_field", "chat_message_list", "conversation_view", "camera_capture_button",
+                "camera_page", "memories_grid", "stories_list", "map_view", "comments_tray", "comment_input"
+            ),
+            playerIds = setOf("spotlight_view_pager", "spotlight_pager", "spotlight_feed_recycler_view", "spotlight_recycler_view"),
+            playerClasses = setOf("SpotlightViewPager")
+        )
     }
 }

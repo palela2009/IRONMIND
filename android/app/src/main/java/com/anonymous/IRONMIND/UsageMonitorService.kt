@@ -90,7 +90,9 @@ class UsageMonitorService : Service() {
         challengeWindowMs = (config.second * 1000).toLong()
         maxDailyChallenges = config.third.toInt()
 
-        restoreChallenge()
+        ChallengeStore.saveActive(this, null)
+        activeChallenge = null
+        pendingWin = null
         handler.removeCallbacks(pollRunnable)
         handler.post(pollRunnable)
 
@@ -283,71 +285,16 @@ class UsageMonitorService : Service() {
         val foreground = getForegroundPackage() ?: return
         lastKnownForeground = foreground
         if (BuildConfig.IRONMIND_REELS_TEST) reelsForegroundPackage = foreground
-        val now = System.currentTimeMillis()
-
-        pendingWin?.let { win ->
-            if (resumedSince(win.pkg, win.leftAt + 500)) {
-                emitChallengeResult(win.appName, REENTRY_MS / 1000.0, false, win.id, win.uid, win.startTime)
-                pendingWin = null
-                fireReentryNotification(win.appName)
-                return
-            }
-            if (now - win.leftAt >= REENTRY_MS) {
-                emitChallengeResult(win.appName, win.exactMs / 1000.0, true, win.id, win.uid, win.startTime)
-                pendingWin = null
-            } else {
-                return
-            }
-        }
-
-        activeChallenge?.let { challenge ->
-            val elapsedMs = now - challenge.startTime
-            if (foreground != challenge.pkg) {
-                val leftAt = leaveTimeAfter(challenge.pkg, challenge.startTime) ?: now
-                val exactMs = (leftAt - challenge.startTime).coerceAtLeast(0L)
-                if (exactMs < challenge.windowMs) {
-                    pendingWin = PendingWin(challenge.appName, challenge.pkg, exactMs, leftAt, challenge.id, challenge.uid, challenge.startTime)
-                    saveChallenge()
-                } else {
-                    emitChallengeResult(challenge.appName, exactMs / 1000.0, false, challenge.id, challenge.uid, challenge.startTime)
-                }
-                activeChallenge = null
-                return
-            }
-
-            if (elapsedMs > STUCK_CHALLENGE_MS) {
-                emitChallengeResult(challenge.appName, elapsedMs / 1000.0, false, challenge.id, challenge.uid, challenge.startTime)
-                activeChallenge = null
-            }
-            return
-        }
 
         if (BuildConfig.IRONMIND_REELS_TEST && reelsChallengeInProgress) return
         for ((appName, pkg) in monitoredPackages) {
             if (foreground == pkg) {
                 val limit = appLimits[appName] ?: 0
-                val used = if (limit > 0) minutesUsedToday(appName) else 0
-                val overBudget = limit > 0 && used >= limit
-
-                if (limit > 0 && !overBudget && used >= (limit * 8 / 10)) {
-                    maybeWarn(appName, limit - used)
-                }
-
-                if (usesShortVideoChallenges(pkg) && !overBudget) return
-
-                val inCooldown = lastChallengeTime > 0L && (now - lastChallengeTime) < cooldownMs
-                val allowed = overBudget || (!inCooldown && getFiredCountToday() < maxDailyChallenges)
-
-                if (allowed) {
-                    lastChallengedApp = appName
-                    lastChallengeTime = now
-                    getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit().putLong("lastChallengeTime", now).apply()
-                    val uid = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString("uid", "") ?: ""
-                    if (uid.isEmpty()) return
-                    activeChallenge = ActiveChallenge(appName, pkg, now, UUID.randomUUID().toString(), uid, challengeWindowMs)
-                    saveChallenge()
-                    fireChallengeNotification(appName, overBudget)
-                    if (!overBudget) incrementFiredCountToday()
+                if (limit > 0) {
+                    val used = minutesUsedToday(appName)
+                    if (used < limit && used >= (limit * 8 / 10)) {
+                        maybeWarn(appName, limit - used)
+                    }
                 }
                 return
             }
@@ -365,7 +312,7 @@ class UsageMonitorService : Service() {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val notification = NotificationCompat.Builder(this, CHALLENGE_CHANNEL)
             .setContentTitle("$appName — ${minutesLeft}m left")
-            .setContentText("You are close to your daily limit. Every open past it triggers a challenge.")
+            .setContentText("You are close to your daily budget for $appName.")
             .setSmallIcon(R.drawable.notification_icon)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)

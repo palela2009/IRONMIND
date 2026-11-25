@@ -1,6 +1,14 @@
-export const APPS_LIST = ['Instagram', 'YouTube', 'TikTok', 'Facebook', 'X (Twitter)', 'Reddit', 'Snapchat'];
+export const APPS_LIST = ['Instagram', 'TikTok', 'YouTube', 'Facebook', 'Snapchat'];
 
-export const SHORT_VIDEO_APPS = ['Instagram', 'TikTok', 'YouTube', 'Facebook'] as const;
+export const SHORT_VIDEO_APPS = ['Instagram', 'TikTok', 'YouTube', 'Facebook', 'Snapchat'] as const;
+
+export const FEED_LABEL_FOR_APP: Record<string, string> = {
+  Instagram: 'Reels',
+  TikTok: 'For You & Feed',
+  YouTube: 'Shorts',
+  Facebook: 'Reels',
+  Snapchat: 'Spotlight',
+};
 
 const APP_COLORS: Record<string, string> = {
   Instagram: '#C13584',

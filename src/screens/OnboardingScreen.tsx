@@ -8,7 +8,7 @@ import { API_BASE_URL } from '../config/api';
 import { authedFetch } from '../utils/authFetch';
 import { DifficultyLevel, DIFFICULTY_WINDOW_SECONDS } from '../constants/difficulty';
 import { DAILY_LIMIT_VALUES, DailyLimitLevel } from '../constants/dailyLimit';
-import { APPS_LIST } from '../constants/apps';
+import { APPS_LIST, FEED_LABEL_FOR_APP } from '../constants/apps';
 import { AppIcon } from '../components/AppIcon';
 import { useAuth } from '../context/AuthContext';
 import { syncAppMonitor } from '../hooks/useAppMonitor';
@@ -157,9 +157,9 @@ export const OnboardingScreen: React.FC<OnboardingProps> = ({ onComplete }) => {
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {step === 1 && (
           <>
-            <Text style={styles.title}>WHICH APPS{'\n'}STEAL YOUR TIME?</Text>
+            <Text style={styles.title}>WHICH FEEDS{'\n'}STEAL YOUR TIME?</Text>
             <Text style={styles.sub}>
-              Pick the apps you want IRONMIND to challenge. You can add or remove apps anytime in the Apps tab.
+              IRONMIND only alerts you when you start scrolling short videos — never during DMs, Snaps, or studying on YouTube.
             </Text>
             <View style={styles.appGrid}>
               {APPS_LIST.map((app) => {
@@ -178,6 +178,9 @@ export const OnboardingScreen: React.FC<OnboardingProps> = ({ onComplete }) => {
                       </View>
                     </View>
                     <Text style={[styles.appTileName, on && styles.optionLabelOn]} numberOfLines={1}>{app}</Text>
+                    {FEED_LABEL_FOR_APP[app] && (
+                      <Text style={styles.appTileFeed} numberOfLines={1}>{FEED_LABEL_FOR_APP[app]}</Text>
+                    )}
                   </TouchableOpacity>
                 );
               })}
@@ -263,9 +266,9 @@ export const OnboardingScreen: React.FC<OnboardingProps> = ({ onComplete }) => {
                     <Text style={styles.previewBadgeText}>IM</Text>
                   </View>
                   <View style={styles.previewBody}>
-                    <Text style={styles.previewTitle}>IRONMIND CHALLENGE</Text>
+                    <Text style={styles.previewTitle}>STILL SCROLLING {FEED_LABEL_FOR_APP[selectedApps[0] ?? 'Instagram']?.toUpperCase() ?? 'REELS'}?</Text>
                     <Text style={styles.previewText}>
-                      Leave {selectedApps[0] ?? 'Instagram'} within 10s · Remember why: {pickedGoal.alertText}
+                      Leave within 10s · Goal: {pickedGoal.alertText}
                     </Text>
                   </View>
                 </View>
@@ -306,9 +309,9 @@ export const OnboardingScreen: React.FC<OnboardingProps> = ({ onComplete }) => {
             })}
 
             <View style={styles.smartNote}>
-              <Text style={styles.smartNoteTitle}>STUDY & TEXT FREELY</Text>
+              <Text style={styles.smartNoteTitle}>100% SCROLL-ONLY PROTECTION</Text>
               <Text style={styles.smartNoteBody}>
-                Watching a study lecture on YouTube or answering DMs? Enable <Text style={styles.smartNoteStrong}>Scroll-Only Detection</Text> in the Apps tab so alerts only fire when you're actively scrolling Reels, TikTok, or Shorts.
+                Study on YouTube, answer DMs, reply to Snaps, or watch 1 reel a friend sent — <Text style={styles.smartNoteStrong}>IRONMIND stays completely silent</Text> until your thumb starts doomscrolling Reels, TikTok, Shorts, or Spotlight.
               </Text>
             </View>
           </>
@@ -318,7 +321,7 @@ export const OnboardingScreen: React.FC<OnboardingProps> = ({ onComplete }) => {
           <>
             <Text style={styles.title}>TWO QUICK{'\n'}PERMISSIONS.</Text>
             <Text style={styles.sub}>
-              Just two switches — takes 10 seconds. That powers challenges, screen time, and automatic background duel sync.
+              Just two switches to enter the app — powers your Screen Time, Leaderboard, and automatic Duel sync. Right on Home, tap Activate Scroll Challenges to turn on doomscroll detection.
             </Text>
             <PermissionSteps perms={perms} />
           </>
@@ -386,6 +389,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   appTileOn: { borderColor: c.accent, backgroundColor: c.accentMuted },
   appTileTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   appTileName: { color: c.textSecondary, fontSize: 14, fontWeight: '800' },
+  appTileFeed: { color: c.textTertiary, fontSize: 11, fontWeight: '700', marginTop: 2 },
 
   optionRow: {
     flexDirection: 'row',

@@ -11,7 +11,8 @@ internal enum class ShortVideoTarget(
     INSTAGRAM("Instagram", setOf("com.instagram.android"), "instagram_reels", "Reels"),
     FACEBOOK("Facebook", setOf("com.facebook.katana"), "facebook_reels", "Reels"),
     TIKTOK("TikTok", setOf("com.zhiliaoapp.musically", "com.ss.android.ugc.trill"), "tiktok_feed", "the TikTok feed"),
-    YOUTUBE("YouTube", setOf("com.google.android.youtube"), "youtube_shorts", "Shorts");
+    YOUTUBE("YouTube", setOf("com.google.android.youtube"), "youtube_shorts", "Shorts"),
+    SNAPCHAT("Snapchat", setOf("com.snapchat.android"), "snapchat_spotlight", "Spotlight");
 
     val packageId: String get() = packageIds.first()
 

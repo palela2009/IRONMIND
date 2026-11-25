@@ -216,6 +216,7 @@ class InstagramReelsService : AccessibilityService() {
         ShortVideoTarget.FACEBOOK -> ShortVideoNavigation.facebook
         ShortVideoTarget.TIKTOK -> ShortVideoNavigation.tiktok
         ShortVideoTarget.YOUTUBE -> ShortVideoNavigation.youtube
+        ShortVideoTarget.SNAPCHAT -> ShortVideoNavigation.snapchat
     }
 
     private fun AccessibilityNodeInfo.hasVisibleNode(ids: List<String>): Boolean =
@@ -254,12 +255,13 @@ class InstagramReelsService : AccessibilityService() {
         if (ChallengeStore.active(this) != null) return false
         val prefs = getSharedPreferences("ironmind_reels_test", MODE_PRIVATE)
         val day = TrustedClock.dayKey(this)
-        if (firedCount(day) >= monitorPrefs.getFloat("limit", 5f).toInt()) return false
+        val dailyLimit = monitorPrefs.getFloat("limit", 5f).toInt().coerceIn(1, 20)
+        if (firedCount(day) >= dailyLimit) return false
         val today = prefs.getString("day", null) == day
         val count = if (today) prefs.getInt("reminders", 0) else 0
         val sentAt = prefs.getLong("sentAt", 0)
         val timestamp = TrustedClock.now(this)
-        if (count >= 3 || (sentAt != 0L && timestamp - sentAt < 600_000L)) return false
+        if (count >= dailyLimit || (sentAt != 0L && timestamp - sentAt < SCROLL_COOLDOWN_MS)) return false
         if (monitoringAccount(target) != uid) return false
 
         val instagram = target == ShortVideoTarget.INSTAGRAM
@@ -272,7 +274,8 @@ class InstagramReelsService : AccessibilityService() {
         if ((manager.getNotificationChannel(channel)?.importance ?: 0) < NotificationManager.IMPORTANCE_HIGH) return false
         val index = Math.floorMod(prefs.getInt("nextPrompt", 0), PROMPTS.size)
         val (title, question) = PROMPTS[index]
-        val seconds = ReelsChallenge.EXIT_WINDOW_MS / 1000
+        val windowMs = (monitorPrefs.getFloat("window", 10f) * 1000f).toLong().coerceIn(3_000L, ReelsChallenge.EXIT_WINDOW_MS)
+        val seconds = windowMs / 1000
         val goalText = monitorPrefs.getString("userGoal", null)?.takeIf { it.isNotBlank() }
         val instruction = if (goalText != null) {
             "Leave ${target.feedName} within $seconds seconds · Goal: $goalText"
@@ -283,6 +286,7 @@ class InstagramReelsService : AccessibilityService() {
             when (target) {
                 ShortVideoTarget.TIKTOK -> it.replace("Reels", "TikTok").replace("Reel", "video")
                 ShortVideoTarget.YOUTUBE -> it.replace("Reels", "Shorts").replace("Reel", "Short")
+                ShortVideoTarget.SNAPCHAT -> it.replace("Reels", "Spotlight").replace("Reel", "Spotlight")
                 else -> it
             }
         }
@@ -291,13 +295,13 @@ class InstagramReelsService : AccessibilityService() {
             .setContentTitle(prompt)
             .setContentText(instruction)
             .setStyle(NotificationCompat.BigTextStyle().bigText("$question $instruction"))
-            .setWhen(System.currentTimeMillis() + ReelsChallenge.EXIT_WINDOW_MS)
+            .setWhen(System.currentTimeMillis() + windowMs)
             .setUsesChronometer(true)
             .setChronometerCountDown(true)
-            .setTimeoutAfter(ReelsChallenge.EXIT_WINDOW_MS)
+            .setTimeoutAfter(windowMs)
             .build()
         manager.notify(NOTIFICATION_ID, notification)
-        attempt = Attempt(uid, target, UUID.randomUUID().toString(), timestamp, day, ReelsChallenge(now))
+        attempt = Attempt(uid, target, UUID.randomUUID().toString(), timestamp, day, ReelsChallenge(now, windowMs))
         UsageMonitorService.reelsChallengeInProgress = true
         prefs.edit()
             .putString("day", day)
@@ -406,6 +410,7 @@ class InstagramReelsService : AccessibilityService() {
         const val SHORT_VIDEO_CHANNEL = "ironmind_short_video_challenges"
         val EVENT_FILTER_KEYS = setOf("uid", "apps", ShortVideoTarget.INSTAGRAM_CONSENT_UID, ShortVideoTarget.EXPANDED_CONSENT_UID)
         const val NOTIFICATION_ID = 1004
+        const val SCROLL_COOLDOWN_MS = 300_000L
         const val TAG = "IronmindReels"
         val SAFE_ID = Regex("[a-zA-Z0-9_.]+:id/[a-zA-Z0-9_]{1,100}")
         val TAB_IDS = listOf("clips_tab", "clips_home_tab", "reels_tab").map { "$INSTAGRAM:id/$it" }

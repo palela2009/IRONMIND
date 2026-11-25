@@ -72,7 +72,8 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
             val countToday = if (today) reelsPrefs.getInt("reminders", 0) else 0
             val sentAt = reelsPrefs.getLong("sentAt", 0L)
             val now = TrustedClock.now(reactContext)
-            val cooldownMs = if (sentAt > 0L) maxOf(0L, 600_000L - (now - sentAt)) else 0L
+            val cooldownMs = if (sentAt > 0L) maxOf(0L, 300_000L - (now - sentAt)) else 0L
+            val maxPerDay = prefs.getFloat("limit", 5f).toInt().coerceIn(1, 20)
 
             promise.resolve(Arguments.createMap().apply {
                 putBoolean("consented", ShortVideoTarget.INSTAGRAM.hasConsent(prefs, uid))
@@ -80,7 +81,7 @@ class UsageMonitorModule(private val reactContext: ReactApplicationContext) :
                 putBoolean("enabled", enabled)
                 putBoolean("connected", ShortVideoTarget.serviceConnected)
                 putInt("countToday", countToday)
-                putInt("maxPerDay", 3)
+                putInt("maxPerDay", maxPerDay)
                 putDouble("cooldownRemainingMs", cooldownMs.toDouble())
             })
         } catch (error: Exception) {

@@ -6,7 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ChallengeItem } from '../types/training';
 import { useScreenTime, formatMinutes } from '../hooks/useScreenTime';
 import { syncAppMonitor } from '../hooks/useAppMonitor';
-import { APPS_LIST, SHORT_VIDEO_APPS, colorForApp } from '../constants/apps';
+import { APPS_LIST, SHORT_VIDEO_APPS, FEED_LABEL_FOR_APP, colorForApp } from '../constants/apps';
 import { AppIcon } from '../components/AppIcon';
 import { API_BASE_URL } from '../config/api';
 import { authedFetch } from '../utils/authFetch';
@@ -43,7 +43,7 @@ export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged, re
     if (!raw) return;
     try {
       const data = JSON.parse(raw);
-      setMonitoredApps(Array.isArray(data.targetApps) ? data.targetApps : []);
+      setMonitoredApps(Array.isArray(data.targetApps) ? data.targetApps.filter((a: string) => APPS_LIST.includes(a)) : []);
       const limits: Record<string, number> = {};
       for (const entry of data.appLimits ?? []) {
         if (entry?.app && Number(entry.minutes) > 0) limits[entry.app] = entry.minutes;
@@ -183,26 +183,23 @@ export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged, re
         <TouchableOpacity
           style={[
             styles.scrollCard,
-            reelsTest.isActive && styles.scrollCardActive,
-            reelsTest.needsSetup && styles.scrollCardWarn,
+            reelsTest.isActive ? styles.scrollCardActive : styles.scrollCardHighlight,
           ]}
           onPress={reelsTest.open}
           activeOpacity={0.85}
         >
           <View style={styles.scrollCardHead}>
-            <Text style={styles.scrollCardTitle}>SCROLL-ONLY DETECTION</Text>
+            <Text style={styles.scrollCardTitle}>SCROLL CHALLENGES · BIG 5</Text>
             <View
               style={[
                 styles.scrollBadge,
-                reelsTest.isActive && styles.scrollBadgeActive,
-                reelsTest.needsSetup && styles.scrollBadgeWarn,
+                reelsTest.isActive ? styles.scrollBadgeActive : styles.scrollBadgeWarn,
               ]}
             >
               <Text
                 style={[
                   styles.scrollBadgeText,
-                  reelsTest.isActive && styles.scrollBadgeTextActive,
-                  reelsTest.needsSetup && styles.scrollBadgeTextWarn,
+                  reelsTest.isActive ? styles.scrollBadgeTextActive : styles.scrollBadgeTextWarn,
                 ]}
               >
                 {reelsTest.status}
@@ -210,14 +207,14 @@ export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged, re
             </View>
           </View>
           <Text style={styles.scrollCardDesc}>
-            Challenges fire ONLY when scrolling Instagram Reels, TikTok, YouTube Shorts, or Facebook Reels — never while texting or watching 1 shared video.
+            Challenges fire ONLY when scrolling Instagram Reels, TikTok, YouTube Shorts, Facebook Reels, or Snapchat Spotlight — silent during DMs, Snaps, or studying.
           </Text>
           <Text style={styles.scrollCardAction}>
             {reelsTest.isActive
-              ? `${reelsTest.countToday}/${reelsTest.maxPerDay} short-video alerts today · Tap to manage`
+              ? `${reelsTest.countToday}/${reelsTest.maxPerDay} scroll challenges today · Tap to manage`
               : reelsTest.needsSetup
               ? 'TAP TO FINISH 1-STEP SETUP GUIDE →'
-              : 'TURN ON WITH STEP-BY-STEP GUIDE →'}
+              : 'ACTIVATE WITH STEP-BY-STEP GUIDE →'}
           </Text>
         </TouchableOpacity>
       )}
@@ -289,9 +286,9 @@ export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged, re
                 <View style={styles.appBody}>
                   <View style={styles.appNameRow}>
                     <Text style={styles.appName}>{app}</Text>
-                    {scrollModeActive && (
+                    {FEED_LABEL_FOR_APP[app] && (
                       <View style={styles.scrollChip}>
-                        <Text style={styles.scrollChipText}>SCROLL-ONLY</Text>
+                        <Text style={styles.scrollChipText}>{FEED_LABEL_FOR_APP[app].toUpperCase()}</Text>
                       </View>
                     )}
                   </View>
@@ -449,6 +446,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     borderColor: c.border,
   },
   scrollCardActive: { borderColor: c.accentDim },
+  scrollCardHighlight: { borderColor: c.accent, backgroundColor: c.accentMuted },
   scrollCardWarn: { borderColor: '#FFA23B' },
   scrollCardHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   scrollCardTitle: { color: c.textPrimary, fontSize: 12, fontWeight: '900', letterSpacing: 0.7 },

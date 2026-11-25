@@ -57,6 +57,7 @@ const kindBadgeFor = (kind?: ChallengeItem['challengeKind']): string | null => {
   if (kind === 'facebook_reels') return 'FB REELS';
   if (kind === 'tiktok_feed') return 'TIKTOK';
   if (kind === 'youtube_shorts') return 'SHORTS';
+  if (kind === 'snapchat_spotlight') return 'SPOTLIGHT';
   return null;
 };
 
@@ -331,22 +332,30 @@ export const HomeScreen: React.FC<HomeProps> = ({
               </TouchableOpacity>
             )}
 
-            {reelsTest && hasShortVideoTracked && (reelsTest.isActive || reelsTest.needsSetup) && (
-              <TouchableOpacity
-                style={[styles.scrollStrip, reelsTest.needsSetup && styles.scrollStripWarn]}
-                onPress={reelsTest.open}
-                activeOpacity={0.85}
-              >
-                <View style={[styles.scrollDot, reelsTest.needsSetup && styles.scrollDotWarn]} />
-                <Text style={styles.scrollStripText} numberOfLines={1}>
-                  {reelsTest.needsSetup
-                    ? 'Finish Scroll Detection setup for Reels/TikTok/Shorts'
-                    : `Scroll Detection · ${reelsTest.countToday}/${reelsTest.maxPerDay} today${cooldownMins > 0 ? ` · ${cooldownMins}m cooldown` : ' · Ready'}`}
-                </Text>
-                <Text style={[styles.scrollStripCta, reelsTest.needsSetup && styles.scrollStripCtaWarn]}>
-                  {reelsTest.needsSetup ? 'SETUP →' : 'LIVE'}
-                </Text>
-              </TouchableOpacity>
+            {reelsTest && hasShortVideoTracked && (
+              reelsTest.isActive ? (
+                <TouchableOpacity style={styles.scrollStrip} onPress={reelsTest.open} activeOpacity={0.85}>
+                  <View style={styles.scrollDot} />
+                  <Text style={styles.scrollStripText} numberOfLines={1}>
+                    {`Scroll Challenges · ${reelsTest.countToday}/${reelsTest.maxPerDay} today${cooldownMins > 0 ? ` · ${cooldownMins}m cooldown` : ' · Ready'}`}
+                  </Text>
+                  <Text style={styles.scrollStripCta}>LIVE</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity style={styles.activateScrollCard} onPress={reelsTest.open} activeOpacity={0.85}>
+                  <View style={styles.activateScrollBody}>
+                    <Text style={styles.activateScrollKicker}>
+                      {reelsTest.needsSetup ? 'FINISH 1-STEP SETUP' : 'ACTIVATE SCROLL CHALLENGES'}
+                    </Text>
+                    <Text style={styles.activateScrollSub}>
+                      Catches doomscrolling on Reels, TikTok, Shorts & Spotlight — silent during DMs & YouTube study.
+                    </Text>
+                  </View>
+                  <View style={styles.activateScrollBtn}>
+                    <Text style={styles.activateScrollBtnText}>TURN ON →</Text>
+                  </View>
+                </TouchableOpacity>
+              )
             )}
 
             <View style={styles.halfRow}>
@@ -428,8 +437,8 @@ export const HomeScreen: React.FC<HomeProps> = ({
         )}
         ListEmptyComponent={(
           <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>READY FOR YOUR FIRST CHALLENGE</Text>
-            <Text style={styles.emptySub}>Open any tracked app and exit before the timer expires to earn coins and start your streak.</Text>
+            <Text style={styles.emptyTitle}>SCROLL-ONLY PROTECTION READY</Text>
+            <Text style={styles.emptySub}>Challenges only fire when you scroll Reels, TikTok, Shorts, or Spotlight — DMs, Snaps, and regular videos stay untouched.</Text>
             <TouchableOpacity style={styles.emptyBtn} onPress={() => onNavigate('APPS')} activeOpacity={0.85}>
               <Text style={styles.emptyBtnText}>MANAGE APPS →</Text>
             </TouchableOpacity>
@@ -611,6 +620,23 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   scrollStripText: { flex: 1, color: c.textSecondary, fontSize: 12, fontWeight: '700' },
   scrollStripCta: { color: c.accent, fontSize: 10, fontWeight: '900', letterSpacing: 0.6 },
   scrollStripCtaWarn: { color: '#FFA23B' },
+  activateScrollCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+    padding: spacing.lg,
+    borderRadius: radius.md,
+    backgroundColor: c.accentMuted,
+    borderWidth: 1,
+    borderColor: c.accent,
+  },
+  activateScrollBody: { flex: 1 },
+  activateScrollKicker: { color: c.accent, fontSize: 11, fontWeight: '900', letterSpacing: 0.8 },
+  activateScrollSub: { color: c.textSecondary, fontSize: 12, lineHeight: 17, marginTop: 3 },
+  activateScrollBtn: { backgroundColor: c.accent, borderRadius: radius.sm, paddingHorizontal: 12, paddingVertical: 9 },
+  activateScrollBtnText: { color: c.accentContrast, fontSize: 11, fontWeight: '900', letterSpacing: 0.5 },
 
   halfRow: { flexDirection: 'row', gap: spacing.sm, marginHorizontal: spacing.lg, marginBottom: spacing.sm },
   halfCard: {

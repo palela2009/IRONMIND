@@ -594,8 +594,8 @@ export const ProfileScreen: React.FC<ProfileProps> = ({
       {reelsTest && (
         <TouchableOpacity style={styles.settingRow} onPress={reelsTest.open} accessibilityRole="button">
           <View style={styles.settingCol}>
-            <Text style={styles.settingLabel}>SCROLL-ONLY DETECTION</Text>
-            <Text style={styles.pauseSub}>Only challenges when scrolling Reels, TikTok or Shorts</Text>
+            <Text style={styles.settingLabel}>SCROLL CHALLENGES</Text>
+            <Text style={styles.pauseSub}>Instagram Reels, TikTok, Shorts, FB Reels & Spotlight</Text>
           </View>
           <Text style={[styles.settingStatus, reelsTest.isActive && styles.settingStatusOn]}>
             {reelsTest.status} ›
