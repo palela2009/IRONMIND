@@ -16,9 +16,11 @@ import android.os.SystemClock
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 import androidx.core.app.NotificationCompat
 import com.facebook.react.ReactApplication
 import com.facebook.react.modules.core.DeviceEventManagerModule
+import java.util.Locale
 import java.util.UUID
 import org.json.JSONObject
 
@@ -44,6 +46,8 @@ class InstagramReelsService : AccessibilityService() {
     private var feedTarget: ShortVideoTarget? = null
     private var feedWindow = -1
     private var lastFeedConfirmedAt = 0L
+    private var lastVideoHash: Int? = null
+    private var lastSignatureScanAt = 0L
     private var unknownFeedSince: Long? = null
     private var lastKnownSurface = Surface.UNKNOWN
     private var lastKnownAt = 0L
@@ -57,16 +61,20 @@ class InstagramReelsService : AccessibilityService() {
             reset()
             return@Runnable
         }
-        val root = rootInActiveWindow
+        val root = activeAppRoot(target)
         val surface = classifySurface(root, target, now)
         val transientUnknown = surface == Surface.UNKNOWN &&
             root?.packageName?.toString() in target.packageIds &&
             now - lastFeedConfirmedAt <= 2_500L
-        if ((surface != Surface.REELS && !transientUnknown) || (surface == Surface.REELS && root?.windowId != feedWindow)) {
+        if (surface != Surface.REELS && !transientUnknown) {
             updateAttempt(uid, surface, now)
             clearFeed()
         } else {
-            val scroll = session.settleScroll(now)
+            val nav = target.navigation()
+            val newHash = if (root != null && nav != null) nav.videoIdentityHash(root) else null
+            val contentChanged = newHash != null && lastVideoHash != null && newHash != lastVideoHash
+            if (newHash != null) lastVideoHash = newHash
+            val scroll = session.settleScroll(now, contentChanged)
             val wasInChallenge = attempt != null
             updateAttempt(uid, Surface.REELS, now, scroll.advanced)
             if (!wasInChallenge && scroll.shouldRemind && startIfAllowed(uid, target, now)) {
@@ -86,9 +94,9 @@ class InstagramReelsService : AccessibilityService() {
             }
             val lockedOrOff = getSystemService(KeyguardManager::class.java).isDeviceLocked ||
                 !getSystemService(PowerManager::class.java).isInteractive
-            val surface = if (lockedOrOff) Surface.AWAY else classifySurface(rootInActiveWindow, target, now)
+            val surface = if (lockedOrOff) Surface.AWAY else classifySurface(activeAppRoot(target), target, now)
             updateAttempt(uid, surface, now)
-            if (surface != Surface.REELS) clearFeed()
+            if (surface != Surface.REELS && surface != Surface.UNKNOWN) clearFeed()
             if (attempt != null) handler.postDelayed(this, 300L)
         }
     }
@@ -108,6 +116,36 @@ class InstagramReelsService : AccessibilityService() {
         if (feedTarget?.let { it !in watched } == true) clearFeed()
     }
 
+    private fun activeAppRoot(target: ShortVideoTarget): AccessibilityNodeInfo? {
+        val direct = rootInActiveWindow
+        val directPkg = direct?.packageName?.toString()
+        if (direct != null && directPkg != null && !isSystemOverlay(directPkg)) {
+            return direct
+        }
+        try {
+            val appWindows = windows.orEmpty()
+                .filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
+                .sortedByDescending { it.layer }
+            val focused = appWindows.firstOrNull { it.isFocused || it.isActive }?.root
+            if (focused != null && focused.packageName?.toString()?.let { !isSystemOverlay(it) } == true) {
+                return focused
+            }
+            val targetWin = appWindows.firstOrNull { win ->
+                val p = win.root?.packageName?.toString()
+                p != null && p in target.packageIds
+            }?.root
+            if (targetWin != null) return targetWin
+            val top = appWindows.firstOrNull()?.root
+            if (top != null && top.packageName?.toString()?.let { !isSystemOverlay(it) } == true) {
+                return top
+            }
+        } catch (_: Exception) {}
+        return direct
+    }
+
+    private fun isSystemOverlay(pkg: String): Boolean =
+        pkg == "com.android.systemui" || pkg.contains("inputmethod") || pkg.contains("keyboard")
+
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         val target = ShortVideoTarget.fromPackage(event.packageName?.toString()) ?: return
         if (attempt?.target?.let { it != target } == true) return
@@ -118,7 +156,7 @@ class InstagramReelsService : AccessibilityService() {
         }
 
         val now = SystemClock.elapsedRealtime()
-        val root = rootInActiveWindow
+        val root = activeAppRoot(target)
         val surface = classifySurface(root, target, now)
         if (surface != Surface.REELS) {
             updateAttempt(uid, surface, now)
@@ -133,15 +171,36 @@ class InstagramReelsService : AccessibilityService() {
         }
         unknownFeedSince = null
         lastFeedConfirmedAt = now
-        if (root?.windowId != event.windowId) return
-        if (feedWindow != event.windowId || feedTarget != target) {
+        val rootWindowId = root?.windowId ?: event.windowId
+        if (feedWindow != rootWindowId || feedTarget != target) {
             clearFeed()
-            feedWindow = event.windowId
+            feedWindow = rootWindowId
             feedTarget = target
             lastFeedConfirmedAt = now
         }
         session.observeFeed(now)
-        if (event.eventType != AccessibilityEvent.TYPE_VIEW_SCROLLED) return
+
+        if (event.eventType != AccessibilityEvent.TYPE_VIEW_SCROLLED) {
+            val nav = target.navigation()
+            if (nav != null && root != null && now - lastSignatureScanAt >= 650L) {
+                lastSignatureScanAt = now
+                val currentHash = nav.videoIdentityHash(root)
+                if (currentHash != null) {
+                    if (lastVideoHash == null) {
+                        lastVideoHash = currentHash
+                    } else if (currentHash != lastVideoHash) {
+                        lastVideoHash = currentHash
+                        val outcome = session.observeContentAdvance(now)
+                        val wasInChallenge = attempt != null
+                        updateAttempt(uid, surface, now, outcome.advanced)
+                        if (!wasInChallenge && outcome.shouldRemind && startIfAllowed(uid, target, now)) {
+                            session.markReminded()
+                        }
+                    }
+                }
+            }
+            return
+        }
 
         val source = event.source
         val deltaX = if (Build.VERSION.SDK_INT >= 28) event.scrollDeltaX else -1
@@ -154,13 +213,13 @@ class InstagramReelsService : AccessibilityService() {
             Rect().also(pager::getBoundsInScreen).height()
         } else {
             val h = if (source == null) {
-                val fallback = if (vertical || event.fromIndex >= 0) Rect().also(root::getBoundsInScreen).height().takeIf { it > 0 } else null
+                val fallback = if (root != null) Rect().also(root::getBoundsInScreen).height().takeIf { it > 0 } else null
                 traceScroll(target, event, fallback != null)
                 fallback
             } else {
                 val sourcePkg = source.packageName?.toString()
                 if (sourcePkg == null || sourcePkg !in target.packageIds) return
-                val found = target.navigation()?.pagerHeight(source, root)
+                val found = if (root != null) target.navigation()?.pagerHeight(source, root) else null
                 traceScroll(target, event, found != null)
                 found
             }
@@ -172,7 +231,10 @@ class InstagramReelsService : AccessibilityService() {
         }
         if (deltaX != -1 && deltaX != 0 && !vertical) return
         val offset = event.scrollY.takeIf { it >= 0 && (event.maxScrollY > 0 || it > 0) }
-        if (!session.queueScroll(event.fromIndex, if (vertical) deltaY else 0, offset, height)) return
+        val page = event.fromIndex.takeIf { it >= 0 } ?: event.toIndex
+        if (!session.queueScroll(page, if (vertical) deltaY else 0, offset, height)) {
+            session.markScrolled()
+        }
         handler.removeCallbacks(settlePage)
         handler.postDelayed(settlePage, 350L)
     }
@@ -186,17 +248,17 @@ class InstagramReelsService : AccessibilityService() {
 
     private fun classifySurface(root: AccessibilityNodeInfo?, target: ShortVideoTarget, now: Long): Surface {
         val pkg = root?.packageName?.toString()
-        if (pkg == null) {
+        if (pkg == null || isSystemOverlay(pkg)) {
             val fallback = UsageMonitorService.reelsForegroundPackage
-            if (fallback != null && fallback !in target.packageIds && fallback != "com.android.systemui") {
+            if (fallback != null && fallback !in target.packageIds && !isSystemOverlay(fallback)) {
                 return Surface.AWAY
+            }
+            if (attempt?.target == target && fallback != null && fallback in target.packageIds && now - lastFeedConfirmedAt <= 15_000L) {
+                return Surface.REELS
             }
             return Surface.UNKNOWN
         }
         if (pkg !in target.packageIds) {
-            if (pkg == "com.android.systemui" || pkg.contains("inputmethod") || pkg.contains("keyboard")) {
-                return Surface.UNKNOWN
-            }
             return Surface.AWAY
         }
         target.navigation()?.let { navigation ->
@@ -323,7 +385,7 @@ class InstagramReelsService : AccessibilityService() {
             .setTimeoutAfter(windowMs)
             .build()
         manager.notify(NOTIFICATION_ID, notification)
-        attempt = Attempt(uid, target, UUID.randomUUID().toString(), timestamp, day, ReelsChallenge(now, windowMs))
+        attempt = Attempt(uid, target, UUID.randomUUID().toString(), timestamp, day, ReelsChallenge(now, windowMs, REENTRY_CONFIRM_MS))
         UsageMonitorService.reelsChallengeInProgress = true
         prefs.edit()
             .putString("day", day)
@@ -362,12 +424,13 @@ class InstagramReelsService : AccessibilityService() {
     }
 
     private fun recordOutcome(current: Attempt, outcome: ReelsChallenge.Outcome.Scored) {
+        val elapsedSec = outcome.elapsedMs / 1000.0
         val result = JSONObject()
             .put("id", current.id)
             .put("uid", current.uid)
             .put("targetApp", current.target.appName)
             .put("challengeKind", current.target.challengeKind)
-            .put("elapsedTime", outcome.elapsedMs / 1000.0)
+            .put("elapsedTime", elapsedSec)
             .put("wasSuccessful", outcome.won)
             .put("timestamp", current.timestamp)
         ChallengeStore.finish(this, result, clearActive = false)
@@ -377,10 +440,41 @@ class InstagramReelsService : AccessibilityService() {
                 .putInt("count", firedCount(current.day) + 1)
                 .apply()
         }
+        postOutcomeNotification(current.target, outcome.won, elapsedSec)
         val reactContext = (applicationContext as? ReactApplication)?.reactHost?.currentReactContext
         reactContext?.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
             ?.emit("IronmindChallengeResult", null)
         Log.i(TAG, if (outcome.won) "${current.target.appName} challenge won" else "${current.target.appName} challenge missed")
+    }
+
+    private fun postOutcomeNotification(target: ShortVideoTarget, won: Boolean, elapsedSec: Double) {
+        try {
+            val manager = getSystemService(NotificationManager::class.java)
+            if (!manager.areNotificationsEnabled()) return
+            manager.createNotificationChannel(NotificationChannel(
+                RESULT_CHANNEL,
+                "Challenge results",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ))
+            val title = if (won) {
+                "✓ ${target.appName} challenge won (${String.format(Locale.US, "%.1f", elapsedSec)}s)"
+            } else {
+                "${target.appName} challenge missed"
+            }
+            val body = if (won) {
+                "Streak extended · XP & coins added."
+            } else {
+                "Open IRONMIND to check your streak shield."
+            }
+            val notification = NotificationCompat.Builder(this, RESULT_CHANNEL)
+                .setSmallIcon(R.drawable.notification_icon)
+                .setContentTitle(title)
+                .setContentText(body)
+                .setAutoCancel(true)
+                .setTimeoutAfter(8_000L)
+                .build()
+            manager.notify(RESULT_NOTIFICATION_ID, notification)
+        } catch (_: Exception) {}
     }
 
     private fun firedCount(day: String): Int {
@@ -408,6 +502,7 @@ class InstagramReelsService : AccessibilityService() {
         handler.removeCallbacks(settlePage)
         feedTarget = null
         feedWindow = -1
+        lastVideoHash = null
         unknownFeedSince = null
         session.leaveFeed()
     }
@@ -431,8 +526,11 @@ class InstagramReelsService : AccessibilityService() {
         const val INSTAGRAM = "com.instagram.android"
         const val CHANNEL = "ironmind_instagram_reels_challenges"
         const val SHORT_VIDEO_CHANNEL = "ironmind_short_video_challenges"
+        const val RESULT_CHANNEL = "ironmind_challenge_results"
         val EVENT_FILTER_KEYS = setOf("uid", "apps", ShortVideoTarget.INSTAGRAM_CONSENT_UID, ShortVideoTarget.EXPANDED_CONSENT_UID)
         const val NOTIFICATION_ID = 1004
+        const val RESULT_NOTIFICATION_ID = 1005
+        const val REENTRY_CONFIRM_MS = 10_000L
         const val SCROLL_COOLDOWN_MS = 300_000L
         const val TAG = "IronmindReels"
         val SAFE_ID = Regex("[a-zA-Z0-9_.]+:id/[a-zA-Z0-9_]{1,100}")

@@ -12,7 +12,9 @@ internal class ReelsReminderSession {
     private var pendingOffset: Int? = null
     private var pendingDistance = 0L
     private var pendingViewportHeight = 0
+    private var pendingScrollHint = false
     private var pageChanges = 0
+    private var lastAdvanceAt = 0L
     private var reminded = false
 
     fun observeFeed(now: Long) {
@@ -25,6 +27,7 @@ internal class ReelsReminderSession {
         previousOffset = null
         clearPendingScroll()
         pageChanges = 0
+        lastAdvanceAt = 0L
         reminded = false
     }
 
@@ -34,10 +37,15 @@ internal class ReelsReminderSession {
         if (offset != null) pendingOffset = offset
         pendingDistance += verticalDelta
         if (viewportHeight > 0) pendingViewportHeight = viewportHeight
+        pendingScrollHint = true
         return true
     }
 
-    fun settleScroll(now: Long): ScrollOutcome {
+    fun markScrolled() {
+        pendingScrollHint = true
+    }
+
+    fun settleScroll(now: Long, contentChanged: Boolean = false): ScrollOutcome {
         observeFeed(now)
         val page = pendingPage
         val changedPage = page != null && previousPage?.let { it != page } == true
@@ -47,13 +55,28 @@ internal class ReelsReminderSession {
         if (offset != null) previousOffset = offset
         val movedAcrossPage = pendingViewportHeight > 0 &&
             maxOf(abs(pendingDistance), offsetDistance) >= pendingViewportHeight * .45
+        val scrolledNewItem = pendingScrollHint && contentChanged
         clearPendingScroll()
 
-        val advanced = changedPage || movedAcrossPage
-        if (advanced && !reminded) pageChanges++
+        val advanced = changedPage || movedAcrossPage || scrolledNewItem
+        if (advanced && !reminded) {
+            pageChanges++
+            lastAdvanceAt = now
+        }
         val shouldRemind = advanced && !reminded && pageChanges >= 3 &&
             now - checkNotNull(firstSeenAt) >= 15_000L
         return ScrollOutcome(advanced, shouldRemind)
+    }
+
+    fun observeContentAdvance(now: Long): ScrollOutcome {
+        observeFeed(now)
+        if (reminded || (lastAdvanceAt != 0L && now - lastAdvanceAt < 1_500L)) {
+            return ScrollOutcome(advanced = false, shouldRemind = false)
+        }
+        pageChanges++
+        lastAdvanceAt = now
+        val shouldRemind = pageChanges >= 3 && now - checkNotNull(firstSeenAt) >= 15_000L
+        return ScrollOutcome(advanced = true, shouldRemind = shouldRemind)
     }
 
     fun markReminded() {
@@ -65,5 +88,6 @@ internal class ReelsReminderSession {
         pendingOffset = null
         pendingDistance = 0
         pendingViewportHeight = 0
+        pendingScrollHint = false
     }
 }

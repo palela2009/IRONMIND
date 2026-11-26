@@ -2,9 +2,9 @@
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:accessibilityEventTypes="typeViewScrolled|typeWindowStateChanged|typeWindowContentChanged"
     android:accessibilityFeedbackType="feedbackGeneric"
-    android:accessibilityFlags="flagReportViewIds"
+    android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows"
     android:canRetrieveWindowContent="true"
     android:description="@string/instagram_reels_service_description"
     android:isAccessibilityTool="false"
-    android:notificationTimeout="50"
+    android:notificationTimeout="20"
     android:packageNames="com.instagram.android,com.facebook.katana,com.zhiliaoapp.musically,com.ss.android.ugc.trill,com.google.android.youtube,com.snapchat.android" />

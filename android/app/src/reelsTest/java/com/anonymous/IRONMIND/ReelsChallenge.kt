@@ -4,7 +4,8 @@ import kotlin.math.abs
 
 internal class ReelsChallenge(
     private val startedAt: Long,
-    private val exitWindowMs: Long = EXIT_WINDOW_MS
+    private val exitWindowMs: Long = EXIT_WINDOW_MS,
+    private val reentryWindowMs: Long = REENTRY_WINDOW_MS
 ) {
     enum class Screen { FEED, AWAY, UNKNOWN }
 
@@ -20,7 +21,7 @@ internal class ReelsChallenge(
 
     fun observe(screen: Screen, now: Long, swipedInFeed: Boolean = false): Outcome? {
         val exit = leftAt
-        val deadline = if (exit == null) startedAt + exitWindowMs else exit + REENTRY_WINDOW_MS
+        val deadline = if (exit == null) startedAt + exitWindowMs else exit + reentryWindowMs
         val uncertain = uncertainSince
         if (screen == Screen.UNKNOWN) {
             if (uncertain == null) uncertainSince = now
