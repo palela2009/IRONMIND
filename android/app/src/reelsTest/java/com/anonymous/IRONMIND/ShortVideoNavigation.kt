@@ -47,9 +47,10 @@ internal class ShortVideoNavigation private constructor(
             val rawText = node.text?.toString()?.trim().orEmpty()
             val descLower = rawDesc.lowercase(Locale.ROOT)
             val textLower = rawText.lowercase(Locale.ROOT)
+            val shortLabel = descLower.length <= 48 && textLower.length <= 40
 
-            if (!bounds.isEmpty && awayLabelHints.isNotEmpty()) {
-                if (awayLabelHints.any { hint -> descLower == hint || textLower == hint || descLower.contains(hint) || textLower.contains(hint) }) {
+            if (!bounds.isEmpty && shortLabel && awayLabelHints.isNotEmpty()) {
+                if (awayLabelHints.any { hint -> matchesPhrase(descLower, hint) || matchesPhrase(textLower, hint) }) {
                     return ReelsChallenge.Screen.AWAY
                 }
             }
@@ -57,23 +58,23 @@ internal class ShortVideoNavigation private constructor(
             if (id in feedMarkerIds && !bounds.isEmpty && bounds.height() > 0 && bounds.width() > 0) {
                 feedMarkerVisible = true
             }
-            if (!bounds.isEmpty && feedLabelHints.isNotEmpty()) {
-                if (feedLabelHints.any { hint -> descLower == hint || textLower == hint || descLower.contains(hint) || textLower.contains(hint) }) {
+            if (!bounds.isEmpty && shortLabel && feedLabelHints.isNotEmpty()) {
+                if (feedLabelHints.any { hint -> matchesPhrase(descLower, hint) || matchesPhrase(textLower, hint) }) {
                     feedMarkerVisible = true
                 }
             }
-            if (!bounds.isEmpty && topFeedLabels.isNotEmpty() && bounds.centerY() <= window.top + window.height() * .16) {
+            if (!bounds.isEmpty && shortLabel && topFeedLabels.isNotEmpty() && bounds.centerY() <= window.top + window.height() * .16) {
                 if (descLower in topFeedLabels || textLower in topFeedLabels) {
                     topFeedHeaderVisible = true
                 }
             }
-            if (!bounds.isEmpty && rightRailHints.isNotEmpty() &&
+            if (!bounds.isEmpty && shortLabel && rightRailHints.isNotEmpty() &&
                 bounds.centerX() >= window.left + window.width() * .70 &&
                 bounds.centerY() >= window.top + window.height() * .25 &&
                 bounds.centerY() <= window.bottom - window.height() * .10
             ) {
                 for (hint in rightRailHints) {
-                    if (descLower.contains(hint) || textLower.contains(hint)) {
+                    if (matchesPhrase(descLower, hint) || matchesPhrase(textLower, hint)) {
                         rightRailMatched.add(hint)
                     }
                 }
@@ -180,6 +181,20 @@ internal class ShortVideoNavigation private constructor(
         return ""
     }
 
+    private fun matchesPhrase(source: String, phrase: String): Boolean {
+        if (source.isEmpty()) return false
+        if (source == phrase) return true
+        var start = source.indexOf(phrase)
+        while (start >= 0) {
+            val beforeOk = start == 0 || !source[start - 1].isLetterOrDigit()
+            val end = start + phrase.length
+            val afterOk = end == source.length || !source[end].isLetterOrDigit()
+            if (beforeOk && afterOk) return true
+            start = source.indexOf(phrase, start + 1)
+        }
+        return false
+    }
+
     private fun isDedicatedPager(node: AccessibilityNodeInfo): Boolean =
         node.resourceName() in playerIds || node.className?.toString()?.substringAfterLast('.') in playerClasses
 
@@ -213,7 +228,7 @@ internal class ShortVideoNavigation private constructor(
             ),
             feedTabIds = setOf("reels_tab", "reels_home_tab"),
             awayPanelIds = setOf("message_thread", "thread_view", "conversation_view", "comment_composer", "comments_sheet", "search_box", "profile_header"),
-            awayLabelHints = setOf("what's on your mind", "write a comment", "create post", "search facebook"),
+            awayLabelHints = setOf("what's on your mind", "create post", "search facebook"),
             playerIds = setOf("reels_view_pager", "reels_viewpager", "reels_pager", "reels_player_pager", "fullscreen_reels_pager"),
             playerClasses = setOf("ReelsViewPager", "ReelsPager"),
             rightRailHints = setOf("like", "comment", "share", "send"),
@@ -229,7 +244,7 @@ internal class ShortVideoNavigation private constructor(
             ),
             feedTabIds = setOf("for_you_tab", "following_tab", "recommend_tab"),
             awayPanelIds = setOf("chat_room", "chat_container", "message_list", "message_composer", "inbox_container", "comment_panel", "comment_list", "search_box", "profile_header"),
-            awayLabelHints = setOf("add comment", "send a message", "direct messages"),
+            awayLabelHints = setOf("send a message", "direct messages"),
             playerIds = setOf("for_you_pager", "following_pager", "main_feed_pager", "feed_view_pager", "feed_viewpager", "recommend_feed_pager"),
             playerClasses = setOf("MainFeedViewPager", "ForYouViewPager", "FeedSwipeViewPager"),
             rightRailHints = setOf("like", "comment", "favorite", "bookmark", "share"),
@@ -244,7 +259,7 @@ internal class ShortVideoNavigation private constructor(
             ),
             feedTabIds = setOf("button_shorts_container", "pivot_bar_shorts_tab"),
             awayPanelIds = setOf("comment_dialog_root", "shorts_creation_player_view", "watch_while_time_bar_view", "next_gen_watch_layout", "miniplayer_bar"),
-            awayLabelHints = setOf("enter fullscreen", "exit fullscreen", "seek slider", "miniplayer", "add a comment"),
+            awayLabelHints = setOf("enter fullscreen", "exit fullscreen", "seek slider", "miniplayer"),
             playerIds = setOf(
                 "reel_recycler",
                 "reel_watch_pager_view_pager",

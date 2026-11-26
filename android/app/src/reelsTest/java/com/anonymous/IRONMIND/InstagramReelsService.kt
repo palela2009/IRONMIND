@@ -46,6 +46,7 @@ class InstagramReelsService : AccessibilityService() {
     private var feedTarget: ShortVideoTarget? = null
     private var feedWindow = -1
     private var lastFeedConfirmedAt = 0L
+    private var lastScrollEventAt = 0L
     private var lastVideoHash: Int? = null
     private var lastSignatureScanAt = 0L
     private var unknownFeedSince: Long? = null
@@ -182,7 +183,7 @@ class InstagramReelsService : AccessibilityService() {
 
         if (event.eventType != AccessibilityEvent.TYPE_VIEW_SCROLLED) {
             val nav = target.navigation()
-            if (nav != null && root != null && now - lastSignatureScanAt >= 650L) {
+            if (nav != null && root != null && now - lastScrollEventAt >= 1_200L && now - lastSignatureScanAt >= 650L) {
                 lastSignatureScanAt = now
                 val currentHash = nav.videoIdentityHash(root)
                 if (currentHash != null) {
@@ -232,9 +233,12 @@ class InstagramReelsService : AccessibilityService() {
         if (deltaX != -1 && deltaX != 0 && !vertical) return
         val offset = event.scrollY.takeIf { it >= 0 && (event.maxScrollY > 0 || it > 0) }
         val page = event.fromIndex.takeIf { it >= 0 } ?: event.toIndex
-        if (!session.queueScroll(page, if (vertical) deltaY else 0, offset, height)) {
+        val queued = session.queueScroll(page, if (vertical) deltaY else 0, offset, height)
+        if (!queued) {
+            if (target.navigation() == null) return
             session.markScrolled()
         }
+        lastScrollEventAt = now
         handler.removeCallbacks(settlePage)
         handler.postDelayed(settlePage, 350L)
     }
