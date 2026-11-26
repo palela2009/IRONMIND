@@ -153,10 +153,17 @@ class InstagramReelsService : AccessibilityService() {
             if (pager == null) return
             Rect().also(pager::getBoundsInScreen).height()
         } else {
-            val sourcePkg = source?.packageName?.toString()
-            if (sourcePkg == null || sourcePkg !in target.packageIds) return
-            val h = target.navigation()?.pagerHeight(source, root)
-            traceScroll(target, event, h != null)
+            val h = if (source == null) {
+                val fallback = if (vertical || event.fromIndex >= 0) Rect().also(root::getBoundsInScreen).height().takeIf { it > 0 } else null
+                traceScroll(target, event, fallback != null)
+                fallback
+            } else {
+                val sourcePkg = source.packageName?.toString()
+                if (sourcePkg == null || sourcePkg !in target.packageIds) return
+                val found = target.navigation()?.pagerHeight(source, root)
+                traceScroll(target, event, found != null)
+                found
+            }
             h ?: return
         }
         if (attempt?.challenge?.isConfirmingExit == true && vertical) {
@@ -278,7 +285,10 @@ class InstagramReelsService : AccessibilityService() {
             channel,
             if (instagram) "Instagram Reels challenges" else "Short-video challenges",
             NotificationManager.IMPORTANCE_HIGH
-        ))
+        ).apply {
+            enableVibration(true)
+            vibrationPattern = longArrayOf(0, 250, 200, 250)
+        })
         if ((manager.getNotificationChannel(channel)?.importance ?: 0) < NotificationManager.IMPORTANCE_HIGH) return false
         val index = Math.floorMod(prefs.getInt("nextPrompt", 0), PROMPTS.size)
         val (title, question) = PROMPTS[index]
@@ -303,6 +313,10 @@ class InstagramReelsService : AccessibilityService() {
             .setContentTitle(prompt)
             .setContentText(instruction)
             .setStyle(NotificationCompat.BigTextStyle().bigText("$question $instruction"))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setVibrate(longArrayOf(0, 250, 200, 250))
             .setWhen(System.currentTimeMillis() + windowMs)
             .setUsesChronometer(true)
             .setChronometerCountDown(true)

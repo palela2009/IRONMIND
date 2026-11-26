@@ -18,6 +18,15 @@
         "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       }
     },
+    "internal": {
+      "distribution": "store",
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "env": {
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+      }
+    },
     "production": {
       "android": {
         "buildType": "app-bundle"
@@ -29,6 +38,12 @@
     }
   },
   "submit": {
+    "internal": {
+      "android": {
+        "track": "internal",
+        "releaseStatus": "completed"
+      }
+    },
     "production": {
       "android": {
         "track": "production",

@@ -435,10 +435,14 @@ function RootNavigator() {
         }}
       />
 
-      <WelcomeOfferScreen />
-      <ProIntroScreen />
-      <InviteRewardOverlay />
-      <WelcomeGiftScreen />
+      {(!reelsTest || reelsTest.isActive) && (
+        <>
+          <WelcomeOfferScreen />
+          <ProIntroScreen />
+          <InviteRewardOverlay />
+          <WelcomeGiftScreen />
+        </>
+      )}
       <PermissionGate reelsTest={reelsTest} />
       <ShortVideoSetupModal controller={reelsTest} />
 
