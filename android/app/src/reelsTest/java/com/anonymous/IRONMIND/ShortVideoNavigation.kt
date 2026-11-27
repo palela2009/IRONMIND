@@ -155,6 +155,7 @@ internal class ShortVideoNavigation private constructor(
         val queue = ArrayDeque<AccessibilityNodeInfo>()
         queue.add(root)
         val tokens = mutableListOf<String>()
+        val fallbackTokens = mutableListOf<String>()
         var examined = 0
         while (queue.isNotEmpty() && examined++ < 700 && tokens.size < 6) {
             val node = queue.removeFirst()
@@ -164,24 +165,47 @@ internal class ShortVideoNavigation private constructor(
                 val id = node.resourceName().orEmpty()
                 val text = node.text?.toString()?.trim().orEmpty()
                 val desc = node.contentDescription?.toString()?.trim().orEmpty()
+                val descLower = desc.lowercase(Locale.ROOT)
+                val textLower = text.lowercase(Locale.ROOT)
                 val candidate = when {
-                    text.startsWith("@") && text.length in 2..48 -> text.lowercase(Locale.ROOT)
-                    desc.lowercase(Locale.ROOT).startsWith("go to channel") -> desc.lowercase(Locale.ROOT)
-                    desc.lowercase(Locale.ROOT).startsWith("subscribe to ") -> desc.lowercase(Locale.ROOT)
-                    desc.lowercase(Locale.ROOT).contains("original sound") || desc.lowercase(Locale.ROOT).contains("original audio") -> desc.lowercase(Locale.ROOT)
-                    id in IDENTITY_IDS && text.length in 2..60 -> text.lowercase(Locale.ROOT)
-                    id in IDENTITY_IDS && desc.length in 2..60 -> desc.lowercase(Locale.ROOT)
+                    text.startsWith("@") && text.length in 2..48 -> textLower
+                    descLower.startsWith("go to channel") -> descLower
+                    descLower.startsWith("subscribe to ") -> descLower
+                    descLower.contains("original sound") || descLower.contains("original audio") -> descLower
+                    id in IDENTITY_IDS && text.length in 2..60 -> textLower
+                    id in IDENTITY_IDS && desc.length in 2..60 -> descLower
                     else -> null
                 }
-                if (candidate != null && candidate !in tokens) tokens.add(candidate)
+                if (candidate != null && candidate !in tokens) {
+                    tokens.add(candidate)
+                } else if (
+                    fallbackTokens.size < 4 &&
+                    bounds.centerY() >= window.top + window.height() * .56 &&
+                    bounds.centerY() <= window.bottom - window.height() * .09 &&
+                    bounds.centerX() <= window.left + window.width() * .68
+                ) {
+                    val sample = textLower.takeIf { isStableContentSample(it) }
+                        ?: descLower.takeIf { isStableContentSample(it) }
+                    if (sample != null && sample !in fallbackTokens) {
+                        fallbackTokens.add(sample)
+                    }
+                }
             }
             for (i in 0 until node.childCount) {
                 if (queue.size + examined >= 700) break
                 node.getChild(i)?.let(queue::addLast)
             }
         }
-        if (tokens.isEmpty()) return null
-        return tokens.joinToString("|").hashCode()
+        val combined = if (tokens.isNotEmpty()) tokens else fallbackTokens
+        if (combined.isEmpty()) return null
+        return combined.joinToString("|").hashCode()
+    }
+
+    private fun isStableContentSample(value: String): Boolean {
+        if (value.length !in 3..80) return false
+        if (value in IGNORED_IDENTITY_LABELS) return false
+        if (TIME_OR_COUNT_PATTERN.matches(value)) return false
+        return value.any { it.isLetter() }
     }
 
     private fun AccessibilityNodeInfo.tabLabel(): String {
@@ -235,6 +259,12 @@ internal class ShortVideoNavigation private constructor(
         private val IDENTITY_IDS = setOf(
             "reel_channel_bar", "reel_player_header", "reel_main_title", "reel_channel_name",
             "title", "author", "username", "creator_name", "music_title"
+        )
+        private val TIME_OR_COUNT_PATTERN = Regex("^\\d{1,2}:\\d{2}(:\\d{2})?(\\s*/\\s*\\d{1,2}:\\d{2})?$")
+        private val IGNORED_IDENTITY_LABELS = setOf(
+            "home", "friends", "inbox", "profile", "shop", "for you", "following", "shorts",
+            "reels", "spotlight", "like", "comment", "share", "follow", "subscribe", "subscribed",
+            "more", "less", "see more", "original", "live"
         )
 
         val facebook = ShortVideoNavigation(

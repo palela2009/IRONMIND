@@ -22,9 +22,10 @@ export type ShortVideoController = {
   turnOff: () => Promise<void>;
   refresh: () => Promise<void>;
   guideVisible: boolean;
-  status: 'ON' | 'FINISH SETUP' | 'INSTAGRAM ONLY' | 'OFF';
+  status: 'ON' | 'RECONNECT' | 'FINISH SETUP' | 'INSTAGRAM ONLY' | 'OFF';
   isActive: boolean;
   needsSetup: boolean;
+  needsReconnect: boolean;
   connected: boolean;
   countToday: number;
   maxPerDay: number;
@@ -37,6 +38,7 @@ const monitor = Platform.OS === 'android' ? NativeModules.UsageMonitor : null;
 export function useInstagramReelsTest(uid: string | undefined, _showDuringSetup = false): ShortVideoController | null {
   const [loaded, setLoaded] = useState<{ uid: string; settings: ReelsSettings | null } | null>(null);
   const [guideVisible, setGuideVisible] = useState(false);
+  const [reconnectGraceDone, setReconnectGraceDone] = useState(false);
   const settings = loaded?.uid === uid ? loaded?.settings ?? null : null;
 
   const refresh = useCallback(async () => {
@@ -49,12 +51,27 @@ export function useInstagramReelsTest(uid: string | undefined, _showDuringSetup 
 
   useEffect(() => {
     setGuideVisible(false);
+    setReconnectGraceDone(false);
     void refresh();
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') void refresh();
+      if (state === 'active') {
+        setReconnectGraceDone(false);
+        void refresh();
+      }
     });
     return () => sub.remove();
   }, [refresh]);
+
+  useEffect(() => {
+    if (!settings?.enabled || settings.connected !== false) {
+      setReconnectGraceDone(false);
+      return;
+    }
+    const timer = setTimeout(() => {
+      void refresh().finally(() => setReconnectGraceDone(true));
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [refresh, settings?.connected, settings?.enabled]);
 
   const openSettingsOnly = useCallback(async () => {
     if (!uid || auth.currentUser?.uid !== uid || !monitor?.openInstagramReelsTestSettings) return;
@@ -100,7 +117,9 @@ export function useInstagramReelsTest(uid: string | undefined, _showDuringSetup 
 
   const open = useCallback(() => {
     if (!uid || !settings) return;
-    if (settings.consented && settings.expandedConsented && settings.enabled) {
+    const isConnected = settings.connected ?? settings.enabled;
+    const staleDisconnected = settings.enabled && !isConnected && reconnectGraceDone;
+    if (settings.consented && settings.expandedConsented && settings.enabled && !staleDisconnected) {
       appAlert(
         'Scroll Challenges are active',
         'Challenges fire ONLY when you actively scroll Instagram Reels, TikTok, YouTube Shorts, Facebook Reels, or Snapchat Spotlight — never during DMs, Snaps, studying on YouTube, or watching 1 shared video.',
@@ -113,19 +132,23 @@ export function useInstagramReelsTest(uid: string | undefined, _showDuringSetup 
       return;
     }
     setGuideVisible(true);
-  }, [openSettingsOnly, settings, turnOff, uid]);
+  }, [openSettingsOnly, reconnectGraceDone, settings, turnOff, uid]);
 
   if (!settings) return null;
 
-  const status: ShortVideoController['status'] = settings.consented
+  const connected = Boolean(settings.connected ?? settings.enabled);
+  const needsReconnect = settings.consented && settings.expandedConsented && settings.enabled && !connected && reconnectGraceDone;
+  const isActive = settings.consented && settings.expandedConsented && settings.enabled && !needsReconnect;
+
+  const status: ShortVideoController['status'] = needsReconnect
+    ? 'RECONNECT'
+    : settings.consented
     ? settings.enabled
       ? settings.expandedConsented
         ? 'ON'
         : 'INSTAGRAM ONLY'
       : 'FINISH SETUP'
     : 'OFF';
-
-  const isActive = settings.consented && settings.expandedConsented && settings.enabled;
 
   return {
     open,
@@ -139,7 +162,8 @@ export function useInstagramReelsTest(uid: string | undefined, _showDuringSetup 
     status,
     isActive,
     needsSetup: settings.consented && !isActive,
-    connected: Boolean(settings.connected ?? settings.enabled),
+    needsReconnect,
+    connected,
     countToday: Number(settings.countToday ?? 0),
     maxPerDay: Number(settings.maxPerDay ?? 5),
     cooldownRemainingMs: Number(settings.cooldownRemainingMs ?? 0),

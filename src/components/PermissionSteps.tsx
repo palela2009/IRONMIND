@@ -66,10 +66,16 @@ export const PermissionSteps: React.FC<Props> = ({ perms, reelsTest, showOptiona
             key: 'scroll',
             title: 'SCROLL CHALLENGES',
             done: reelsTest.isActive,
-            desc: `Detects doomscrolling on Reels, TikTok, Shorts & Spotlight — silent during DMs & YouTube study. ${scrollPathHint()}`,
+            desc: reelsTest.needsReconnect
+              ? 'Android paused Scroll Detection after an app update. Tap below, switch "IRONMIND — Scroll Detection" OFF, wait 1 second, then switch it ON again.'
+              : `Detects doomscrolling on Reels, TikTok, Shorts & Spotlight — silent during DMs & YouTube study. ${scrollPathHint()}`,
             doneDesc: 'Ready. Scroll-only challenges are active for all 5 apps.',
-            action: reelsTest.needsSetup ? 'FINISH SCROLL SETUP →' : 'TURN ON SCROLL CHALLENGES →',
-            onPress: reelsTest.openGuide,
+            action: reelsTest.needsReconnect
+              ? 'RECONNECT IN SETTINGS →'
+              : reelsTest.needsSetup
+              ? 'FINISH SCROLL SETUP →'
+              : 'TURN ON SCROLL CHALLENGES →',
+            onPress: reelsTest.needsReconnect ? () => void reelsTest.openSettingsOnly() : reelsTest.openGuide,
           },
         ]
       : []),

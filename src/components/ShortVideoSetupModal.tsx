@@ -69,7 +69,7 @@ export const ShortVideoSetupModal: React.FC<Props> = ({ controller }) => {
     if (busy) return;
     setBusy(true);
     try {
-      if (alreadyConsented && !settings.enabled) {
+      if ((alreadyConsented && !settings.enabled) || controller.needsReconnect) {
         await controller.openSettingsOnly();
       } else {
         await controller.acceptAndOpenSettings();
@@ -102,9 +102,13 @@ export const ShortVideoSetupModal: React.FC<Props> = ({ controller }) => {
         </View>
 
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          <Text style={styles.title}>SCROLL-ONLY{'\n'}CHALLENGES.</Text>
+          <Text style={styles.title}>
+            {controller.needsReconnect ? 'RECONNECT\nSCROLL DETECTION.' : 'SCROLL-ONLY\nCHALLENGES.'}
+          </Text>
           <Text style={styles.sub}>
-            Catches doomscrolling on Instagram Reels, TikTok, YouTube Shorts, Facebook Reels & Snapchat Spotlight — completely silent during normal use.
+            {controller.needsReconnect
+              ? 'Android paused Scroll Detection after an app update. Open Settings below, switch "IRONMIND — Scroll Detection" OFF, wait 1 second, then switch it right back ON.'
+              : 'Catches doomscrolling on Instagram Reels, TikTok, YouTube Shorts, Facebook Reels & Snapchat Spotlight — completely silent during normal use.'}
           </Text>
 
           <View style={styles.rulesCard}>
@@ -170,7 +174,9 @@ export const ShortVideoSetupModal: React.FC<Props> = ({ controller }) => {
               <ActivityIndicator color={palette.accentContrast} />
             ) : (
               <Text style={styles.primaryText}>
-                {settings.enabled
+                {controller.needsReconnect
+                  ? 'OPEN SETTINGS (TOGGLE OFF → ON) →'
+                  : settings.enabled
                   ? 'AGREE & ENABLE FOR ALL 5 APPS'
                   : alreadyConsented
                   ? 'OPEN ACCESSIBILITY SETTINGS →'

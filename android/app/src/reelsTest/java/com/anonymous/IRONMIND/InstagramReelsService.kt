@@ -5,6 +5,7 @@ import android.accessibilityservice.AccessibilityService
 import android.app.KeyguardManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.graphics.Rect
@@ -343,7 +344,6 @@ class InstagramReelsService : AccessibilityService() {
         ) return false
         val manager = getSystemService(NotificationManager::class.java)
         if (!manager.areNotificationsEnabled()) return false
-        if (manager.currentInterruptionFilter != NotificationManager.INTERRUPTION_FILTER_ALL) return false
         if (ChallengeStore.active(this) != null) return false
         val prefs = getSharedPreferences("ironmind_reels_test", MODE_PRIVATE)
         val day = TrustedClock.dayKey(this)
@@ -366,7 +366,7 @@ class InstagramReelsService : AccessibilityService() {
             enableVibration(true)
             vibrationPattern = longArrayOf(0, 250, 200, 250)
         })
-        if ((manager.getNotificationChannel(channel)?.importance ?: 0) < NotificationManager.IMPORTANCE_HIGH) return false
+        if (manager.getNotificationChannel(channel)?.importance == NotificationManager.IMPORTANCE_NONE) return false
         val index = Math.floorMod(prefs.getInt("nextPrompt", 0), PROMPTS.size)
         val (title, question) = PROMPTS[index]
         val windowMs = (monitorPrefs.getFloat("window", 10f) * 1000f).toLong().coerceIn(3_000L, ReelsChallenge.EXIT_WINDOW_MS)
@@ -530,6 +530,12 @@ class InstagramReelsService : AccessibilityService() {
 
     override fun onInterrupt() = reset()
 
+    override fun onUnbind(intent: Intent?): Boolean {
+        ShortVideoTarget.serviceConnected = false
+        reset()
+        return super.onUnbind(intent)
+    }
+
     override fun onDestroy() {
         ShortVideoTarget.serviceConnected = false
         monitorPrefs.unregisterOnSharedPreferenceChangeListener(settingsChanged)
@@ -539,8 +545,8 @@ class InstagramReelsService : AccessibilityService() {
 
     private companion object {
         const val INSTAGRAM = "com.instagram.android"
-        const val CHANNEL = "ironmind_instagram_reels_challenges"
-        const val SHORT_VIDEO_CHANNEL = "ironmind_short_video_challenges"
+        const val CHANNEL = "ironmind_reels_alerts_v2"
+        const val SHORT_VIDEO_CHANNEL = "ironmind_short_video_alerts_v2"
         const val RESULT_CHANNEL = "ironmind_challenge_results"
         val EVENT_FILTER_KEYS = setOf("uid", "apps", ShortVideoTarget.INSTAGRAM_CONSENT_UID, ShortVideoTarget.EXPANDED_CONSENT_UID)
         const val NOTIFICATION_ID = 1004
