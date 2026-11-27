@@ -25,6 +25,7 @@ export const useNotifications = (userId?: string, onNavigate?: (screen: Training
         if (Platform.OS === 'android') {
           await Notifications.setNotificationChannelAsync('ironmind-social', { name: 'Friends and duels', importance: Notifications.AndroidImportance.DEFAULT });
           await Notifications.setNotificationChannelAsync('ironmind_challenges', { name: 'IRONMIND Challenges', importance: Notifications.AndroidImportance.HIGH, vibrationPattern: [0, 250, 250, 250] });
+          await Notifications.setNotificationChannelAsync('ironmind_over_limit', { name: 'Daily limit alerts', importance: Notifications.AndroidImportance.HIGH, vibrationPattern: [0, 250, 200, 250] });
         }
         const { status } = await Notifications.getPermissionsAsync();
         if (cancelled) return;

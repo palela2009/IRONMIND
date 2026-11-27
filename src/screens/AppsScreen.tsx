@@ -392,8 +392,8 @@ export const AppsScreen: React.FC<AppsProps> = ({ history, onSettingsChanged, re
                   <View style={styles.limitEditor}>
                     <Text style={styles.limitHint}>
                       {mins > 0
-                        ? `Used ${formatMinutes(mins)} today · Suggested: ${chipLabel(suggested)} (alerts at 80%)`
-                        : 'Pick a daily budget — IRONMIND sends a heads-up alert at 80%.'}
+                        ? `Used ${formatMinutes(mins)} today · Suggested: ${chipLabel(suggested)} (warns at 80% & alerts every time you open past limit)`
+                        : 'Pick a daily limit — warns at 80%, then alerts every time you open the app past your limit.'}
                     </Text>
                     <View style={styles.limitChips}>
                       {LIMIT_CHIPS.map((m) => (

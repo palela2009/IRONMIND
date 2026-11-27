@@ -12,6 +12,8 @@ internal class ShortVideoNavigation private constructor(
     private val awayLabelHints: Set<String>,
     private val playerIds: Set<String>,
     private val playerClasses: Set<String>,
+    private val softAwayPanelIds: Set<String> = emptySet(),
+    private val softAwayLabelHints: Set<String> = emptySet(),
     private val feedMarkerIds: Set<String> = emptySet(),
     private val feedLabelHints: Set<String> = emptySet(),
     private val rightRailHints: Set<String> = emptySet(),
@@ -26,6 +28,8 @@ internal class ShortVideoNavigation private constructor(
         val queue = ArrayDeque<AccessibilityNodeInfo>()
         queue.add(root)
         var selectedFeed = false
+        var selectedAway = false
+        var softAwayVisible = false
         var fullScreenPlayer = false
         var dedicatedPlayer = false
         var feedMarkerVisible = false
@@ -42,6 +46,9 @@ internal class ShortVideoNavigation private constructor(
             if ((id in awayPanelIds && hasRealBounds) || (node.isEditable && node.isFocused && !bounds.isEmpty)) {
                 return ReelsChallenge.Screen.AWAY
             }
+            if (id in softAwayPanelIds && hasRealBounds) {
+                softAwayVisible = true
+            }
 
             val rawDesc = node.contentDescription?.toString()?.trim().orEmpty()
             val rawText = node.text?.toString()?.trim().orEmpty()
@@ -52,6 +59,11 @@ internal class ShortVideoNavigation private constructor(
             if (!bounds.isEmpty && shortLabel && awayLabelHints.isNotEmpty()) {
                 if (awayLabelHints.any { hint -> matchesPhrase(descLower, hint) || matchesPhrase(textLower, hint) }) {
                     return ReelsChallenge.Screen.AWAY
+                }
+            }
+            if (!bounds.isEmpty && shortLabel && softAwayLabelHints.isNotEmpty()) {
+                if (softAwayLabelHints.any { hint -> matchesPhrase(descLower, hint) || matchesPhrase(textLower, hint) }) {
+                    softAwayVisible = true
                 }
             }
 
@@ -91,7 +103,7 @@ internal class ShortVideoNavigation private constructor(
                 val description = node.tabLabel()
                 val label = description.substringBefore(',').trim()
                 val selected = checked || description.endsWith(", selected") || description.contains("არჩეული")
-                if (selected && label in awayTabs) return ReelsChallenge.Screen.AWAY
+                if (selected && label in awayTabs) selectedAway = true
                 if (selected && (label in feedTabs || id in feedTabIds)) selectedFeed = true
             }
 
@@ -102,13 +114,18 @@ internal class ShortVideoNavigation private constructor(
         }
 
         val strongRail = portrait && rightRailMatched.size >= 3
-        val confirmedFeed = dedicatedPlayer ||
+        val strongFeed = dedicatedPlayer ||
             (portrait && selectedFeed && (fullScreenPlayer || selectedFeedTabIsSufficient)) ||
-            (portrait && feedMarkerVisible && (fullScreenPlayer || strongRail)) ||
-            (portrait && topFeedHeaderVisible && (fullScreenPlayer || strongRail)) ||
-            strongRail
+            (portrait && feedMarkerVisible && (fullScreenPlayer || strongRail))
+        val confirmedFeed = strongFeed ||
+            (!selectedAway && !softAwayVisible && portrait && topFeedHeaderVisible && (fullScreenPlayer || strongRail)) ||
+            (!selectedAway && !softAwayVisible && strongRail)
 
-        return if (confirmedFeed) ReelsChallenge.Screen.FEED else ReelsChallenge.Screen.UNKNOWN
+        return when {
+            confirmedFeed -> ReelsChallenge.Screen.FEED
+            selectedAway || softAwayVisible -> ReelsChallenge.Screen.AWAY
+            else -> ReelsChallenge.Screen.UNKNOWN
+        }
     }
 
     fun pagerHeight(source: AccessibilityNodeInfo, root: AccessibilityNodeInfo): Int? {
@@ -231,13 +248,13 @@ internal class ShortVideoNavigation private constructor(
             awayLabelHints = setOf("what's on your mind", "create post", "search facebook"),
             playerIds = setOf("reels_view_pager", "reels_viewpager", "reels_pager", "reels_player_pager", "fullscreen_reels_pager"),
             playerClasses = setOf("ReelsViewPager", "ReelsPager"),
-            rightRailHints = setOf("like", "comment", "share", "send"),
+            rightRailHints = setOf("like", "comment", "share", "send", "save", "მოწონება", "კომენტარი", "გაზიარება", "нравится", "комментарий", "поделиться"),
             topFeedLabels = setOf("reels", "რილსები", "рилс"),
             selectedFeedTabIsSufficient = true
         )
 
         val tiktok = ShortVideoNavigation(
-            feedTabs = setOf("for you", "following", "for you feed", "following feed", "შენთვის", "გამოწერილი", "рекомендации"),
+            feedTabs = setOf("for you", "following", "for you feed", "following feed", "შენთვის", "გამოწერილი", "рекомендации", "подписки"),
             awayTabs = setOf(
                 "inbox", "profile", "friends", "shop", "search", "messages", "live",
                 "შემოსულები", "პროფილი", "მეგობრები", "მაღაზია", "ძებნა", "შეტყობინებები"
@@ -247,7 +264,8 @@ internal class ShortVideoNavigation private constructor(
             awayLabelHints = setOf("send a message", "direct messages"),
             playerIds = setOf("for_you_pager", "following_pager", "main_feed_pager", "feed_view_pager", "feed_viewpager", "recommend_feed_pager"),
             playerClasses = setOf("MainFeedViewPager", "ForYouViewPager", "FeedSwipeViewPager"),
-            rightRailHints = setOf("like", "comment", "favorite", "bookmark", "share"),
+            rightRailHints = setOf("like", "comment", "favorite", "bookmark", "share", "მოწონება", "კომენტარი", "გაზიარება", "нравится", "комментарий", "избранное", "поделиться"),
+            topFeedLabels = setOf("for you", "following", "შენთვის", "გამოწერილი", "рекомендации", "подписки"),
             selectedFeedTabIsSufficient = true
         )
 
@@ -258,8 +276,10 @@ internal class ShortVideoNavigation private constructor(
                 "მთავარი", "გამოწერები", "თქვენ", "ბიბლიოთეკა", "ძებნა"
             ),
             feedTabIds = setOf("button_shorts_container", "pivot_bar_shorts_tab"),
-            awayPanelIds = setOf("comment_dialog_root", "shorts_creation_player_view", "watch_while_time_bar_view", "next_gen_watch_layout", "miniplayer_bar"),
-            awayLabelHints = setOf("enter fullscreen", "exit fullscreen", "seek slider", "miniplayer"),
+            awayPanelIds = setOf("comment_dialog_root", "shorts_creation_player_view"),
+            awayLabelHints = emptySet(),
+            softAwayPanelIds = setOf("watch_while_time_bar_view", "miniplayer_bar"),
+            softAwayLabelHints = setOf("enter fullscreen", "exit fullscreen", "miniplayer"),
             playerIds = setOf(
                 "reel_recycler",
                 "reel_watch_pager_view_pager",
@@ -267,7 +287,10 @@ internal class ShortVideoNavigation private constructor(
                 "reel_player_page_container",
                 "reel_watch_player",
                 "reel_watch_player_view",
+                "reel_watch_player_overlay",
+                "reel_scrim_shorts_while_playing",
                 "shorts_player_view",
+                "shorts_player_overlay",
                 "reel_player_overlay_container",
                 "shorts_container"
             ),
@@ -286,7 +309,7 @@ internal class ShortVideoNavigation private constructor(
                 "reel_channel_bar"
             ),
             feedLabelHints = setOf("use this sound", "shorts pivot", "remix this short"),
-            rightRailHints = setOf("like", "dislike", "comment", "share", "remix"),
+            rightRailHints = setOf("like", "dislike", "comment", "share", "remix", "მოწონება", "არ მომწონს", "კომენტარი", "გაზიარება", "нравится", "комментарий", "поделиться", "ремикс"),
             topFeedLabels = setOf("shorts", "შორტსი", "шортс"),
             selectedFeedTabIsSufficient = true
         )
@@ -304,8 +327,9 @@ internal class ShortVideoNavigation private constructor(
             ),
             awayLabelHints = setOf("send a chat", "take a snap", "snap map", "my stories"),
             playerIds = setOf("spotlight_view_pager", "spotlight_pager", "spotlight_feed_recycler_view", "spotlight_recycler_view"),
-            playerClasses = setOf("SpotlightViewPager", "OperaViewPager"),
-            rightRailHints = setOf("like", "comment", "share", "favorite", "remix"),
+            playerClasses = setOf("SpotlightViewPager"),
+            feedMarkerIds = setOf("spotlight_action_bar", "spotlight_like_button", "spotlight_comment_button", "spotlight_share_button", "spotlight_favorite_button"),
+            rightRailHints = setOf("like", "comment", "share", "favorite", "remix", "bookmark", "მოწონება", "კომენტარი", "გაზიარება", "нравится", "комментарий", "поделиться"),
             topFeedLabels = setOf("spotlight", "სპოტლაითი"),
             selectedFeedTabIsSufficient = true
         )

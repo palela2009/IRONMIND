@@ -39,7 +39,7 @@
       android:exported="false">
       <property
         android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-        android:value="Tracks daily app time budgets, sends 80% budget warnings, and syncs screen-time duels in the background for apps the user chooses to limit."/>
+        android:value="Tracks daily app time budgets, sends 80% and over-limit alerts, and syncs screen-time duels in the background for apps the user chooses to limit."/>
     </service>
     <receiver
       android:name=".BootReceiver"

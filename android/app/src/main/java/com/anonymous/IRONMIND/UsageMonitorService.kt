@@ -46,6 +46,7 @@ class UsageMonitorService : Service() {
     private var appLimits: Map<String, Int> = emptyMap()
     private var warnedToday: MutableSet<String> = mutableSetOf()
     private var warnedDate: String = ""
+    private val overLimitTracker = OverLimitTracker()
     private var lastBackgroundSyncAt: Long = 0L
 
     private val pollRunnable = object : Runnable {
@@ -73,6 +74,7 @@ class UsageMonitorService : Service() {
             if (uid.isNotEmpty() && prefs.getString("uid", null) != uid) {
                 activeChallenge = null
                 pendingWin = null
+                overLimitTracker.resetForAccountSwitch()
                 ChallengeStore.saveActive(this, null)
                 prefs.edit().putString("uid", uid).putString("date", null).putInt("count", 0).apply()
             }
@@ -286,19 +288,58 @@ class UsageMonitorService : Service() {
         lastKnownForeground = foreground
         if (BuildConfig.IRONMIND_REELS_TEST) reelsForegroundPackage = foreground
 
-        if (BuildConfig.IRONMIND_REELS_TEST && reelsChallengeInProgress) return
-        for ((appName, pkg) in monitoredPackages) {
-            if (foreground == pkg) {
-                val limit = appLimits[appName] ?: 0
-                if (limit > 0) {
-                    val used = minutesUsedToday(appName)
-                    if (used < limit && used >= (limit * 8 / 10)) {
-                        maybeWarn(appName, limit - used)
-                    }
-                }
-                return
-            }
+        val matched = monitoredPackages.firstOrNull { it.second == foreground }
+        if (matched == null) {
+            overLimitTracker.onForegroundChanged(foreground)
+            return
         }
+
+        val appName = matched.first
+        val limit = appLimits[appName] ?: 0
+        if (limit <= 0) {
+            overLimitTracker.onForegroundChanged(foreground)
+            return
+        }
+
+        val used = minutesUsedToday(appName)
+        val shouldFireOverLimit = overLimitTracker.shouldAlertOnForeground(
+            foreground = foreground,
+            appName = appName,
+            usedMinutes = used,
+            limitMinutes = limit,
+            dayKey = getTodayKey()
+        )
+        if (BuildConfig.IRONMIND_REELS_TEST && reelsChallengeInProgress) return
+        if (shouldFireOverLimit) {
+            fireOverLimitNotification(appName, used, limit)
+        } else if (used < limit && used >= (limit * 8 / 10)) {
+            maybeWarn(appName, limit - used)
+        }
+    }
+
+    private fun fireOverLimitNotification(appName: String, usedMinutes: Int, limitMinutes: Int) {
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (!nm.areNotificationsEnabled()) return
+        val goal = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getString("userGoal", null)?.takeIf { it.isNotBlank() }
+        val body = if (goal != null) {
+            "You've used ${usedMinutes}m / ${limitMinutes}m today · Goal: $goal. Close $appName now."
+        } else {
+            "You've used ${usedMinutes}m / ${limitMinutes}m today. Close $appName now."
+        }
+        val notification = NotificationCompat.Builder(this, OVER_LIMIT_CHANNEL)
+            .setContentTitle("⛔ $appName daily limit reached")
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setSmallIcon(R.drawable.notification_icon)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setVibrate(longArrayOf(0, 250, 200, 250))
+            .setOnlyAlertOnce(false)
+            .setAutoCancel(true)
+            .build()
+        nm.cancel(OVER_LIMIT_ID)
+        nm.notify(OVER_LIMIT_ID, notification)
     }
 
     private fun maybeWarn(appName: String, minutesLeft: Int) {
@@ -310,11 +351,13 @@ class UsageMonitorService : Service() {
         if (!warnedToday.add(appName)) return
 
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val notification = NotificationCompat.Builder(this, CHALLENGE_CHANNEL)
+        if (!nm.areNotificationsEnabled()) return
+        val notification = NotificationCompat.Builder(this, OVER_LIMIT_CHANNEL)
             .setContentTitle("$appName — ${minutesLeft}m left")
-            .setContentText("You are close to your daily budget for $appName.")
+            .setContentText("You are at 80% of your daily limit for $appName.")
             .setSmallIcon(R.drawable.notification_icon)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setAutoCancel(true)
             .build()
         nm.notify(WARNING_ID, notification)
@@ -496,8 +539,17 @@ class UsageMonitorService : Service() {
                 enableVibration(true)
             }
 
+            val overLimitCh = NotificationChannel(
+                OVER_LIMIT_CHANNEL, "Daily limit alerts", NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Alerts when an app approaches or exceeds its daily limit"
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 250, 200, 250)
+            }
+
             nm.createNotificationChannel(foregroundCh)
             nm.createNotificationChannel(challengeCh)
+            nm.createNotificationChannel(overLimitCh)
         }
     }
 
@@ -521,8 +573,10 @@ class UsageMonitorService : Service() {
         const val FOREGROUND_ID = 1001
         const val CHALLENGE_ID = 1002
         const val WARNING_ID = 1003
+        const val OVER_LIMIT_ID = 1006
         const val FOREGROUND_CHANNEL = "ironmind_monitor"
         const val CHALLENGE_CHANNEL = "ironmind_challenges"
+        const val OVER_LIMIT_CHANNEL = "ironmind_over_limit"
         const val PREFS_NAME = "ironmind_challenge_prefs"
         const val FOREGROUND_LOOKBACK_MS = 60_000L
         const val STUCK_CHALLENGE_MS = 10 * 60 * 1000L

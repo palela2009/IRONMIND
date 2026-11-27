@@ -178,6 +178,10 @@ class InstagramReelsService : AccessibilityService() {
             feedWindow = rootWindowId
             feedTarget = target
             lastFeedConfirmedAt = now
+            val nav = target.navigation()
+            if (nav != null && root != null) {
+                lastVideoHash = nav.videoIdentityHash(root)
+            }
         }
         session.observeFeed(now)
 
@@ -269,7 +273,14 @@ class InstagramReelsService : AccessibilityService() {
             return when (navigation.screen(root)) {
                 ReelsChallenge.Screen.FEED -> Surface.REELS
                 ReelsChallenge.Screen.AWAY -> Surface.AWAY
-                ReelsChallenge.Screen.UNKNOWN -> Surface.UNKNOWN
+                ReelsChallenge.Screen.UNKNOWN -> {
+                    val currentAttempt = attempt
+                    if (currentAttempt?.target == target && !currentAttempt.challenge.isConfirmingExit && now - lastFeedConfirmedAt <= 20_000L) {
+                        Surface.REELS
+                    } else {
+                        Surface.UNKNOWN
+                    }
+                }
             }
         }
         val surface = run {
